@@ -375,6 +375,54 @@ function highlightMatches(word, indices) {
   return result;
 }
 
+// Filter and sort favorites by subsequence match quality
+function searchFavorites(query) {
+  if (!query || !query.trim()) return [];
+  const q = query.trim();
+  const favs = getVFavs();
+  const results = [];
+  for (let i = 0; i < favs.length; i++) {
+    const f = favs[i];
+    const match = subsequenceMatch(q, f.word);
+    if (match) {
+      results.push({
+        fav: f,
+        score: matchScore(match, f.word.length),
+        indices: match.indices,
+        favIdx: i
+      });
+    }
+  }
+  results.sort((a, b) => a.score - b.score);
+  return results;
+}
+
+// Render the search dropdown with matched results
+function renderSearchDropdown(results) {
+  const $dd = document.getElementById('favSearchDropdown');
+  if (!results.length) {
+    $dd.innerHTML = '<div class="fs-dd-empty">无匹配结果</div>';
+    $dd.style.display = 'block';
+    return;
+  }
+  $dd.innerHTML = results.map(r => {
+    const f = r.fav;
+    const meaning = f.meaning || (f.definitions ? f.definitions.join('；') : '');
+    return '<div class="fs-dd-item" data-favid="' + escAttr(f.id) + '" data-favidx="' + r.favIdx + '">'
+      + '<span class="fs-word">' + highlightMatches(f.word, r.indices) + '</span>'
+      + (f.phonetic ? '<span class="fs-phonetic">' + esc(f.phonetic) + '</span>' : '')
+      + (f.pos ? '<span class="fs-pos">' + esc(f.pos) + '</span>' : '')
+      + '<span class="fs-meaning">' + esc(meaning) + '</span>'
+      + '</div>';
+  }).join('');
+  $dd.style.display = 'block';
+}
+
+function hideSearchDropdown() {
+  const $dd = document.getElementById('favSearchDropdown');
+  if ($dd) $dd.style.display = 'none';
+}
+
 function renderWordResult(wrapper, resultEl, searchWord_, info) {
   const displayWord = info.baseForm || info.word;
   const baseFormHint = info.baseForm
