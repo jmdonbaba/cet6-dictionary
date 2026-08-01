@@ -226,48 +226,50 @@ body {
 .toast.show { opacity: 1; }
 
 /* Favorites search */
-.modal-header-left {
-  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
-}
 .fav-search {
   position: relative;
-  flex: 1;
-  max-width: 320px;
+  margin-bottom: 12px;
 }
 .fav-search input {
   width: 100%;
-  padding: 8px 32px 8px 12px;
+  padding: 10px 14px;
   border: 2px solid var(--border);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: 14px;
   outline: none;
   font-family: inherit;
 }
 .fav-search input:focus {
   border-color: var(--primary);
 }
+.fav-search input {
+  padding-right: 36px;
+}
 .fav-search-clear {
   display: none;
   position: absolute;
-  right: 6px;
   top: 50%;
+  right: 8px;
   transform: translateY(-50%);
-  background: none;
+  width: 24px;
+  height: 24px;
   border: none;
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  padding: 0 4px;
-  line-height: 1;
+  background: var(--border);
   border-radius: 50%;
-  z-index: 5;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
 .fav-search-clear:hover {
-  color: var(--text);
-  background: var(--border);
+  background: var(--text-secondary);
+  color: #fff;
 }
 .fav-search-clear.visible {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .fav-search-dropdown {
   display: none;
@@ -300,7 +302,7 @@ body {
 .fs-dd-item .fs-word {
   font-size: 15px;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: var(--primary);
 }
 .fs-dd-item .fs-phonetic {
   font-size: 12px;
@@ -323,7 +325,7 @@ body {
   text-overflow: ellipsis;
 }
 .match-hl {
-  color: var(--primary);
+  color: #dc2626;
 }
 .fs-dd-empty {
   padding: 16px;
@@ -364,17 +366,15 @@ body {
 <div class="modal-overlay" id="modalOverlay" style="display:none">
   <div class="modal-card" id="modalVocabFav">
     <div class="modal-header">
-      <div class="modal-header-left">
-        <span>词汇收藏 (<span id="modalVocabCount">0</span>)</span>
-        <div class="fav-search" id="favSearch" style="display:none">
-          <input type="text" id="favSearchInput" placeholder="搜索..." autocomplete="off">
-          <button class="fav-search-clear" id="favSearchClear">&times;</button>
-          <div class="fav-search-dropdown" id="favSearchDropdown"></div>
-        </div>
-      </div>
+      <span>词汇收藏 (<span id="modalVocabCount">0</span>)</span>
       <button class="modal-close" data-close="modalVocabFav">&times;</button>
     </div>
     <div class="modal-body" id="modalVocabBody">
+      <div class="fav-search" id="favSearch" style="display:none">
+        <input type="text" id="favSearchInput" placeholder="搜索收藏的单词..." autocomplete="off">
+        <button class="fav-search-clear" id="favSearchClear" title="清除搜索">&times;</button>
+        <div class="fav-search-dropdown" id="favSearchDropdown"></div>
+      </div>
       <div id="favListContainer"></div>
     </div>
   </div>
@@ -539,8 +539,8 @@ function renderSearchDropdown(results) {
 function hideSearchDropdown() {
   const $dd = document.getElementById('favSearchDropdown');
   if ($dd) $dd.style.display = 'none';
-  const $clr = document.getElementById('favSearchClear');
-  if ($clr) $clr.classList.remove('visible');
+  const $clear = document.getElementById('favSearchClear');
+  if ($clear) $clear.classList.remove('visible');
 }
 
 // Scroll to a specific favorite item in the list and expand it
@@ -996,11 +996,9 @@ const $favSearchInput = document.getElementById('favSearchInput');
 if ($favSearchInput) {
   $favSearchInput.addEventListener('input', function () {
     const query = this.value;
-    const $clr = document.getElementById('favSearchClear');
-    if ($clr) {
-      if (query) $clr.classList.add('visible');
-      else $clr.classList.remove('visible');
-    }
+    // Toggle clear button
+    const $clear = document.getElementById('favSearchClear');
+    if ($clear) $clear.classList.toggle('visible', !!query);
     if (!query || !query.trim()) {
       hideSearchDropdown();
       return;
@@ -1017,18 +1015,25 @@ if ($favSearchInput) {
         this.value = '';
         hideSearchDropdown();
         this.blur();
+        // Hide clear button
+        const $clear = document.getElementById('favSearchClear');
+        if ($clear) $clear.classList.remove('visible');
       }
     }
   });
 }
 
-// Clear button in search input
+// Clear button click
 const $favSearchClear = document.getElementById('favSearchClear');
 if ($favSearchClear) {
   $favSearchClear.addEventListener('click', function () {
     const $input = document.getElementById('favSearchInput');
-    if ($input) { $input.value = ''; $input.focus(); }
+    if ($input) {
+      $input.value = '';
+      $input.focus();
+    }
     hideSearchDropdown();
+    this.classList.remove('visible');
   });
 }
 
