@@ -801,6 +801,13 @@ function openModal(modal) {
   $modalOverlay.style.display = 'flex';
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
+  // Focus search input when opening vocab favorites
+  if (modal === $modalVocabFav) {
+    setTimeout(function () {
+      var si = document.getElementById('favSearchInput');
+      if (si && getVFavs().length) si.focus();
+    }, 150);
+  }
 }
 function closeModal() {
   $modalOverlay.style.display = 'none';
@@ -939,6 +946,56 @@ $wsModules.addEventListener('keydown', e => {
         wrapper.querySelector('.word-search-submit').click();
       }
     }
+  }
+});
+
+// ==================== Favorites search events ====================
+const $favSearchInput = document.getElementById('favSearchInput');
+if ($favSearchInput) {
+  $favSearchInput.addEventListener('input', function () {
+    const query = this.value;
+    if (!query || !query.trim()) {
+      hideSearchDropdown();
+      return;
+    }
+    const results = searchFavorites(query);
+    renderSearchDropdown(results);
+  });
+
+  // Clear search and hide dropdown on Escape
+  $favSearchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      this.value = '';
+      hideSearchDropdown();
+      this.blur();
+    }
+  });
+}
+
+// Click on dropdown item — jump to favorite
+const $favSearchDropdown = document.getElementById('favSearchDropdown');
+if ($favSearchDropdown) {
+  $favSearchDropdown.addEventListener('click', function (e) {
+    const item = e.target.closest('.fs-dd-item');
+    if (!item) return;
+    const favId = item.dataset.favid;
+    if (favId) {
+      // Clear search and hide dropdown
+      const $input = document.getElementById('favSearchInput');
+      if ($input) $input.value = '';
+      hideSearchDropdown();
+      // Scroll to the favorite item
+      scrollToVFavItem(favId);
+    }
+  });
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function (e) {
+  const $dd = document.getElementById('favSearchDropdown');
+  const $input = document.getElementById('favSearchInput');
+  if ($dd && $input && !$input.contains(e.target) && !$dd.contains(e.target)) {
+    hideSearchDropdown();
   }
 });
 
