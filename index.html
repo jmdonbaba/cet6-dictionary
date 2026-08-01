@@ -260,7 +260,13 @@ body {
       <span>词汇收藏 (<span id="modalVocabCount">0</span>)</span>
       <button class="modal-close" data-close="modalVocabFav">&times;</button>
     </div>
-    <div class="modal-body" id="modalVocabBody"></div>
+    <div class="modal-body" id="modalVocabBody">
+      <div class="fav-search" id="favSearch" style="display:none">
+        <input type="text" id="favSearchInput" placeholder="搜索收藏的单词..." autocomplete="off">
+        <div class="fav-search-dropdown" id="favSearchDropdown"></div>
+      </div>
+      <div id="favListContainer"></div>
+    </div>
   </div>
 </div>
 
@@ -285,6 +291,8 @@ const $vocabFavCnt = document.getElementById('vocabFavCount');
 const $modalOverlay = document.getElementById('modalOverlay');
 const $modalVocabFav = document.getElementById('modalVocabFav');
 const $modalVocabBody = document.getElementById('modalVocabBody');
+const $favListContainer = document.getElementById('favListContainer');
+const $favSearch = document.getElementById('favSearch');
 const $modalVocabCount = document.getElementById('modalVocabCount');
 const $keyArea = document.getElementById('keyArea');
 const $apiKeyInput = document.getElementById('apiKeyInput');
@@ -646,12 +654,14 @@ function renderVFavs() {
   const favs = getVFavs();
   $vocabFavCnt.textContent = `(${favs.length})`;
   $modalVocabCount.textContent = favs.length;
+  // Show/hide search box
+  if ($favSearch) $favSearch.style.display = favs.length ? 'block' : 'none';
   if (!favs.length) {
-    $modalVocabBody.innerHTML = '<div class="empty-state">还没有收藏的词汇，搜索单词后点击收藏即可保存</div>';
+    $favListContainer.innerHTML = '<div class="empty-state">还没有收藏的词汇，搜索单词后点击收藏即可保存</div>';
     return;
   }
-  $modalVocabBody.innerHTML = favs.map((f, idx) => `
-    <div class="vf-compact${f.pinned ? ' pinned' : ''}" data-vfidx="${idx}">
+  $favListContainer.innerHTML = favs.map((f, idx) => `
+    <div class="vf-compact${f.pinned ? ' pinned' : ''}" data-vfidx="${idx}" data-vfavid="${escAttr(f.id)}">
       <div class="vf-main">
         <div class="vf-word">${esc(f.word)} ${f.phonetic ? `<span class="phonetic">${esc(f.phonetic)}</span>` : ''} ${f.pos ? `<span class="pos">${esc(f.pos)}</span>` : ''}</div>
         <div class="vf-brief">${esc(f.meaning)}</div>
