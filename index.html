@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CET-6 查词助手</title>
+<style>
+:root {
+  --primary: #4f46e5;
+  --primary-light: #eef2ff;
+  --primary-hover: #4338ca;
+  --bg: #f8fafc;
+  --card-bg: #ffffff;
+  --text: #1e293b;
+  --text-secondary: #64748b;
+  --border: #e2e8f0;
+  --danger: #ef4444;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.container { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+
+.header { text-align: center; padding: 32px 0 24px; }
+.header h1 { font-size: 28px; font-weight: 700; color: var(--primary); }
+.header p { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+
+/* Key area */
+.key-area { margin-top: 12px; display: flex; justify-content: center; align-items: center; gap: 8px; }
+.key-area input {
+  width: 360px; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 13px; outline: none; font-family: monospace;
+}
+.key-area input:focus { border-color: var(--primary); }
+.key-area.saved input { display: none; }
+.key-area.saved .btn-sm { display: none; }
+.key-status { display: none; font-size: 12px; color: var(--text); cursor: pointer; }
+.key-status:hover { text-decoration: underline; }
+.key-area.saved .key-status { display: inline; }
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+/* Input area */
+.input-area { display: flex; gap: 10px; }
+.input-area input {
+  flex: 1; padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 15px; outline: none;
+  transition: border-color 0.2s;
+}
+.input-area input:focus { border-color: var(--primary); }
+.btn-primary {
+  padding: 12px 28px; background: var(--primary);
+  color: #fff; border: none; border-radius: var(--radius);
+  font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background 0.2s;
+}
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-sm {
+  padding: 6px 14px; border: 1px solid var(--border);
+  border-radius: 6px; font-size: 13px; cursor: pointer;
+  background: #fff; transition: all 0.2s;
+}
+.btn-sm:hover { border-color: var(--primary); color: var(--primary); }
+.btn-sm.danger { color: var(--danger); border-color: transparent; }
+.btn-sm.danger:hover { background: #fef2f2; border-color: var(--danger); }
+
+/* Favorites nav */
+.fav-btns { display: flex; gap: 10px; margin-top: 16px; }
+.btn-fav-nav {
+  flex: 1; padding: 14px 20px; background: var(--card-bg);
+  border: 2px solid var(--border); border-radius: var(--radius);
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  color: var(--text); transition: all 0.2s;
+  box-shadow: var(--shadow);
+}
+.btn-fav-nav:hover { border-color: var(--primary); color: var(--primary); }
+
+/* Word search result */
+.word-result { padding: 16px; background: #f8fafc; border-radius: 8px; }
+.base-form-hint { font-size: 13px; color: #b45309; background: #fef3c7; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; }
+.base-form-hint .pos { font-size: 11px; margin: 0 2px; }
+.word-result .word-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.word-result .word-header .word { font-size: 20px; font-weight: 700; color: var(--primary); }
+.word-result .phonetic { font-size: 13px; color: var(--text-secondary); font-family: "Times New Roman", serif; }
+.word-result .pos { font-size: 12px; color: var(--text-secondary); background: #e2e8f0; padding: 1px 8px; border-radius: 10px; }
+.word-result .definition { font-size: 14px; color: var(--text); margin-bottom: 4px; }
+.word-result .def-label { font-weight: 700; color: var(--text-secondary); font-size: 13px; margin-right: 4px; }
+.word-forms { font-size: 13px; color: var(--text-secondary); margin: 10px 0; padding: 8px 12px; background: #fff; border-radius: 6px; border: 1px solid var(--border); }
+.word-result .sentences { margin-top: 10px; }
+.word-result .sentences .sen-item { font-size: 13px; color: var(--text); margin: 4px 0; padding-left: 12px; border-left: 2px solid var(--border); }
+
+.example-cn { color: var(--text-secondary); margin-left: 6px; font-size: 12px; }
+
+.btn-favorite {
+  padding: 8px 18px; background: var(--primary-light);
+  border: 1px solid transparent; border-radius: 8px;
+  font-size: 14px; cursor: pointer; color: var(--primary);
+  font-weight: 500; transition: all 0.2s;
+}
+.btn-favorite:hover { border-color: var(--primary); }
+.btn-favorite.favorited { background: #fef3c7; color: #d97706; cursor: default; }
+
+/* Word search multi-module */
+.word-search-wrapper { position: relative; padding-bottom: 50px; }
+.word-search-btn {
+  position: absolute;
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 16px; font-weight: 600;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  padding: 0; line-height: 1;
+  z-index: 5;
+}
+.word-search-btn-plus { bottom: 12px; right: 20px; }
+.word-search-btn-plus:hover { border-color: var(--primary); color: var(--primary); }
+.word-search-btn-minus { bottom: 12px; right: 58px; color: var(--danger); border-color: #fecaca; }
+.word-search-btn-minus:hover { background: #fef2f2; border-color: var(--danger); color: #dc2626; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  z-index: 999; display: flex; align-items: center; justify-content: center;
+}
+.modal-card {
+  background: var(--card-bg); border-radius: var(--radius);
+  width: 90%; max-width: 700px; max-height: 80vh;
+  display: none; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.modal-card.active { display: flex; }
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 18px 20px; border-bottom: 1px solid var(--border);
+  font-size: 17px; font-weight: 700;
+}
+.modal-close {
+  background: none; border: none; font-size: 24px;
+  cursor: pointer; color: var(--text-secondary); padding: 0 4px;
+}
+.modal-close:hover { color: var(--danger); }
+.modal-body { flex: 1; overflow-y: auto; padding: 8px 20px 20px; }
+
+/* Three-dot menu */
+.more-btn {
+  background: none; border: none; font-size: 18px; cursor: pointer;
+  color: var(--text-secondary); padding: 4px 8px; border-radius: 6px;
+  line-height: 1;
+}
+.more-btn:hover { background: var(--border); color: var(--text); }
+.more-menu {
+  display: none; position: absolute; right: 0;
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 10; min-width: 100px; overflow: hidden;
+}
+.more-menu.open { display: block; }
+.more-menu button {
+  display: block; width: 100%; padding: 10px 16px; border: none;
+  background: none; font-size: 14px; cursor: pointer; text-align: left;
+  color: var(--text);
+}
+.more-menu button:hover { background: var(--primary-light); }
+.more-menu button.danger { color: var(--danger); }
+.more-menu button.danger:hover { background: #fef2f2; }
+
+/* Vocab fav compact item */
+.vf-compact {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.15s;
+}
+.vf-compact:hover { background: var(--primary-light); }
+.vf-compact.pinned { background: #f1f5f9; }
+.vf-compact .vf-main { flex: 1; min-width: 0; }
+.vf-compact .vf-word { font-size: 16px; font-weight: 700; color: var(--primary); }
+.vf-compact .vf-brief { font-size: 13px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.vf-detail {
+  display: none; padding: 0 16px 14px; border-bottom: 1px solid var(--border);
+  background: #fafbfc;
+}
+.vf-detail.open { display: block; }
+.vf-detail .vf-def { font-size: 14px; color: var(--text); margin: 6px 0 4px; }
+.vf-detail .vf-def-label { font-weight: 600; color: var(--text-secondary); font-size: 13px; }
+.vf-detail .vf-phonetic { font-size: 13px; color: var(--text-secondary); margin: 4px 0; }
+.vf-detail .vf-sen { font-size: 13px; color: var(--primary-hover); margin: 3px 0 3px 8px; }
+.vf-detail .vf-sen-cn { color: var(--text-secondary); margin-left: 4px; }
+.vf-detail .vf-forms { font-size: 12px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+
+/* Empty & error */
+.empty-state { text-align: center; padding: 32px 16px; color: var(--text-secondary); font-size: 14px; }
+
+/* Toast */
+.toast {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  background: #1e293b; color: #fff; padding: 10px 24px;
+  border-radius: 8px; font-size: 14px; z-index: 1000;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+.footer { text-align: center; padding: 16px; color: var(--text-secondary); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>CET-6 查词助手</h1>
+    <p>输入单词或短语，AI 为您提供释义、音标、用法和学术例句</p>
+    <div class="key-area" id="keyArea">
+      <input type="password" id="apiKeyInput" placeholder="输入您的 DeepSeek API Key" autocomplete="off">
+      <button class="btn-sm" id="btnSaveKey">保存</button>
+      <span class="key-status" id="keyStatus"></span>
+    </div>
+  </div>
+
+  <!-- Word Search Modules -->
+  <div id="wordSearchModules"></div>
+
+  <!-- Favorites button -->
+  <div class="fav-btns">
+    <button class="btn-fav-nav" id="btnOpenVocabFav">词汇收藏 <span id="vocabFavCount">(0)</span></button>
+  </div>
+
+  <div class="footer">CET-6 查词助手 · 数据保存在本地浏览器 · 与作文助手共享收藏</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Modal overlay -->
+<div class="modal-overlay" id="modalOverlay" style="display:none">
+  <div class="modal-card" id="modalVocabFav">
+    <div class="modal-header">
+      <span>词汇收藏 (<span id="modalVocabCount">0</span>)</span>
+      <button class="modal-close" data-close="modalVocabFav">&times;</button>
+    </div>
+    <div class="modal-body" id="modalVocabBody"></div>
+  </div>
+</div>
+
+<script>
+// ==================== 配置 ====================
+const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions';
+// 与原项目共享相同的 localStorage key，收藏自动同步
+const VFAV_KEY = 'cet6_vocab_favorites';
+const KEY_STORAGE = 'cet6_api_key';
+
+function getApiKey() {
+  return localStorage.getItem(KEY_STORAGE) || '';
+}
+function setApiKey(key) {
+  try { localStorage.setItem(KEY_STORAGE, key.trim()); } catch { toast('存储失败，请重试'); }
+}
+
+// ==================== DOM refs ====================
+const $toast = document.getElementById('toast');
+const $wsModules = document.getElementById('wordSearchModules');
+const $vocabFavCnt = document.getElementById('vocabFavCount');
+const $modalOverlay = document.getElementById('modalOverlay');
+const $modalVocabFav = document.getElementById('modalVocabFav');
+const $modalVocabBody = document.getElementById('modalVocabBody');
+const $modalVocabCount = document.getElementById('modalVocabCount');
+const $keyArea = document.getElementById('keyArea');
+const $apiKeyInput = document.getElementById('apiKeyInput');
+const $btnSaveKey = document.getElementById('btnSaveKey');
+const $keyStatus = document.getElementById('keyStatus');
+
+// ==================== Utils ====================
+let toastTimer;
+function toast(msg) {
+  $toast.textContent = msg;
+  $toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $toast.classList.remove('show'), 2200);
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+function escAttr(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function fmtTime(date) {
+  const d = new Date(date);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+// Extract JSON array/object from AI response that may contain reasoning text
+function extractJSON(text) {
+  try { return JSON.parse(text); } catch {}
+  let m = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (m) { try { return JSON.parse(m[1].trim()); } catch {} }
+  const candidates = [];
+  const re = /(\[[\s\S]*?\]|\{[\s\S]*?\})/g;
+  while ((m = re.exec(text)) !== null) {
+    candidates.push(m[1]);
+  }
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    try { return JSON.parse(candidates[i]); } catch {}
+  }
+  return null;
+}
+
+function renderWordResult(wrapper, resultEl, searchWord_, info) {
+  const displayWord = info.baseForm || info.word;
+  const baseFormHint = info.baseForm
+    ? `<div class="base-form-hint">← 你搜的 <strong>"${esc(searchWord_)}"</strong> 是 <strong>${esc(displayWord)}</strong> 的<span>${esc(info.inflection || '变形')}</span>，以下为原形查询结果</div>`
+    : '';
+  const sentences = info.sentences || info.examples || [];
+  resultEl.innerHTML = `
+    <div class="word-result">
+      ${baseFormHint}
+      <div class="word-header">
+        <span class="word">${esc(displayWord)}</span>
+        ${info.phonetic ? `<span class="phonetic">${esc(info.phonetic)}</span>` : ''}
+        ${info.pos ? `<span class="pos">${esc(info.pos)}</span>` : ''}
+        <button class="btn-favorite">收藏</button>
+      </div>
+      ${info.definitions ? info.definitions.map((d, i) => `<div class="definition"><span class="def-label">${i + 1}.</span>${esc(d)}</div>`).join('') : ''}
+      ${info.forms ? `<div class="word-forms">其他变形：${esc(info.forms)}</div>` : ''}
+      ${sentences.length ? `<div class="sentences">${sentences.map((s, i) => {
+        const en = typeof s === 'string' ? s : (s.en || '');
+        const cn = typeof s === 'string' ? '' : (s.cn || '');
+        return `<div class="sen-item">${i + 1}. ${esc(en)}${cn ? `<span class="example-cn">${esc(cn)}</span>` : ''}</div>`;
+      }).join('')}</div>` : ''}
+      ${info.fromCache ? `<div style="font-size:12px;color:#16a34a;margin-top:8px;display:flex;align-items:center;gap:8px;"><span>搜索结果来自收藏夹：</span><button class="btn-open-in-favs" data-vfavid="${esc(info.vfavId || '')}" style="font-size:11px;padding:2px 8px;border:1px solid #16a34a;border-radius:4px;background:transparent;color:#16a34a;cursor:pointer;line-height:1.5;position:relative;top:1px;transition:all 0.2s;" onmouseover="this.style.background='#16a34a';this.style.color='#fff'" onmouseout="this.style.background='transparent';this.style.color='#16a34a'">在收藏夹中打开</button></div>` : ''}
+    </div>`;
+  wrapper._wordData = { ...info, word: displayWord };
+  // Check if already favorited
+  const vfavs = getVFavs();
+  if (vfavs.some(f => f.word.toLowerCase() === displayWord.toLowerCase())) {
+    const btn = wrapper.querySelector('.btn-favorite');
+    if (btn) { btn.textContent = '取消收藏'; btn.classList.add('favorited'); }
+  }
+}
+
+// ==================== Word Search ====================
+async function searchWord(word, wrapper) {
+  const resultEl = wrapper.querySelector('.word-search-result');
+  if (!getApiKey()) { resultEl.innerHTML = '<div class="empty-state">请先在顶部输入 API Key</div>'; return; }
+
+  // Check favorites cache first
+  const vfavs = getVFavs();
+  const cached = vfavs.find(f => f.word.toLowerCase() === word.toLowerCase());
+  if (cached) {
+    renderWordResult(wrapper, resultEl, word, {
+      word: cached.word,
+      phonetic: cached.phonetic,
+      pos: cached.pos,
+      definitions: cached.definitions,
+      forms: cached.forms,
+      sentences: cached.examples,
+      fromCache: true,
+      vfavId: cached.id
+    });
+    return;
+  }
+
+  resultEl.innerHTML = '<div class="empty-state">查询中...</div>';
+  try {
+    const res = await fetch(DEEPSEEK_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${getApiKey()}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-v4-flash',
+        messages: [
+          { role: 'system', content: '你是英语词典专家。只返回 JSON，不要其他。' },
+          { role: 'user', content: `查询"${word}"。
+
+规则：
+0. word字段必须全部小写（universal，不要Universal或UNIVERSAL之类）。
+1. 如果输入包含空格（如"grappling with"），说明查询的是短语。先确认每个单词是否需要还原（如grappling是现在分词→还原为grapple），然后将整个短语标准化后查询。baseForm填标准化后的完整短语，inflection填变形类型。
+2. 如果输入是单个词，按变形规则还原后查询。
+
+【例句要求】每个例句要有难度，含六级高级词汇（但也不要太超过六级考纲）或复杂句型，学术正式、适合直接用在作文中。
+
+返回 JSON（sentences必须恰好3个）：
+{
+  "word": "标准化后的词或短语（如grapple with）",
+  "baseForm": "若是变形则填标准化后的形式（含短语），否则空",
+  "inflection": "若有baseForm必须填类型（过去式/过去分词/现在分词/复数/比较级/最高级/三单），不可为空",
+  "phonetic": "音标",
+  "pos": "词性",
+  "definitions": ["n. 释义", "v. 释义"],
+  "forms": "其他变形",
+  "sentences": [{"en": "英文例句1", "cn": "中文翻译1"}, {"en": "英文例句2", "cn": "中文翻译2"}, {"en": "英文例句3", "cn": "中文翻译3"}]
+}
+
+【重要】phonetic、pos、definitions、forms、sentences 都必须基于 word 字段的最终值（标准化后的词/短语），不是用户输入的变形。比如用户搜"escalating"，word 是"escalate"，那 phonetic 必须是 escalate 的音标 /ˈeskəleɪt/，而不是 escalating 的音标。` }
+        ],
+        temperature: 0.3
+      })
+    });
+    if (!res.ok) throw new Error('查询失败');
+    const data = await res.json();
+    let content = (data.choices[0].message.content || '').trim();
+    const info = extractJSON(content);
+    if (!info) throw new Error('查询返回解析失败');
+
+    renderWordResult(wrapper, resultEl, word, info);
+  } catch (e) {
+    console.error(e);
+    wrapper._wordData = null;
+    resultEl.innerHTML = '<div class="empty-state" style="color:var(--danger)">查询失败，请尝试再次查询或检查单词拼写后重试</div>';
+  }
+}
+
+// ==================== Vocab Favorites ====================
+function getVFavs() {
+  try {
+    const v = JSON.parse(localStorage.getItem(VFAV_KEY) || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
+}
+function setVFavs(vs) {
+  try { localStorage.setItem(VFAV_KEY, JSON.stringify(vs)); }
+  catch { toast('存储空间不足，请清理收藏后重试'); }
+}
+
+function addVFav(vocab) {
+  const favs = getVFavs();
+  if (favs.some(f => f.word.toLowerCase() === vocab.word.toLowerCase())) {
+    toast('该单词已收藏'); return;
+  }
+  const meaning = vocab.meaning || (vocab.definitions ? vocab.definitions.join('；') : '');
+  const examples = vocab.examples || vocab.sentences || [];
+  favs.unshift({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    word: vocab.word,
+    phonetic: vocab.phonetic || '',
+    pos: vocab.pos || '',
+    meaning: meaning,
+    definitions: vocab.definitions || [],
+    examples: examples,
+    forms: vocab.forms || '',
+    createdAt: fmtTime(new Date())
+  });
+  setVFavs(favs);
+  renderVFavs();
+  toast('单词已收藏');
+  updateAllVocabButtons();
+}
+
+function delVFav(id) {
+  if (!confirm('确定要删除这个词汇吗？')) return;
+  setVFavs(getVFavs().filter(f => f.id !== id));
+  renderVFavs();
+  toast('已删除');
+  updateAllVocabButtons();
+}
+
+function removeVFavByWord(word) {
+  const favs = getVFavs();
+  const idx = favs.findIndex(f => f.word.toLowerCase() === word.toLowerCase());
+  if (idx === -1) return false;
+  favs.splice(idx, 1);
+  setVFavs(favs);
+  renderVFavs();
+  updateAllVocabButtons();
+  return true;
+}
+
+function pinVFav(id) {
+  const favs = getVFavs();
+  const idx = favs.findIndex(f => f.id === id);
+  if (idx === -1) return;
+  const item = favs[idx];
+  if (item.pinned) {
+    item.pinned = false;
+    favs.splice(idx, 1);
+    let insertAt = favs.findIndex(f => !f.pinned);
+    if (insertAt === -1) insertAt = favs.length;
+    while (insertAt < favs.length && !favs[insertAt].pinned && favs[insertAt].createdAt > item.createdAt) insertAt++;
+    favs.splice(insertAt, 0, item);
+    setVFavs(favs);
+    renderVFavs();
+    toast('已取消置顶');
+  } else {
+    item.pinned = true;
+    favs.splice(idx, 1);
+    const firstUnpinned = favs.findIndex(f => !f.pinned);
+    const pinPos = firstUnpinned === -1 ? favs.length : firstUnpinned;
+    favs.splice(pinPos, 0, item);
+    setVFavs(favs);
+    renderVFavs();
+    toast('已置顶');
+  }
+}
+
+function updateAllVocabButtons() {
+  const vfavs = getVFavs();
+  const favWords = new Set(vfavs.map(f => f.word.toLowerCase()));
+  document.querySelectorAll('.word-search-wrapper').forEach(wrapper => {
+    const saveBtn = wrapper.querySelector('.btn-favorite');
+    if (saveBtn && wrapper._wordData) {
+      const isFav = favWords.has(wrapper._wordData.word.toLowerCase());
+      if (isFav) { saveBtn.textContent = '取消收藏'; saveBtn.classList.add('favorited'); }
+      else { saveBtn.textContent = '收藏'; saveBtn.classList.remove('favorited'); }
+    }
+  });
+}
+
+function renderVFavs() {
+  const favs = getVFavs();
+  $vocabFavCnt.textContent = `(${favs.length})`;
+  $modalVocabCount.textContent = favs.length;
+  if (!favs.length) {
+    $modalVocabBody.innerHTML = '<div class="empty-state">还没有收藏的词汇，搜索单词后点击收藏即可保存</div>';
+    return;
+  }
+  $modalVocabBody.innerHTML = favs.map((f, idx) => `
+    <div class="vf-compact${f.pinned ? ' pinned' : ''}" data-vfidx="${idx}">
+      <div class="vf-main">
+        <div class="vf-word">${esc(f.word)} ${f.phonetic ? `<span class="phonetic">${esc(f.phonetic)}</span>` : ''} ${f.pos ? `<span class="pos">${esc(f.pos)}</span>` : ''}</div>
+        <div class="vf-brief">${esc(f.meaning)}</div>
+      </div>
+      <div class="fav-actions" style="position:relative">
+        <button class="more-btn" data-act="morevfav" data-id="${f.id}">&ctdot;</button>
+        <div class="more-menu" data-menu="vfav-${f.id}">
+          <button data-act="pinvfav" data-id="${f.id}">${f.pinned ? '取消置顶' : '置顶'}</button>
+          <button class="danger" data-act="delvfav" data-id="${f.id}">删除</button>
+        </div>
+      </div>
+    </div>
+    <div class="vf-detail" id="vfDetail${idx}">
+      ${f.forms ? `<div class="vf-forms" style="margin-top:0">其他变形：${esc(f.forms)}</div>` : ''}
+      ${f.examples && f.examples.length ? `<div style="margin-top:8px;font-weight:600;font-size:13px;color:var(--text-secondary)">例句：</div>` + f.examples.map((ex, ei) => {
+        const en = typeof ex === 'string' ? ex : (ex.en || '');
+        const cn = typeof ex === 'string' ? '' : (ex.cn || '');
+        return `<div class="vf-sen">${ei + 1}. ${esc(en)}${cn ? `<span class="vf-sen-cn">${esc(cn)}</span>` : ''}</div>`;
+      }).join('') : ''}
+      <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">${f.createdAt}</div>
+    </div>
+  `).join('');
+}
+
+// ==================== Word Search Modules ====================
+let wsCounter = 0;
+
+function createWordSearchModule() {
+  const id = wsCounter++;
+  const wrapper = document.createElement('div');
+  wrapper.className = 'card word-search-wrapper';
+  wrapper.id = `ws-module-${id}`;
+  wrapper.innerHTML = `
+    <button class="word-search-btn word-search-btn-plus" data-ws-act="add" data-ws-id="${id}">+</button>
+    <button class="word-search-btn word-search-btn-minus" data-ws-act="remove" data-ws-id="${id}">−</button>
+    <div class="input-area">
+      <input type="text" class="word-search-input" placeholder="输入想查询的单词" data-ws-id="${id}">
+      <button class="btn-primary word-search-submit" data-ws-id="${id}">查词</button>
+    </div>
+    <div class="word-search-result" style="margin-top:14px"></div>
+  `;
+  return wrapper;
+}
+
+function updateMinusButtons() {
+  const modules = document.querySelectorAll('.word-search-wrapper');
+  modules.forEach(m => {
+    const minusBtn = m.querySelector('[data-ws-act="remove"]');
+    if (minusBtn) minusBtn.style.display = modules.length <= 1 ? 'none' : '';
+  });
+}
+
+// ==================== Events ====================
+
+// Modal open/close
+function openModal(modal) {
+  $modalOverlay.style.display = 'flex';
+  document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
+  modal.classList.add('active');
+}
+function closeModal() {
+  $modalOverlay.style.display = 'none';
+  document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
+}
+
+$modalOverlay.addEventListener('click', e => { if (e.target === $modalOverlay) closeModal(); });
+document.querySelectorAll('.modal-close').forEach(btn => btn.addEventListener('click', closeModal));
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $modalOverlay.style.display === 'flex') closeModal(); });
+document.getElementById('btnOpenVocabFav').addEventListener('click', () => openModal($modalVocabFav));
+
+// Close all open menus
+function closeAllMenus() {
+  document.querySelectorAll('.more-menu.open').forEach(m => m.classList.remove('open'));
+}
+
+// Vocab favs in modal
+$modalVocabBody.addEventListener('click', e => {
+  const compact = e.target.closest('.vf-compact');
+  const btn = e.target.closest('button');
+  const { act, id } = (btn && btn.dataset) || {};
+  if (act === 'delvfav') { closeAllMenus(); delVFav(id); return; }
+  if (act === 'pinvfav') { closeAllMenus(); pinVFav(id); return; }
+  if (act === 'morevfav') {
+    e.stopPropagation();
+    closeAllMenus();
+    document.querySelector(`[data-menu="vfav-${id}"]`).classList.add('open');
+    return;
+  }
+  // Expand/collapse
+  if (compact && !btn) {
+    const idx = compact.dataset.vfidx;
+    const detail = document.getElementById('vfDetail' + idx);
+    if (detail) detail.classList.toggle('open');
+  }
+});
+
+// Close menus on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.more-menu') && !e.target.closest('.more-btn')) closeAllMenus();
+});
+
+// Word search event delegation
+$wsModules.addEventListener('click', async e => {
+  // Handle +/- buttons
+  const actionBtn = e.target.closest('[data-ws-act]');
+  if (actionBtn) {
+    const act = actionBtn.dataset.wsAct;
+    const id = actionBtn.dataset.wsId;
+    const wrapper = document.getElementById('ws-module-' + id);
+    if (act === 'add') {
+      const newModule = createWordSearchModule();
+      wrapper.after(newModule);
+      updateMinusButtons();
+      newModule.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else if (act === 'remove') {
+      const modules = document.querySelectorAll('.word-search-wrapper');
+      if (modules.length <= 1) return;
+      wrapper.remove();
+      updateMinusButtons();
+    }
+    return;
+  }
+
+  // Handle search button
+  const submitBtn = e.target.closest('.word-search-submit');
+  if (submitBtn) {
+    const id = submitBtn.dataset.wsId;
+    const wrapper = document.getElementById('ws-module-' + id);
+    const input = wrapper.querySelector('.word-search-input');
+    const word = input.value.trim();
+    if (!word) { toast('请输入要查询的单词'); return; }
+    if (wrapper._searching) return;
+    wrapper._searching = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = '查询中...';
+    try { await searchWord(word, wrapper); } finally {
+      wrapper._searching = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = '查词';
+    }
+    return;
+  }
+
+  // Handle save vocab button in search result
+  const saveBtn = e.target.closest('.word-search-result .btn-favorite');
+  if (saveBtn) {
+    const wrapper = e.target.closest('.word-search-wrapper');
+    if (wrapper && wrapper._wordData) {
+      if (saveBtn.classList.contains('favorited')) {
+        const word = wrapper._wordData && wrapper._wordData.word;
+        if (word && removeVFavByWord(word)) {
+          saveBtn.textContent = '收藏';
+          saveBtn.classList.remove('favorited');
+          toast('已取消收藏');
+        }
+        return;
+      }
+      addVFav(wrapper._wordData);
+      saveBtn.textContent = '取消收藏';
+      saveBtn.classList.add('favorited');
+    }
+    return;
+  }
+
+  // Handle "open in favorites" button
+  const openInFavsBtn = e.target.closest('.btn-open-in-favs');
+  if (openInFavsBtn) {
+    const vfavId = openInFavsBtn.dataset.vfavid;
+    if (!vfavId) { toast('未找到收藏记录'); return; }
+    renderVFavs();
+    openModal($modalVocabFav);
+    const favs = getVFavs();
+    const idx = favs.findIndex(f => f.id === vfavId);
+    if (idx !== -1) {
+      setTimeout(() => {
+        const compact = $modalVocabBody.querySelector(`[data-vfidx="${idx}"]`);
+        if (compact) {
+          compact.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const detail = document.getElementById('vfDetail' + idx);
+          if (detail) detail.classList.add('open');
+        }
+      }, 100);
+    }
+    return;
+  }
+});
+
+// Enter key in word search inputs
+$wsModules.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const input = e.target.closest('.word-search-input');
+    if (input) {
+      const wrapper = input.closest('.word-search-wrapper');
+      if (wrapper && !wrapper._searching) {
+        wrapper.querySelector('.word-search-submit').click();
+      }
+    }
+  }
+});
+
+// ==================== Key management ====================
+function initKey() {
+  const saved = getApiKey();
+  if (saved) {
+    $keyArea.classList.add('saved');
+    $apiKeyInput.style.display = 'none';
+    $btnSaveKey.style.display = 'none';
+    $keyStatus.style.display = 'inline';
+    $keyStatus.textContent = 'API Key 已保存（点击更换）';
+  }
+}
+
+function saveKey() {
+  const key = $apiKeyInput.value.trim();
+  if (!key) { toast('请输入 API Key'); return; }
+  if (!key.startsWith('sk-')) { toast('Key 格式不正确，应以 sk- 开头'); return; }
+  setApiKey(key);
+  $apiKeyInput.value = '';
+  document.querySelectorAll('.word-search-result').forEach(el => { el.innerHTML = ''; });
+  document.querySelectorAll('.word-search-wrapper').forEach(w => { delete w._wordData; });
+  initKey();
+  toast('Key 已保存');
+}
+
+$btnSaveKey.addEventListener('click', saveKey);
+$apiKeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveKey(); });
+$keyStatus.addEventListener('click', () => {
+  if (confirm('确定要更换 API Key 吗？')) {
+    localStorage.removeItem(KEY_STORAGE);
+    location.reload();
+  }
+});
+
+// ==================== Init ====================
+initKey();
+renderVFavs();
+// Create initial word search module
+$wsModules.appendChild(createWordSearchModule());
+updateMinusButtons();
+</script>
+</body>
+</html>
