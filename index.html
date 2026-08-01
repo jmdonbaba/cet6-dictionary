@@ -764,6 +764,11 @@ function renderVFavs() {
       <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">${f.createdAt}</div>
     </div>
   `).join('');
+
+  // Clear search state after list rebuild
+  var si = document.getElementById('favSearchInput');
+  if (si) si.value = '';
+  hideSearchDropdown();
 }
 
 // ==================== Word Search Modules ====================
@@ -812,6 +817,11 @@ function openModal(modal) {
 function closeModal() {
   $modalOverlay.style.display = 'none';
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
+
+  // Clear search state
+  var si = document.getElementById('favSearchInput');
+  if (si) { si.value = ''; }
+  hideSearchDropdown();
 }
 
 $modalOverlay.addEventListener('click', e => { if (e.target === $modalOverlay) closeModal(); });
@@ -965,9 +975,12 @@ if ($favSearchInput) {
   // Clear search and hide dropdown on Escape
   $favSearchInput.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      this.value = '';
-      hideSearchDropdown();
-      this.blur();
+      if (this.value) {
+        e.stopPropagation();
+        this.value = '';
+        hideSearchDropdown();
+        this.blur();
+      }
     }
   });
 }
