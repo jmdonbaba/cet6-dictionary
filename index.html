@@ -333,6 +333,48 @@ function extractJSON(text) {
   return null;
 }
 
+// ==================== Favorites Search ====================
+// Subsequence match: check if query chars appear in word in order
+// Returns match details or null if no match
+function subsequenceMatch(query, word) {
+  const q = query.toLowerCase();
+  const w = word.toLowerCase();
+  const indices = [];
+  let wi = 0;
+  for (let qi = 0; qi < q.length; qi++) {
+    while (wi < w.length && w[wi] !== q[qi]) wi++;
+    if (wi >= w.length) return null;
+    indices.push(wi);
+    wi++;
+  }
+  const firstMatchPos = indices[0];
+  let gapSum = 0;
+  for (let i = 1; i < indices.length; i++) {
+    gapSum += indices[i] - indices[i - 1] - 1;
+  }
+  return { matched: true, indices, firstMatchPos, gapSum };
+}
+
+// Score a match — lower is better
+function matchScore(match, wordLength) {
+  return (match.firstMatchPos * 1000) + (match.gapSum * 100) + wordLength;
+}
+
+// Highlight matched letters in a word
+function highlightMatches(word, indices) {
+  if (!indices || !indices.length) return esc(word);
+  const idxSet = new Set(indices);
+  let result = '';
+  for (let i = 0; i < word.length; i++) {
+    if (idxSet.has(i)) {
+      result += '<span class="match-hl">' + esc(word[i]) + '</span>';
+    } else {
+      result += esc(word[i]);
+    }
+  }
+  return result;
+}
+
 function renderWordResult(wrapper, resultEl, searchWord_, info) {
   const displayWord = info.baseForm || info.word;
   const baseFormHint = info.baseForm
