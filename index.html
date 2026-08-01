@@ -423,6 +423,23 @@ function hideSearchDropdown() {
   if ($dd) $dd.style.display = 'none';
 }
 
+// Scroll to a specific favorite item in the list and expand it
+function scrollToVFavItem(favId) {
+  const favs = getVFavs();
+  const idx = favs.findIndex(f => f.id === favId);
+  if (idx === -1) return;
+  const container = document.getElementById('favListContainer');
+  if (!container) return;
+  setTimeout(function () {
+    const compact = container.querySelector('[data-vfavid="' + favId + '"]');
+    if (compact) {
+      compact.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const detail = document.getElementById('vfDetail' + idx);
+      if (detail) detail.classList.add('open');
+    }
+  }, 100);
+}
+
 function renderWordResult(wrapper, resultEl, searchWord_, info) {
   const displayWord = info.baseForm || info.word;
   const baseFormHint = info.baseForm
