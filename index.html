@@ -76,6 +76,62 @@ body {
 .btn-primary:hover { background: var(--primary-hover); }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
+/* Search mode toggle — DeepSeek-style sliding pill */
+.ws-mode-toggle {
+  position: relative;
+  display: inline-flex;
+  background: #f1f5f9;
+  border-radius: 999px;
+  padding: 3px;
+  flex-shrink: 0;
+  align-self: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+}
+.ws-mode-slider {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  height: calc(100% - 6px);
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 0;
+}
+.ws-mode-toggle.dragging .ws-mode-slider {
+  transition: none;
+}
+.ws-mode-toggle button {
+  position: relative;
+  z-index: 1;
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-weight: 500;
+  transition: color 0.25s ease;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.ws-mode-toggle button.active {
+  color: var(--primary);
+}
+.ws-mode-toggle button:not(.active):hover {
+  color: var(--text);
+}
+.ws-mode-toggle.dragging button {
+  color: var(--text-secondary);
+}
+.ws-mode-toggle.dragging button.drag-hover {
+  color: var(--text);
+}
+
 .btn-sm {
   padding: 6px 14px; border: 1px solid var(--border);
   border-radius: 6px; font-size: 13px; cursor: pointer;
@@ -193,13 +249,52 @@ body {
 .vf-compact {
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px; border-bottom: 1px solid var(--border);
-  cursor: pointer; transition: background 0.15s;
+  transition: background 0.15s;
 }
 .vf-compact:hover { background: var(--primary-light); }
 .vf-compact.pinned { background: #f1f5f9; }
-.vf-compact .vf-main { flex: 1; min-width: 0; }
+.vf-compact .vf-main { flex: 1; min-width: 0; cursor: pointer; }
 .vf-compact .vf-word { font-size: 16px; font-weight: 700; color: var(--primary); }
+.vf-compact .vf-word .phonetic,
+.vf-compact .vf-word .pos { color: var(--text-secondary); }
 .vf-compact .vf-brief { font-size: 13px; color: var(--text-secondary); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Drag handle */
+.vf-drag-handle {
+  display: flex; gap: 2px; align-items: center; justify-content: center;
+  width: 24px; height: 28px; cursor: grab; flex-shrink: 0;
+  border-radius: 4px; transition: background 0.15s; margin-right: 4px;
+}
+.vf-drag-handle::before,
+.vf-drag-handle::after {
+  content: ''; display: block;
+  width: 2px; height: 14px; border-radius: 1px;
+  background: var(--text-secondary);
+  transition: background 0.15s;
+}
+.vf-drag-handle:hover { background: var(--border); }
+.vf-drag-handle:hover::before,
+.vf-drag-handle:hover::after { background: var(--text); }
+.vf-drag-handle:active { cursor: grabbing; }
+.vf-compact.dragging { opacity: 0.4; }
+.vf-compact.drag-over { border-bottom: 2px solid var(--primary); }
+	.vf-compact.drag-over-top { border-top: 2px solid var(--primary); }
+
+/* Drag ghost */
+.vf-drag-ghost {
+  position: fixed;
+  z-index: 1001;
+  pointer-events: none;
+  opacity: 0.85;
+  background: var(--card-bg);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  padding: 10px 16px;
+  font-size: 14px;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
 
 .vf-detail {
   display: none; padding: 0 16px 14px; border-bottom: 1px solid var(--border);
@@ -296,7 +391,8 @@ body {
 .fs-dd-item:last-child {
   border-bottom: none;
 }
-.fs-dd-item:hover {
+.fs-dd-item:hover,
+.fs-dd-item.key-selected {
   background: var(--primary-light);
 }
 .fs-dd-item .fs-word {
@@ -334,7 +430,24 @@ body {
   font-size: 13px;
 }
 
+/* Word search dropdown (same style as fav-search-dropdown) */
+.ws-search-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0; right: 0;
+  margin-top: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  z-index: 20;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
 .footer { text-align: center; padding: 16px; color: var(--text-secondary); font-size: 12px; }
+.footer-actions { margin-top: 8px; display: flex; gap: 10px; justify-content: center; }
 </style>
 </head>
 <body>
@@ -357,7 +470,7 @@ body {
     <button class="btn-fav-nav" id="btnOpenVocabFav">词汇收藏 <span id="vocabFavCount">(0)</span></button>
   </div>
 
-  <div class="footer">CET-6 查词助手 · 数据保存在本地浏览器 · 与作文助手共享收藏</div>
+  <div class="footer">CET-6 查词助手 · 数据保存在本地浏览器</div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -543,6 +656,59 @@ function hideSearchDropdown() {
   if ($clear) $clear.classList.remove('visible');
 }
 
+// Render word-search dropdown for a specific module
+function renderWSSearchDropdown(dropdown, results) {
+  if (!results.length) {
+    dropdown.style.display = 'none';
+    return;
+  }
+  dropdown.innerHTML = results.map(r => {
+    const f = r.fav;
+    const meaning = f.meaning || (f.definitions ? f.definitions.join('；') : '');
+    return '<div class="fs-dd-item" data-favid="' + escAttr(f.id) + '">'
+      + '<span class="fs-word">' + highlightMatches(f.word, r.indices) + '</span>'
+      + (f.phonetic ? '<span class="fs-phonetic">' + esc(f.phonetic) + '</span>' : '')
+      + (f.pos ? '<span class="fs-pos">' + esc(f.pos) + '</span>' : '')
+      + '<span class="fs-meaning">' + esc(meaning) + '</span>'
+      + '</div>';
+  }).join('');
+  dropdown.style.display = 'block';
+}
+
+function hideAllWSSearchDropdowns() {
+  document.querySelectorAll('.ws-search-dropdown').forEach(function(dd) { dd.style.display = 'none'; });
+}
+
+// ==================== Dropdown Keyboard Navigation ====================
+// Navigate selection in a dropdown (ArrowUp/ArrowDown)
+function navigateDropdown(dropdown, key) {
+  const items = dropdown.querySelectorAll('.fs-dd-item');
+  if (!items.length) return;
+  const current = dropdown.querySelector('.fs-dd-item.key-selected');
+  let nextIdx = -1;
+  if (current) {
+    const curIdx = Array.from(items).indexOf(current);
+    current.classList.remove('key-selected');
+    if (key === 'ArrowDown') {
+      nextIdx = (curIdx + 1) % items.length;
+    } else if (key === 'ArrowUp') {
+      nextIdx = (curIdx - 1 + items.length) % items.length;
+    }
+  } else {
+    if (key === 'ArrowDown') nextIdx = 0;
+    else if (key === 'ArrowUp') nextIdx = items.length - 1;
+  }
+  if (nextIdx >= 0) {
+    items[nextIdx].classList.add('key-selected');
+    items[nextIdx].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+// Get the currently selected item in a dropdown
+function getSelectedDropdownItem(dropdown) {
+  return dropdown.querySelector('.fs-dd-item.key-selected');
+}
+
 // Scroll to a specific favorite item in the list and expand it
 function scrollToVFavItem(favId) {
   const favs = getVFavs();
@@ -572,7 +738,7 @@ function renderWordResult(wrapper, resultEl, searchWord_, info) {
       <div class="word-header">
         <span class="word">${esc(displayWord)}</span>
         ${info.phonetic ? `<span class="phonetic">${esc(info.phonetic)}</span>` : ''}
-        ${info.pos ? `<span class="pos">${esc(info.pos)}</span>` : ''}
+        ${info.pos ? `<span class="pos">${esc(info.pos.replace(/,\s*/g, ' & '))}</span>` : ''}
         <button class="btn-favorite">收藏</button>
       </div>
       ${info.definitions ? info.definitions.map((d, i) => `<div class="definition"><span class="def-label">${i + 1}.</span>${esc(d)}</div>`).join('') : ''}
@@ -594,9 +760,11 @@ function renderWordResult(wrapper, resultEl, searchWord_, info) {
 }
 
 // ==================== Word Search ====================
-async function searchWord(word, wrapper) {
+async function searchWord(word, wrapper, mode) {
   const resultEl = wrapper.querySelector('.word-search-result');
   if (!getApiKey()) { resultEl.innerHTML = '<div class="empty-state">请先在顶部输入 API Key</div>'; return; }
+
+  const isOriginal = (mode === 'original');
 
   // Check favorites cache first
   const vfavs = getVFavs();
@@ -616,6 +784,15 @@ async function searchWord(word, wrapper) {
   }
 
   resultEl.innerHTML = '<div class="empty-state">查询中...</div>';
+
+  const modeInstruction = isOriginal
+    ? '【原词模式】直接按用户输入的原词查询，不要做任何词形还原。baseForm必须为空字符串，inflection必须为空字符串。'
+    : '【原形模式】按变形规则将输入词还原为原形后查询。baseForm填原形，inflection填变形类型。';
+
+  const finalNote = isOriginal
+    ? 'word 就是用户输入的原词。'
+    : 'word 是还原后的原形，不是用户输入的变形。比如用户搜"escalating"，word 是"escalate"，那 phonetic 必须是 escalate 的音标 /ˈeskəleɪt/，而不是 escalating 的音标。';
+
   try {
     const res = await fetch(DEEPSEEK_URL, {
       method: 'POST',
@@ -627,12 +804,17 @@ async function searchWord(word, wrapper) {
         model: 'deepseek-v4-flash',
         messages: [
           { role: 'system', content: '你是英语词典专家。只返回 JSON，不要其他。' },
-          { role: 'user', content: `查询"${word}"。
+          { role: 'user', content: `查询"${word}"。${modeInstruction}
 
 规则：
 0. word字段必须全部小写（universal，不要Universal或UNIVERSAL之类）。
-1. 如果输入包含空格（如"grappling with"），说明查询的是短语。先确认每个单词是否需要还原（如grappling是现在分词→还原为grapple），然后将整个短语标准化后查询。baseForm填标准化后的完整短语，inflection填变形类型。
-2. 如果输入是单个词，按变形规则还原后查询。
+1. forms 必须列出，只列出六级考纲范围内的：
+   - 形态屈折变化：复数/过去式/过去分词/现在分词/三单/比较级/最高级（只列该词性适用的）
+   - 同根派生词：仅包含六级难度的紧密派生词（同根名词、动词、形容词、副词），每条必须附带中文释义
+   格式示例（动词）：第三人称单数 aspires；现在分词 aspiring；过去式 aspired；过去分词 aspired；派生名词 aspiration 抱负、渴望
+   格式示例（名词）：复数 analyses；派生形容词 analytical 分析的；派生副词 analytically 分析地；派生动词 analyze 分析
+   格式示例（形容词）：比较级 bigger，最高级 biggest；派生名词 bigness 巨大
+   若确实没有六级考纲内的其他变形（如个别虚词），填"无"，不得留空或省略。
 
 【例句要求】每个例句要有难度，含六级高级词汇（但也不要太超过六级考纲）或复杂句型，学术正式、适合直接用在作文中。
 
@@ -642,13 +824,13 @@ async function searchWord(word, wrapper) {
   "baseForm": "若是变形则填标准化后的形式（含短语），否则空",
   "inflection": "若有baseForm必须填类型（过去式/过去分词/现在分词/复数/比较级/最高级/三单），不可为空",
   "phonetic": "音标",
-  "pos": "词性",
+  "pos": "词性（多个用 & 分隔，如 adj. & v.，不要用逗号）",
   "definitions": ["n. 释义", "v. 释义"],
-  "forms": "其他变形",
+  "forms": "其他变形（必须包含形态变化和同根派生词，详见规则1）",
   "sentences": [{"en": "英文例句1", "cn": "中文翻译1"}, {"en": "英文例句2", "cn": "中文翻译2"}, {"en": "英文例句3", "cn": "中文翻译3"}]
 }
 
-【重要】phonetic、pos、definitions、forms、sentences 都必须基于 word 字段的最终值（标准化后的词/短语），不是用户输入的变形。比如用户搜"escalating"，word 是"escalate"，那 phonetic 必须是 escalate 的音标 /ˈeskəleɪt/，而不是 escalating 的音标。` }
+【重要】phonetic、pos、definitions、forms、sentences 都必须基于 word 字段的值。${finalNote}` }
         ],
         temperature: 0.3
       })
@@ -778,6 +960,7 @@ function renderVFavs() {
         <div class="vf-word">${esc(f.word)} ${f.phonetic ? `<span class="phonetic">${esc(f.phonetic)}</span>` : ''} ${f.pos ? `<span class="pos">${esc(f.pos)}</span>` : ''}</div>
         <div class="vf-brief">${esc(f.meaning)}</div>
       </div>
+      <span class="vf-drag-handle"></span>
       <div class="fav-actions" style="position:relative">
         <button class="more-btn" data-act="morevfav" data-id="${f.id}">&ctdot;</button>
         <div class="more-menu" data-menu="vfav-${f.id}">
@@ -815,7 +998,15 @@ function createWordSearchModule() {
     <button class="word-search-btn word-search-btn-plus" data-ws-act="add" data-ws-id="${id}">+</button>
     <button class="word-search-btn word-search-btn-minus" data-ws-act="remove" data-ws-id="${id}">−</button>
     <div class="input-area">
-      <input type="text" class="word-search-input" placeholder="输入想查询的单词" data-ws-id="${id}">
+      <div style="flex:1;position:relative;">
+        <input type="text" class="word-search-input" placeholder="输入想查询的单词" data-ws-id="${id}" autocomplete="off" style="width:100%;box-sizing:border-box">
+        <div class="ws-search-dropdown" data-ws-dd="${id}"></div>
+      </div>
+      <div class="ws-mode-toggle" data-ws-id="${id}">
+        <div class="ws-mode-slider"></div>
+        <button class="active" data-mode="lemma" data-ws-id="${id}">原形</button>
+        <button data-mode="original" data-ws-id="${id}">原词</button>
+      </div>
       <button class="btn-primary word-search-submit" data-ws-id="${id}">查词</button>
     </div>
     <div class="word-search-result" style="margin-top:14px"></div>
@@ -831,15 +1022,28 @@ function updateMinusButtons() {
   });
 }
 
+function getSearchMode(wrapper) {
+  const activeBtn = wrapper.querySelector('.ws-mode-toggle button.active');
+  return activeBtn ? activeBtn.dataset.mode : 'lemma';
+}
+
+function syncSlider(toggle) {
+  const slider = toggle.querySelector('.ws-mode-slider');
+  const activeBtn = toggle.querySelector('button.active');
+  if (!slider || !activeBtn) return;
+  slider.style.left = activeBtn.offsetLeft + 'px';
+  slider.style.width = activeBtn.offsetWidth + 'px';
+}
+
 // ==================== Events ====================
 
 // Modal open/close
-function openModal(modal) {
+function openModal(modal, skipFocus) {
   $modalOverlay.style.display = 'flex';
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
-  // Focus search input when opening vocab favorites
-  if (modal === $modalVocabFav) {
+  // Focus search input when opening vocab favorites (skip when navigating from "open in favorites")
+  if (modal === $modalVocabFav && !skipFocus) {
     setTimeout(function () {
       var si = document.getElementById('favSearchInput');
       if (si && getVFavs().length) si.focus();
@@ -856,7 +1060,15 @@ function closeModal() {
   hideSearchDropdown();
 }
 
-$modalOverlay.addEventListener('click', e => { if (e.target === $modalOverlay) closeModal(); });
+// Track mousedown target to avoid closing modal when drag-releasing outside
+let _modalMousedownInside = false;
+$modalOverlay.addEventListener('mousedown', e => {
+  const activeModal = document.querySelector('.modal-card.active');
+  _modalMousedownInside = activeModal ? activeModal.contains(e.target) : false;
+});
+$modalOverlay.addEventListener('click', e => {
+  if (e.target === $modalOverlay && !_modalMousedownInside) closeModal();
+});
 document.querySelectorAll('.modal-close').forEach(btn => btn.addEventListener('click', closeModal));
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $modalOverlay.style.display === 'flex') closeModal(); });
 document.getElementById('btnOpenVocabFav').addEventListener('click', () => openModal($modalVocabFav));
@@ -879,8 +1091,8 @@ $modalVocabBody.addEventListener('click', e => {
     document.querySelector(`[data-menu="vfav-${id}"]`).classList.add('open');
     return;
   }
-  // Expand/collapse
-  if (compact && !btn) {
+  // Expand/collapse (skip if clicking drag handle)
+  if (compact && !btn && !e.target.closest('.vf-drag-handle')) {
     const idx = compact.dataset.vfidx;
     const detail = document.getElementById('vfDetail' + idx);
     if (detail) detail.classList.toggle('open');
@@ -905,12 +1117,28 @@ $wsModules.addEventListener('click', async e => {
       wrapper.after(newModule);
       updateMinusButtons();
       newModule.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      syncSlider(newModule.querySelector('.ws-mode-toggle'));
+      setTimeout(() => {
+        const newInput = newModule.querySelector('.word-search-input');
+        if (newInput) newInput.focus();
+      }, 100);
     } else if (act === 'remove') {
       const modules = document.querySelectorAll('.word-search-wrapper');
       if (modules.length <= 1) return;
       wrapper.remove();
       updateMinusButtons();
     }
+    return;
+  }
+
+  // Handle mode toggle click
+  const toggleBtn = e.target.closest('.ws-mode-toggle button');
+  if (toggleBtn) {
+    const toggle = toggleBtn.closest('.ws-mode-toggle');
+    if (toggle._wasDragging) { toggle._wasDragging = false; return; }
+    toggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    toggleBtn.classList.add('active');
+    syncSlider(toggle);
     return;
   }
 
@@ -926,7 +1154,7 @@ $wsModules.addEventListener('click', async e => {
     wrapper._searching = true;
     submitBtn.disabled = true;
     submitBtn.textContent = '查询中...';
-    try { await searchWord(word, wrapper); } finally {
+    try { await searchWord(word, wrapper, getSearchMode(wrapper)); } finally {
       wrapper._searching = false;
       submitBtn.disabled = false;
       submitBtn.textContent = '查词';
@@ -961,12 +1189,12 @@ $wsModules.addEventListener('click', async e => {
     const vfavId = openInFavsBtn.dataset.vfavid;
     if (!vfavId) { toast('未找到收藏记录'); return; }
     renderVFavs();
-    openModal($modalVocabFav);
+    openModal($modalVocabFav, true);
     const favs = getVFavs();
     const idx = favs.findIndex(f => f.id === vfavId);
     if (idx !== -1) {
       setTimeout(() => {
-        const compact = $modalVocabBody.querySelector(`[data-vfidx="${idx}"]`);
+        const compact = $modalVocabBody.querySelector('[data-vfidx="' + idx + '"]');
         if (compact) {
           compact.scrollIntoView({ behavior: 'smooth', block: 'start' });
           const detail = document.getElementById('vfDetail' + idx);
@@ -976,19 +1204,176 @@ $wsModules.addEventListener('click', async e => {
     }
     return;
   }
+
+  // Handle word search dropdown item click — populate result from favorites cache
+  const ddItem = e.target.closest('.ws-search-dropdown .fs-dd-item');
+  if (ddItem) {
+    const favId = ddItem.dataset.favid;
+    const wrapper = ddItem.closest('.word-search-wrapper');
+    const dropdown = wrapper.querySelector('.ws-search-dropdown');
+    const input = wrapper.querySelector('.word-search-input');
+    const resultEl = wrapper.querySelector('.word-search-result');
+    const favs = getVFavs();
+    const fav = favs.find(f => f.id === favId);
+    if (fav) {
+      input.value = fav.word;
+      renderWordResult(wrapper, resultEl, fav.word, {
+        word: fav.word,
+        phonetic: fav.phonetic,
+        pos: fav.pos,
+        definitions: fav.definitions,
+        forms: fav.forms,
+        sentences: fav.examples,
+        fromCache: true,
+        vfavId: fav.id
+      });
+    }
+    dropdown.style.display = 'none';
+    return;
+  }
 });
 
-// Enter key in word search inputs
+// Mode toggle — drag to slide (document-level to track outside toggle bounds)
+let _activeDragToggle = null;
+
+document.addEventListener('pointerdown', e => {
+  const toggle = e.target.closest('.ws-mode-toggle');
+  if (!toggle) return;
+  const slider = toggle.querySelector('.ws-mode-slider');
+  const btns = toggle.querySelectorAll('button');
+  if (!slider || btns.length !== 2) return;
+  _activeDragToggle = toggle;
+  toggle._drag = {
+    startX: e.clientX,
+    startLeft: parseFloat(slider.style.left) || btns[0].offsetLeft,
+    minL: btns[0].offsetLeft,
+    maxL: btns[1].offsetLeft,
+    w0: btns[0].offsetWidth,
+    w1: btns[1].offsetWidth,
+    moved: false
+  };
+});
+
+document.addEventListener('pointermove', e => {
+  const toggle = _activeDragToggle;
+  if (!toggle || !toggle._drag) return;
+  const d = toggle._drag;
+  const dx = e.clientX - d.startX;
+  if (Math.abs(dx) > 3) { d.moved = true; toggle.classList.add('dragging'); }
+  if (!d.moved) return;
+  let nl = d.startLeft + dx;
+  nl = Math.max(d.minL, Math.min(d.maxL, nl));
+  const mid = (d.minL + d.maxL) / 2;
+  const hoverIdx = nl >= mid ? 1 : 0;
+  const btns = toggle.querySelectorAll('button');
+  btns.forEach((b, i) => b.classList.toggle('drag-hover', i === hoverIdx));
+  const p = (nl - d.minL) / (d.maxL - d.minL || 1);
+  const sw = d.w0 + (d.w1 - d.w0) * p;
+  const slider = toggle.querySelector('.ws-mode-slider');
+  slider.style.left = nl + 'px';
+  slider.style.width = sw + 'px';
+});
+
+function _finishToggleDrag(toggle) {
+  if (!toggle || !toggle._drag) return;
+  const d = toggle._drag;
+  toggle.classList.remove('dragging');
+  const slider = toggle.querySelector('.ws-mode-slider');
+  const btns = toggle.querySelectorAll('button');
+  btns.forEach(b => b.classList.remove('drag-hover'));
+  if (!slider || btns.length !== 2) { delete toggle._drag; return; }
+  const curL = parseFloat(slider.style.left) || d.minL;
+  const mid = (d.minL + d.maxL) / 2;
+  const idx = curL >= mid ? 1 : 0;
+  btns.forEach(b => b.classList.remove('active'));
+  btns[idx].classList.add('active');
+  syncSlider(toggle);
+  toggle._wasDragging = d.moved;
+  delete toggle._drag;
+}
+
+document.addEventListener('pointerup', e => {
+  if (_activeDragToggle) {
+    _finishToggleDrag(_activeDragToggle);
+    _activeDragToggle = null;
+  }
+});
+document.addEventListener('pointercancel', e => {
+  if (_activeDragToggle) {
+    _finishToggleDrag(_activeDragToggle);
+    _activeDragToggle = null;
+  }
+});
+
+// Keyboard navigation in word search inputs
 $wsModules.addEventListener('keydown', e => {
+  const input = e.target.closest('.word-search-input');
+  if (!input) return;
+  const wrapper = input.closest('.word-search-wrapper');
+  const dropdown = wrapper.querySelector('.ws-search-dropdown');
+  const dropdownVisible = dropdown && dropdown.style.display !== 'none';
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (dropdownVisible) {
+      e.preventDefault();
+      navigateDropdown(dropdown, e.key);
+    }
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    if (dropdown) dropdown.style.display = 'none';
+    return;
+  }
+
   if (e.key === 'Enter') {
-    const input = e.target.closest('.word-search-input');
-    if (input) {
-      const wrapper = input.closest('.word-search-wrapper');
-      if (wrapper && !wrapper._searching) {
-        wrapper.querySelector('.word-search-submit').click();
+    if (dropdownVisible) {
+      const selected = getSelectedDropdownItem(dropdown);
+      if (selected) {
+        e.preventDefault();
+        // Trigger the same action as clicking the dropdown item
+        const favId = selected.dataset.favid;
+        const favs = getVFavs();
+        const fav = favs.find(f => f.id === favId);
+        if (fav) {
+          input.value = fav.word;
+          const resultEl = wrapper.querySelector('.word-search-result');
+          renderWordResult(wrapper, resultEl, fav.word, {
+            word: fav.word,
+            phonetic: fav.phonetic,
+            pos: fav.pos,
+            definitions: fav.definitions,
+            forms: fav.forms,
+            sentences: fav.examples,
+            fromCache: true,
+            vfavId: fav.id
+          });
+        }
+        dropdown.style.display = 'none';
+        return;
       }
     }
+    // No selection — submit search
+    if (dropdown) dropdown.style.display = 'none';
+    if (wrapper && !wrapper._searching) {
+      wrapper.querySelector('.word-search-submit').click();
+    }
   }
+});
+
+// Word search input — show favorites dropdown as user types
+$wsModules.addEventListener('input', e => {
+  const input = e.target.closest('.word-search-input');
+  if (!input) return;
+  const query = input.value;
+  const wrapper = input.closest('.word-search-wrapper');
+  const dropdown = wrapper.querySelector('.ws-search-dropdown');
+  if (!query || !query.trim()) {
+    dropdown.style.display = 'none';
+    return;
+  }
+  const results = searchFavorites(query);
+  renderWSSearchDropdown(dropdown, results);
 });
 
 // ==================== Favorites search events ====================
@@ -1007,8 +1392,35 @@ if ($favSearchInput) {
     renderSearchDropdown(results);
   });
 
-  // Clear search and hide dropdown on Escape
+  // Keyboard navigation in favorites search
   $favSearchInput.addEventListener('keydown', function (e) {
+    const $dd = document.getElementById('favSearchDropdown');
+    const ddVisible = $dd && $dd.style.display !== 'none';
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (ddVisible) {
+        e.preventDefault();
+        navigateDropdown($dd, e.key);
+      }
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      if (ddVisible) {
+        const selected = getSelectedDropdownItem($dd);
+        if (selected) {
+          e.preventDefault();
+          const favId = selected.dataset.favid;
+          if (favId) {
+            this.value = '';
+            hideSearchDropdown();
+            scrollToVFavItem(favId);
+          }
+          return;
+        }
+      }
+    }
+
     if (e.key === 'Escape') {
       if (this.value) {
         e.stopPropagation();
@@ -1055,13 +1467,163 @@ if ($favSearchDropdown) {
   });
 }
 
-// Close dropdown when clicking outside
+// ==================== Drag and drop reorder for favorites ====================
+let dragSrcIdx = null;
+let dragScrollTimer = null;
+let dragActive = false; // true during custom pointer-drag
+let dragGhost = null;  // clone element following the pointer
+
+function clearDragScroll() {
+  if (dragScrollTimer) { clearInterval(dragScrollTimer); dragScrollTimer = null; }
+}
+
+function clearDragState() {
+  dragSrcIdx = null;
+  dragActive = false;
+  clearDragScroll();
+  if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+  var list = document.getElementById('favListContainer');
+  if (list) list.querySelectorAll('.vf-compact.drag-over, .vf-compact.drag-over-top, .vf-compact.dragging').forEach(function (el) {
+    el.classList.remove('drag-over', 'drag-over-top', 'dragging');
+  });
+}
+
+// Helper: find the compact item under the pointer, accounting for scrolling container
+function findCompactAt(clientX, clientY) {
+  var compacts = $favListContainer.querySelectorAll('.vf-compact');
+  for (var i = 0; i < compacts.length; i++) {
+    var r = compacts[i].getBoundingClientRect();
+    if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+      return compacts[i];
+    }
+  }
+  return null;
+}
+
+// Pointer-based custom drag on drag handle
+$favListContainer.addEventListener('pointerdown', function (e) {
+  var handle = e.target.closest('.vf-drag-handle');
+  if (!handle) return;
+  e.preventDefault();
+  var compact = handle.closest('.vf-compact');
+  if (!compact) return;
+  dragSrcIdx = parseInt(compact.dataset.vfidx, 10);
+  dragActive = true;
+  compact.classList.add('dragging');
+
+  // Create ghost
+  var wordEl = compact.querySelector('.vf-word');
+  dragGhost = document.createElement('div');
+  dragGhost.className = 'vf-drag-ghost';
+  dragGhost.textContent = wordEl ? wordEl.textContent.trim() : '';
+  dragGhost.style.left = e.clientX + 'px';
+  dragGhost.style.top = e.clientY + 'px';
+  document.body.appendChild(dragGhost);
+
+  handle.setPointerCapture(e.pointerId);
+});
+
+$favListContainer.addEventListener('pointermove', function (e) {
+  if (!dragActive || dragSrcIdx === null) return;
+
+  // Move ghost
+  if (dragGhost) {
+    dragGhost.style.left = e.clientX + 'px';
+    dragGhost.style.top = e.clientY + 'px';
+  }
+
+  // Auto-scroll when near edges
+  var scrollContainer = $modalVocabBody;
+  var rect = scrollContainer.getBoundingClientRect();
+  var edgeZone = 50;
+  clearDragScroll();
+  if (e.clientY < rect.top + edgeZone) {
+    dragScrollTimer = setInterval(function () { scrollContainer.scrollTop -= 10; }, 30);
+  } else if (e.clientY > rect.bottom - edgeZone) {
+    dragScrollTimer = setInterval(function () { scrollContainer.scrollTop += 10; }, 30);
+  }
+
+  // Update drop indicator
+  var target = findCompactAt(e.clientX, e.clientY);
+  $favListContainer.querySelectorAll('.vf-compact.drag-over, .vf-compact.drag-over-top').forEach(function (el) {
+    el.classList.remove('drag-over', 'drag-over-top');
+  });
+  if (target) {
+    var targetIdx = parseInt(target.dataset.vfidx, 10);
+    if (targetIdx !== dragSrcIdx) {
+      target.classList.add('drag-over');
+    }
+  } else {
+    // Check if pointer is above the first item (drop at position 0)
+    var firstCompact = $favListContainer.querySelector('.vf-compact');
+    if (firstCompact) {
+      var fr = firstCompact.getBoundingClientRect();
+      if (e.clientY < fr.top && e.clientX >= fr.left && e.clientX <= fr.right) {
+        firstCompact.classList.add('drag-over-top');
+      }
+    }
+  }
+});
+
+$favListContainer.addEventListener('pointerup', function (e) {
+  if (!dragActive || dragSrcIdx === null) return;
+  var handle = e.target.closest('.vf-drag-handle');
+  // Finalize drop
+  var target = findCompactAt(e.clientX, e.clientY);
+  if (target) {
+    var targetIdx = parseInt(target.dataset.vfidx, 10);
+    if (targetIdx !== dragSrcIdx) {
+      var favs = getVFavs();
+      var moved = favs.splice(dragSrcIdx, 1)[0];
+      favs.splice(targetIdx, 0, moved);
+      setVFavs(favs);
+      renderVFavs();
+    }
+  } else {
+    // Check if dropped above the first item (position 0)
+    var firstCompact = $favListContainer.querySelector('.vf-compact');
+    if (firstCompact) {
+      var fr = firstCompact.getBoundingClientRect();
+      if (e.clientY < fr.top && e.clientX >= fr.left && e.clientX <= fr.right) {
+        var favs = getVFavs();
+        var moved = favs.splice(dragSrcIdx, 1)[0];
+        favs.splice(0, 0, moved);
+        setVFavs(favs);
+        renderVFavs();
+      }
+    }
+  }
+  clearDragState();
+});
+
+$favListContainer.addEventListener('pointerleave', function (e) {
+  if (dragActive) clearDragState();
+});
+
+// Also cancel on Escape
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && dragActive) {
+    clearDragState();
+  }
+});
+
+// Close dropdowns when clicking outside
 document.addEventListener('click', function (e) {
+  // Favorites search dropdown
   const $dd = document.getElementById('favSearchDropdown');
   const $input = document.getElementById('favSearchInput');
   if ($dd && $input && !$input.contains(e.target) && !$dd.contains(e.target)) {
     hideSearchDropdown();
   }
+  // Word search dropdowns
+  document.querySelectorAll('.ws-search-dropdown').forEach(function(dd) {
+    if (dd.style.display === 'none') return;
+    var wrapper = dd.closest('.word-search-wrapper');
+    var inp = wrapper && wrapper.querySelector('.word-search-input');
+    if (inp && !inp.contains(e.target) && !dd.contains(e.target)) {
+      dd.style.display = 'none';
+    }
+  });
 });
 
 // ==================== Key management ====================
@@ -1103,6 +1665,7 @@ renderVFavs();
 // Create initial word search module
 $wsModules.appendChild(createWordSearchModule());
 updateMinusButtons();
+syncSlider($wsModules.querySelector('.ws-mode-toggle'));
 </script>
 </body>
 </html>
