@@ -1376,6 +1376,18 @@ $wsModules.addEventListener('input', e => {
   renderWSSearchDropdown(dropdown, results);
 });
 
+// Word search input — re-show dropdown on focus when a query is still present
+$wsModules.addEventListener('focusin', e => {
+  const input = e.target.closest('.word-search-input');
+  if (!input) return;
+  const query = input.value;
+  if (!query || !query.trim()) return;
+  const wrapper = input.closest('.word-search-wrapper');
+  const dropdown = wrapper.querySelector('.ws-search-dropdown');
+  const results = searchFavorites(query);
+  renderWSSearchDropdown(dropdown, results);
+});
+
 // ==================== Favorites search events ====================
 const $favSearchInput = document.getElementById('favSearchInput');
 if ($favSearchInput) {
@@ -1388,6 +1400,16 @@ if ($favSearchInput) {
       hideSearchDropdown();
       return;
     }
+    const results = searchFavorites(query);
+    renderSearchDropdown(results);
+  });
+
+  // Re-show dropdown + clear button on focus when a query is still present
+  $favSearchInput.addEventListener('focus', function () {
+    const query = this.value;
+    const $clear = document.getElementById('favSearchClear');
+    if ($clear) $clear.classList.toggle('visible', !!query);
+    if (!query || !query.trim()) return;
     const results = searchFavorites(query);
     renderSearchDropdown(results);
   });
