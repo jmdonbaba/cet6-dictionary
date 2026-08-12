@@ -470,10 +470,17 @@ body {
     <button class="btn-fav-nav" id="btnOpenVocabFav">词汇收藏 <span id="vocabFavCount">(0)</span></button>
   </div>
 
-  <div class="footer">CET-6 查词助手 · 数据保存在本地浏览器</div>
+  <div class="footer">
+    CET-6 查词助手 · 数据保存在本地浏览器
+    <div class="footer-actions">
+      <button class="btn-sm" id="btnExportData">导出数据</button>
+      <button class="btn-sm" id="btnImportData">导入数据</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
+<input type="file" id="importFileInput" accept=".json,application/json" style="display:none">
 
 <!-- Modal overlay -->
 <div class="modal-overlay" id="modalOverlay" style="display:none">
@@ -489,6 +496,22 @@ body {
         <div class="fav-search-dropdown" id="favSearchDropdown"></div>
       </div>
       <div id="favListContainer"></div>
+    </div>
+  </div>
+  <div class="modal-card" id="modalImportChoice">
+    <div class="modal-header">
+      <span>导入数据</span>
+      <button class="modal-close" data-close="modalImportChoice">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="importSummary" style="margin-bottom:16px"></p>
+      <div style="display:flex;gap:10px;justify-content:space-between">
+        <button class="btn-sm" id="btnImportCancel">取消</button>
+        <div style="display:flex;gap:10px">
+          <button class="btn-sm" id="btnImportMerge">合并导入</button>
+          <button class="btn-sm danger" id="btnImportOverwrite">覆盖导入</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -962,10 +985,10 @@ function renderVFavs() {
       </div>
       <span class="vf-drag-handle"></span>
       <div class="fav-actions" style="position:relative">
-        <button class="more-btn" data-act="morevfav" data-id="${f.id}">&ctdot;</button>
-        <div class="more-menu" data-menu="vfav-${f.id}">
-          <button data-act="pinvfav" data-id="${f.id}">${f.pinned ? '取消置顶' : '置顶'}</button>
-          <button class="danger" data-act="delvfav" data-id="${f.id}">删除</button>
+        <button class="more-btn" data-act="morevfav" data-id="${escAttr(f.id)}">&ctdot;</button>
+        <div class="more-menu" data-menu="vfav-${escAttr(f.id)}">
+          <button data-act="pinvfav" data-id="${escAttr(f.id)}">${f.pinned ? '取消置顶' : '置顶'}</button>
+          <button class="danger" data-act="delvfav" data-id="${escAttr(f.id)}">删除</button>
         </div>
       </div>
     </div>
@@ -976,7 +999,7 @@ function renderVFavs() {
         const cn = typeof ex === 'string' ? '' : (ex.cn || '');
         return `<div class="vf-sen">${ei + 1}. ${esc(en)}${cn ? `<span class="vf-sen-cn">${esc(cn)}</span>` : ''}</div>`;
       }).join('') : ''}
-      <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">${f.createdAt}</div>
+      <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">${esc(f.createdAt)}</div>
     </div>
   `).join('');
 
@@ -1648,6 +1671,110 @@ document.addEventListener('click', function (e) {
   });
 });
 
+// ==================== Data Import / Export ====================
+function exportData() {
+  const data = {
+    version: 1,
+    exportedAt: fmtTime(new Date()),
+    apiKey: getApiKey(),
+    favorites: getVFavs()
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  a.href = url;
+  a.download = `cet6-backup-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('数据已导出（含 API Key，请妥善保管）');
+}
+
+document.getElementById('btnExportData').addEventListener('click', exportData);
+
+let _pendingImport = null;
+
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = function () {
+    let data;
+    try {
+      data = JSON.parse(reader.result);
+    } catch (e) {
+      toast('文件格式无效：不是合法 JSON');
+      return;
+    }
+    if (!data || !Array.isArray(data.favorites)) {
+      toast('文件格式无效：缺少 favorites 数组');
+      return;
+    }
+    _pendingImport = data;
+    const favCount = data.favorites.length;
+    const hasKey = typeof data.apiKey === 'string' && data.apiKey.trim() !== '';
+    document.getElementById('importSummary').textContent =
+      `文件包含 ${favCount} 条收藏${hasKey ? ' 和 API Key' : ''}。请选择导入方式：`;
+    openModal(document.getElementById('modalImportChoice'));
+  };
+  reader.onerror = function () {
+    toast('读取文件失败');
+  };
+  reader.readAsText(file);
+}
+
+function mergeFavorites(existing, incoming) {
+  const seen = new Set(existing.map(f => (f && f.word ? f.word.toLowerCase() : '')));
+  const merged = existing.slice();
+  for (const f of incoming) {
+    if (!f || typeof f.word !== 'string') continue;
+    const key = f.word.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(f);
+    }
+  }
+  return merged;
+}
+
+function applyImport(mode, data) {
+  if (mode === 'overwrite') {
+    if (!confirm('确定要覆盖导入吗？当前浏览器中的收藏将被替换为文件内容。')) return;
+    setVFavs((Array.isArray(data.favorites) ? data.favorites : []).filter(f => f && typeof f.word === 'string'));
+    setApiKey(typeof data.apiKey === 'string' ? data.apiKey : '');
+  } else if (mode === 'merge') {
+    const merged = mergeFavorites(getVFavs(), Array.isArray(data.favorites) ? data.favorites : []);
+    setVFavs(merged);
+    const importedKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
+    if (importedKey) setApiKey(importedKey);
+  } else {
+    return;
+  }
+  closeModal();
+  renderVFavs();
+  updateAllVocabButtons();
+  initKey();
+  toast(mode === 'overwrite' ? '已覆盖导入' : '已合并导入');
+}
+
+document.getElementById('btnImportData').addEventListener('click', () => {
+  document.getElementById('importFileInput').click();
+});
+document.getElementById('importFileInput').addEventListener('change', e => {
+  const file = e.target.files && e.target.files[0];
+  if (file) importData(file);
+  e.target.value = '';
+});
+document.getElementById('btnImportOverwrite').addEventListener('click', () => {
+  if (_pendingImport) applyImport('overwrite', _pendingImport);
+});
+document.getElementById('btnImportMerge').addEventListener('click', () => {
+  if (_pendingImport) applyImport('merge', _pendingImport);
+});
+document.getElementById('btnImportCancel').addEventListener('click', closeModal);
+
 // ==================== Key management ====================
 function initKey() {
   const saved = getApiKey();
@@ -1657,6 +1784,12 @@ function initKey() {
     $btnSaveKey.style.display = 'none';
     $keyStatus.style.display = 'inline';
     $keyStatus.textContent = 'API Key 已保存（点击更换）';
+  } else {
+    $keyArea.classList.remove('saved');
+    $apiKeyInput.style.display = '';
+    $btnSaveKey.style.display = '';
+    $keyStatus.style.display = 'none';
+    $apiKeyInput.value = '';
   }
 }
 
