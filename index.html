@@ -198,6 +198,11 @@ body {
 .word-search-btn-minus { bottom: 12px; right: 58px; color: var(--danger); border-color: #fecaca; }
 .word-search-btn-minus:hover { background: #fef2f2; border-color: var(--danger); color: #dc2626; }
 
+@media (max-width: 500px) {
+  .word-search-wrapper .input-area { justify-content: flex-end; flex-wrap: wrap; }
+  .word-search-wrapper .input-area > div:first-child { flex-basis: 100% !important; }
+}
+
 /* Modal */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.4);
@@ -264,6 +269,7 @@ body {
   display: flex; gap: 2px; align-items: center; justify-content: center;
   width: 24px; height: 28px; cursor: grab; flex-shrink: 0;
   border-radius: 4px; transition: background 0.15s; margin-right: 4px;
+  touch-action: none;
 }
 .vf-drag-handle::before,
 .vf-drag-handle::after {
@@ -587,9 +593,37 @@ function extractJSON(text) {
   return null;
 }
 
+// Supports both the new structured forms object and existing saved string data.
+function renderForms(forms) {
+  if (!forms) return '';
+  if (typeof forms === 'string') return esc(forms);
+
+  const inflections = Array.isArray(forms.inflections) ? forms.inflections : [];
+  const derivatives = Array.isArray(forms.derivatives) ? forms.derivatives : [];
+  const inflectionText = inflections
+    .filter(item => item && item.type && item.word)
+    .map(item => `${esc(item.type)} ${esc(item.word)}`)
+    .join('；');
+  const derivativeText = derivatives
+    .filter(item => item && item.word && item.meaning)
+    .map(item => `${item.pos ? `${esc(item.pos)} ` : ''}${esc(item.word)} ${esc(item.meaning)}`)
+    .join('；');
+  const groups = [];
+  if (inflectionText) groups.push(`词形变化：${inflectionText}`);
+  if (derivativeText) groups.push(`同根派生：${derivativeText}`);
+  return groups.join('；') || '无';
+}
+
 // ==================== Favorites Search ====================
 // Subsequence match: check if query chars appear in word in order
 // Returns match details or null if no match
+let _favoritesSearchCache = null;
+
+function getSearchFavorites() {
+  if (!_favoritesSearchCache) _favoritesSearchCache = getVFavs();
+  return _favoritesSearchCache;
+}
+
 function subsequenceMatch(query, word) {
   const q = query.toLowerCase();
   const w = word.toLowerCase();
@@ -633,7 +667,7 @@ function highlightMatches(word, indices) {
 function searchFavorites(query) {
   if (!query || !query.trim()) return [];
   const q = query.trim();
-  const favs = getVFavs();
+  const favs = getSearchFavorites();
   const results = [];
   for (let i = 0; i < favs.length; i++) {
     const f = favs[i];
@@ -750,9 +784,9 @@ function scrollToVFavItem(favId) {
 }
 
 function renderWordResult(wrapper, resultEl, searchWord_, info) {
-  const displayWord = info.baseForm || info.word;
-  const baseFormHint = info.baseForm
-    ? `<div class="base-form-hint">← 你搜的 <strong>"${esc(searchWord_)}"</strong> 是 <strong>${esc(displayWord)}</strong> 的<span>${esc(info.inflection || '变形')}</span>，以下为原形查询结果</div>`
+  const displayWord = info.word;
+  const baseFormHint = info.sourceForm
+    ? `<div class="base-form-hint">你搜的 <strong>"${esc(searchWord_)}"</strong> 是 <strong>${esc(displayWord)}</strong> 的<span>${esc(info.inflection || '变形')}</span>，以下为原形查询结果</div>`
     : '';
   const sentences = info.sentences || info.examples || [];
   resultEl.innerHTML = `
@@ -765,7 +799,7 @@ function renderWordResult(wrapper, resultEl, searchWord_, info) {
         <button class="btn-favorite">收藏</button>
       </div>
       ${info.definitions ? info.definitions.map((d, i) => `<div class="definition"><span class="def-label">${i + 1}.</span>${esc(d)}</div>`).join('') : ''}
-      ${info.forms ? `<div class="word-forms">其他变形：${esc(info.forms)}</div>` : ''}
+      ${info.forms ? `<div class="word-forms">${renderForms(info.forms)}</div>` : ''}
       ${sentences.length ? `<div class="sentences">${sentences.map((s, i) => {
         const en = typeof s === 'string' ? s : (s.en || '');
         const cn = typeof s === 'string' ? '' : (s.cn || '');
@@ -809,8 +843,8 @@ async function searchWord(word, wrapper, mode) {
   resultEl.innerHTML = '<div class="empty-state">查询中...</div>';
 
   const modeInstruction = isOriginal
-    ? '【原词模式】直接按用户输入的原词查询，不要做任何词形还原。baseForm必须为空字符串，inflection必须为空字符串。'
-    : '【原形模式】按变形规则将输入词还原为原形后查询。baseForm填原形，inflection填变形类型。';
+    ? '【原词模式】直接按用户输入的原词查询，不要做任何词形还原。sourceForm必须为空字符串，inflection必须为空字符串。'
+    : '【原形模式】按变形规则将输入词还原为原形后查询。word 填还原后的原形；sourceForm 填用户的原始输入；inflection 填变形类型。';
 
   const finalNote = isOriginal
     ? 'word 就是用户输入的原词。'
@@ -837,23 +871,28 @@ async function searchWord(word, wrapper, mode) {
    格式示例（动词）：第三人称单数 aspires；现在分词 aspiring；过去式 aspired；过去分词 aspired；派生名词 aspiration 抱负、渴望
    格式示例（名词）：复数 analyses；派生形容词 analytical 分析的；派生副词 analytically 分析地；派生动词 analyze 分析
    格式示例（形容词）：比较级 bigger，最高级 biggest；派生名词 bigness 巨大
-   若确实没有六级考纲内的其他变形（如个别虚词），填"无"，不得留空或省略。
+   若确实没有六级考纲内的其他变形（如个别虚词），inflections 和 derivatives 都填 []，不得省略字段。
 
-【例句要求】每个例句要有难度，含六级高级词汇（但也不要太超过六级考纲）或复杂句型，学术正式、适合直接用在作文中。
+【例句要求】每个例句须包含六级难度词汇或复杂句型，但整体难度不得超出六级范围；学术正式、自然，适合直接用在作文中。
 
 返回 JSON（sentences必须恰好3个）：
 {
-  "word": "标准化后的词或短语（如grapple with）",
-  "baseForm": "若是变形则填标准化后的形式（含短语），否则空",
-  "inflection": "若有baseForm必须填类型（过去式/过去分词/现在分词/复数/比较级/最高级/三单），不可为空",
+  "word": "最自然、规范大小写的词或短语（如grapple with；专有名词、缩写按惯例保留）",
+  "sourceForm": "若输入发生词形还原，则填写用户原始输入；否则为空字符串",
+  "inflection": "若有sourceForm必须填类型（过去式/过去分词/现在分词/复数/比较级/最高级/三单），否则为空字符串",
   "phonetic": "音标",
   "pos": "词性（多个用 & 分隔，如 adj. & v.，不要用逗号）",
   "definitions": ["n. 释义", "v. 释义"],
-  "forms": "其他变形（必须包含形态变化和同根派生词，详见规则1）",
+  "forms": {
+    "inflections": [{"type": "过去式", "word": "示例词形"}],
+    "derivatives": [{"pos": "n.", "word": "示例派生词", "meaning": "中文释义"}]
+  },
   "sentences": [{"en": "英文例句1", "cn": "中文翻译1"}, {"en": "英文例句2", "cn": "中文翻译2"}, {"en": "英文例句3", "cn": "中文翻译3"}]
 }
 
-【重要】phonetic、pos、definitions、forms、sentences 都必须基于 word 字段的值。${finalNote}` }
+【输出约束】输出必须是可被 JSON.parse 直接解析的单个 JSON 对象。禁止 Markdown 代码块、说明文字或任何额外内容。所有字段必须出现；不确定时使用空字符串、空数组或“无”，不得猜测或编造。sentences 必须恰好 3 项，每项必须同时有非空 en 和 cn。
+
+【重要】phonetic、pos、definitions、forms、sentences 都必须基于 word 字段的值。forms 中没有内容的数组填 []。${finalNote}` }
         ],
         temperature: 0.3
       })
@@ -880,7 +919,10 @@ function getVFavs() {
   } catch { return []; }
 }
 function setVFavs(vs) {
-  try { localStorage.setItem(VFAV_KEY, JSON.stringify(vs)); }
+  try {
+    localStorage.setItem(VFAV_KEY, JSON.stringify(vs));
+    _favoritesSearchCache = vs;
+  }
   catch { toast('存储空间不足，请清理收藏后重试'); }
 }
 
@@ -993,7 +1035,7 @@ function renderVFavs() {
       </div>
     </div>
     <div class="vf-detail" id="vfDetail${idx}">
-      ${f.forms ? `<div class="vf-forms" style="margin-top:0">其他变形：${esc(f.forms)}</div>` : ''}
+      ${f.forms ? `<div class="vf-forms" style="margin-top:0">${renderForms(f.forms)}</div>` : ''}
       ${f.examples && f.examples.length ? `<div style="margin-top:8px;font-weight:600;font-size:13px;color:var(--text-secondary)">例句：</div>` + f.examples.map((ex, ei) => {
         const en = typeof ex === 'string' ? ex : (ex.en || '');
         const cn = typeof ex === 'string' ? '' : (ex.cn || '');
@@ -1416,7 +1458,6 @@ const $favSearchInput = document.getElementById('favSearchInput');
 if ($favSearchInput) {
   $favSearchInput.addEventListener('input', function () {
     const query = this.value;
-    // Toggle clear button
     const $clear = document.getElementById('favSearchClear');
     if ($clear) $clear.classList.toggle('visible', !!query);
     if (!query || !query.trim()) {
@@ -1471,7 +1512,6 @@ if ($favSearchInput) {
         e.stopPropagation();
         this.value = '';
         hideSearchDropdown();
-        this.blur();
         // Hide clear button
         const $clear = document.getElementById('favSearchClear');
         if ($clear) $clear.classList.remove('visible');
@@ -1642,6 +1682,10 @@ $favListContainer.addEventListener('pointerup', function (e) {
 });
 
 $favListContainer.addEventListener('pointerleave', function (e) {
+  if (dragActive) clearDragState();
+});
+
+$favListContainer.addEventListener('pointercancel', function (e) {
   if (dragActive) clearDragState();
 });
 
