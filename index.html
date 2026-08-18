@@ -201,6 +201,7 @@ body {
 @media (max-width: 500px) {
   .word-search-wrapper .input-area { justify-content: flex-end; flex-wrap: wrap; }
   .word-search-wrapper .input-area > div:first-child { flex-basis: 100% !important; }
+  .vf-drag-handle { position: absolute; left: 0; top: 0; bottom: 0; width: 16px; height: auto; margin: 0; }
 }
 
 /* Modal */
@@ -252,7 +253,7 @@ body {
 
 /* Vocab fav compact item */
 .vf-compact {
-  display: flex; justify-content: space-between; align-items: center;
+  position: relative; display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px; border-bottom: 1px solid var(--border);
   transition: background 0.15s;
 }
@@ -289,6 +290,8 @@ body {
 /* Drag ghost */
 .vf-drag-ghost {
   position: fixed;
+  top: 0;
+  left: 0;
   z-index: 1001;
   pointer-events: none;
   opacity: 0.85;
@@ -299,7 +302,8 @@ body {
   padding: 10px 16px;
   font-size: 14px;
   white-space: nowrap;
-  transform: translate(-50%, -50%);
+  will-change: transform;
+  transform: translate3d(0, 0, 0) translate(-50%, -50%);
 }
 
 .vf-detail {
@@ -1575,6 +1579,26 @@ function clearDragState() {
   });
 }
 
+// The bottom indicator means the dragged card will be inserted after the target.
+function moveFavoriteAfter(items, sourceIndex, targetIndex) {
+  var moved = items.splice(sourceIndex, 1)[0];
+  var insertIndex = targetIndex + (sourceIndex > targetIndex ? 1 : 0);
+  items.splice(insertIndex, 0, moved);
+  return items;
+}
+
+function moveFavoriteBefore(items, sourceIndex, targetIndex) {
+  var moved = items.splice(sourceIndex, 1)[0];
+  var insertIndex = targetIndex - (sourceIndex < targetIndex ? 1 : 0);
+  items.splice(insertIndex, 0, moved);
+  return items;
+}
+
+function isNoOpFavoriteDrop(sourceIndex, targetIndex, insertBefore) {
+  return sourceIndex === targetIndex
+    || (insertBefore ? sourceIndex + 1 === targetIndex : sourceIndex - 1 === targetIndex);
+}
+
 // Find only the card beneath the pointer instead of measuring every favorite card.
 function findCompactAt(clientX, clientY) {
   var el = document.elementFromPoint(clientX, clientY);
@@ -1601,8 +1625,7 @@ function updateDragFrame() {
   var clientX = dragPointer.x;
   var clientY = dragPointer.y;
   if (dragGhost) {
-    dragGhost.style.left = clientX + 'px';
-    dragGhost.style.top = clientY + 'px';
+    dragGhost.style.transform = 'translate3d(' + clientX + 'px, ' + clientY + 'px, 0) translate(-50%, -50%)';
   }
 
   var scrollContainer = $modalVocabBody;
@@ -1618,14 +1641,23 @@ function updateDragFrame() {
   if (scrollStep) scrollContainer.scrollTop += scrollStep;
 
   var target = findCompactAt(clientX, clientY);
-  if (target && parseInt(target.dataset.vfidx, 10) !== dragSrcIdx) {
-    setDragIndicator(target, 'drag-over');
+  if (target) {
+    var targetIdx = parseInt(target.dataset.vfidx, 10);
+    if (targetIdx !== dragSrcIdx) {
+      var targetRect = target.getBoundingClientRect();
+      var insertBefore = clientY < targetRect.top + targetRect.height / 2;
+      setDragIndicator(target, isNoOpFavoriteDrop(dragSrcIdx, targetIdx, insertBefore)
+        ? ''
+        : (insertBefore ? 'drag-over-top' : 'drag-over'));
+    } else {
+      setDragIndicator(null, '');
+    }
   } else {
     var firstCompact = $favListContainer.querySelector('.vf-compact');
     if (firstCompact) {
       var fr = firstCompact.getBoundingClientRect();
       if (clientY < fr.top && clientX >= fr.left && clientX <= fr.right) {
-        setDragIndicator(firstCompact, 'drag-over-top');
+        setDragIndicator(firstCompact, dragSrcIdx === 0 ? '' : 'drag-over-top');
       } else {
         setDragIndicator(null, '');
       }
@@ -1653,8 +1685,6 @@ $favListContainer.addEventListener('pointerdown', function (e) {
   dragGhost = document.createElement('div');
   dragGhost.className = 'vf-drag-ghost';
   dragGhost.textContent = wordEl ? wordEl.textContent.trim() : '';
-  dragGhost.style.left = e.clientX + 'px';
-  dragGhost.style.top = e.clientY + 'px';
   document.body.appendChild(dragGhost);
 
   handle.setPointerCapture(e.pointerId);
@@ -1676,10 +1706,14 @@ $favListContainer.addEventListener('pointerup', function (e) {
     var targetIdx = parseInt(target.dataset.vfidx, 10);
     if (targetIdx !== dragSrcIdx) {
       var favs = getVFavs();
-      var moved = favs.splice(dragSrcIdx, 1)[0];
-      favs.splice(targetIdx, 0, moved);
-      setVFavs(favs);
-      renderVFavs();
+      var targetRect = target.getBoundingClientRect();
+      var insertBefore = e.clientY < targetRect.top + targetRect.height / 2;
+      if (!isNoOpFavoriteDrop(dragSrcIdx, targetIdx, insertBefore)) {
+        setVFavs(insertBefore
+          ? moveFavoriteBefore(favs, dragSrcIdx, targetIdx)
+          : moveFavoriteAfter(favs, dragSrcIdx, targetIdx));
+        renderVFavs();
+      }
     }
   } else {
     // Check if dropped above the first item (position 0)
