@@ -279,9 +279,11 @@ body {
   background: var(--text-secondary);
   transition: background 0.15s;
 }
-.vf-drag-handle:hover { background: var(--border); }
-.vf-drag-handle:hover::before,
-.vf-drag-handle:hover::after { background: var(--text); }
+@media (hover: hover) {
+  .vf-drag-handle:hover { background: var(--border); }
+  .vf-drag-handle:hover::before,
+  .vf-drag-handle:hover::after { background: var(--text); }
+}
 .vf-drag-handle:active { cursor: grabbing; }
 .vf-compact.dragging { opacity: 0.4; }
 .vf-compact.drag-over { box-shadow: inset 0 -2px 0 var(--primary); }
@@ -1562,6 +1564,7 @@ let dragActive = false;
 let dragGhost = null;
 let dragFrame = null;
 let dragPointer = null;
+let dragSourceEl = null;
 let dragIndicator = null;
 let dragIndicatorClass = '';
 
@@ -1569,6 +1572,7 @@ function clearDragState() {
   dragSrcIdx = null;
   dragActive = false;
   dragPointer = null;
+  dragSourceEl = null;
   if (dragFrame) { cancelAnimationFrame(dragFrame); dragFrame = null; }
   if (dragGhost) { dragGhost.remove(); dragGhost = null; }
   dragIndicator = null;
@@ -1614,18 +1618,43 @@ function setDragIndicator(compact, className) {
   if (compact && className) compact.classList.add(className);
 }
 
+// One insertion gap always uses the top edge of the card below it.
+// The only exception is the gap after the final card.
+function resolveDragIndicator(target, insertBefore) {
+  if (insertBefore || target.nextElementSibling) {
+    return { compact: insertBefore ? target : target.nextElementSibling, className: 'drag-over-top' };
+  }
+  return { compact: target, className: 'drag-over' };
+}
+
 function scheduleDragFrame() {
   if (!dragFrame) dragFrame = requestAnimationFrame(updateDragFrame);
+}
+
+function getDragGhostTransform(clientX, clientY) {
+  var horizontalOffset = window.matchMedia('(max-width: 500px)').matches ? '0' : '-50%';
+  return 'translate3d(' + clientX + 'px, ' + clientY + 'px, 0) translate(' + horizontalOffset + ', -50%)';
+}
+
+function ensureDragVisuals() {
+  if (dragGhost || !dragSourceEl) return;
+  dragSourceEl.classList.add('dragging');
+  var wordEl = dragSourceEl.querySelector('.vf-word');
+  dragGhost = document.createElement('div');
+  dragGhost.className = 'vf-drag-ghost';
+  dragGhost.textContent = wordEl ? wordEl.textContent.trim() : '';
+  document.body.appendChild(dragGhost);
 }
 
 function updateDragFrame() {
   dragFrame = null;
   if (!dragActive || dragSrcIdx === null || !dragPointer) return;
+  ensureDragVisuals();
 
   var clientX = dragPointer.x;
   var clientY = dragPointer.y;
   if (dragGhost) {
-    dragGhost.style.transform = 'translate3d(' + clientX + 'px, ' + clientY + 'px, 0) translate(-50%, -50%)';
+    dragGhost.style.transform = getDragGhostTransform(clientX, clientY);
   }
 
   var scrollContainer = $modalVocabBody;
@@ -1646,9 +1675,10 @@ function updateDragFrame() {
     if (targetIdx !== dragSrcIdx) {
       var targetRect = target.getBoundingClientRect();
       var insertBefore = clientY < targetRect.top + targetRect.height / 2;
-      setDragIndicator(target, isNoOpFavoriteDrop(dragSrcIdx, targetIdx, insertBefore)
+      var indicator = resolveDragIndicator(target, insertBefore);
+      setDragIndicator(indicator.compact, isNoOpFavoriteDrop(dragSrcIdx, targetIdx, insertBefore)
         ? ''
-        : (insertBefore ? 'drag-over-top' : 'drag-over'));
+        : indicator.className);
     } else {
       setDragIndicator(null, '');
     }
@@ -1678,17 +1708,9 @@ $favListContainer.addEventListener('pointerdown', function (e) {
   dragSrcIdx = parseInt(compact.dataset.vfidx, 10);
   dragActive = true;
   dragPointer = { x: e.clientX, y: e.clientY };
-  compact.classList.add('dragging');
-
-  // Create ghost
-  var wordEl = compact.querySelector('.vf-word');
-  dragGhost = document.createElement('div');
-  dragGhost.className = 'vf-drag-ghost';
-  dragGhost.textContent = wordEl ? wordEl.textContent.trim() : '';
-  document.body.appendChild(dragGhost);
+  dragSourceEl = compact;
 
   handle.setPointerCapture(e.pointerId);
-  scheduleDragFrame();
 });
 
 $favListContainer.addEventListener('pointermove', function (e) {
@@ -1733,6 +1755,10 @@ $favListContainer.addEventListener('pointerup', function (e) {
 });
 
 $favListContainer.addEventListener('pointercancel', function (e) {
+  if (dragActive) clearDragState();
+});
+
+$favListContainer.addEventListener('lostpointercapture', function (e) {
   if (dragActive) clearDragState();
 });
 
