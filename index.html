@@ -19,7 +19,11 @@
   --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* Buttons: no blue focus ring on pointer/touch taps; keep a ring for keyboard users */
+button:focus { outline: none; }
+button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -46,7 +50,9 @@ body {
 .key-area.saved input { display: none; }
 .key-area.saved .btn-sm { display: none; }
 .key-status { display: none; font-size: 12px; color: var(--text); cursor: pointer; }
-.key-status:hover { text-decoration: underline; }
+@media (hover: hover) {
+  .key-status:hover { text-decoration: underline; }
+}
 .key-area.saved .key-status { display: inline; }
 
 .card {
@@ -73,7 +79,9 @@ body {
   font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap;
   transition: background 0.2s;
 }
-.btn-primary:hover { background: var(--primary-hover); }
+@media (hover: hover) {
+  .btn-primary:hover { background: var(--primary-hover); }
+}
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Search mode toggle — DeepSeek-style sliding pill */
@@ -122,8 +130,10 @@ body {
 .ws-mode-toggle button.active {
   color: var(--primary);
 }
-.ws-mode-toggle button:not(.active):hover {
-  color: var(--text);
+@media (hover: hover) {
+  .ws-mode-toggle button:not(.active):hover {
+    color: var(--text);
+  }
 }
 .ws-mode-toggle.dragging button {
   color: var(--text-secondary);
@@ -137,9 +147,13 @@ body {
   border-radius: 6px; font-size: 13px; cursor: pointer;
   background: #fff; transition: all 0.2s;
 }
-.btn-sm:hover { border-color: var(--primary); color: var(--primary); }
+@media (hover: hover) {
+  .btn-sm:hover { border-color: var(--primary); color: var(--primary); }
+}
 .btn-sm.danger { color: var(--danger); border-color: transparent; }
-.btn-sm.danger:hover { background: #fef2f2; border-color: var(--danger); }
+@media (hover: hover) {
+  .btn-sm.danger:hover { background: #fef2f2; border-color: var(--danger); }
+}
 
 /* Favorites nav */
 .fav-btns { display: flex; gap: 10px; margin-top: 16px; }
@@ -150,7 +164,9 @@ body {
   color: var(--text); transition: all 0.2s;
   box-shadow: var(--shadow);
 }
-.btn-fav-nav:hover { border-color: var(--primary); color: var(--primary); }
+@media (hover: hover) {
+  .btn-fav-nav:hover { border-color: var(--primary); color: var(--primary); }
+}
 
 /* Word search result */
 .word-result { padding: 16px; background: #f8fafc; border-radius: 8px; }
@@ -174,7 +190,9 @@ body {
   font-size: 14px; cursor: pointer; color: var(--primary);
   font-weight: 500; transition: all 0.2s;
 }
-.btn-favorite:hover { border-color: var(--primary); }
+@media (hover: hover) {
+  .btn-favorite:hover { border-color: var(--primary); }
+}
 .btn-favorite.favorited { background: #fef3c7; color: #d97706; cursor: default; }
 
 /* Word search multi-module */
@@ -194,9 +212,13 @@ body {
   z-index: 5;
 }
 .word-search-btn-plus { bottom: 12px; right: 20px; }
-.word-search-btn-plus:hover { border-color: var(--primary); color: var(--primary); }
+@media (hover: hover) {
+  .word-search-btn-plus:hover { border-color: var(--primary); color: var(--primary); }
+}
 .word-search-btn-minus { bottom: 12px; right: 58px; color: var(--danger); border-color: #fecaca; }
-.word-search-btn-minus:hover { background: #fef2f2; border-color: var(--danger); color: #dc2626; }
+@media (hover: hover) {
+  .word-search-btn-minus:hover { background: #fef2f2; border-color: var(--danger); color: #dc2626; }
+}
 
 @media (max-width: 500px) {
   .word-search-wrapper .input-area { justify-content: flex-end; flex-wrap: wrap; }
@@ -225,7 +247,9 @@ body {
   background: none; border: none; font-size: 24px;
   cursor: pointer; color: var(--text-secondary); padding: 0 4px;
 }
-.modal-close:hover { color: var(--danger); }
+@media (hover: hover) {
+  .modal-close:hover { color: var(--danger); }
+}
 .modal-body { flex: 1; overflow-y: auto; padding: 8px 20px 20px; }
 
 /* Three-dot menu */
@@ -234,7 +258,9 @@ body {
   color: var(--text-secondary); padding: 4px 8px; border-radius: 6px;
   line-height: 1;
 }
-.more-btn:hover { background: var(--border); color: var(--text); }
+@media (hover: hover) {
+  .more-btn:hover { background: var(--border); color: var(--text); }
+}
 .more-menu {
   display: none; position: absolute; right: 0;
   background: var(--card-bg); border: 1px solid var(--border);
@@ -247,9 +273,13 @@ body {
   background: none; font-size: 14px; cursor: pointer; text-align: left;
   color: var(--text);
 }
-.more-menu button:hover { background: var(--primary-light); }
+@media (hover: hover) {
+  .more-menu button:hover { background: var(--primary-light); }
+}
 .more-menu button.danger { color: var(--danger); }
-.more-menu button.danger:hover { background: #fef2f2; }
+@media (hover: hover) {
+  .more-menu button.danger:hover { background: #fef2f2; }
+}
 
 /* Vocab fav compact item */
 .vf-compact {
@@ -257,7 +287,9 @@ body {
   padding: 12px 16px; border-bottom: 1px solid var(--border);
   transition: background 0.15s;
 }
-.vf-compact:hover { background: var(--primary-light); }
+@media (hover: hover) {
+  .vf-compact:hover { background: var(--primary-light); }
+}
 .vf-compact.pinned { background: #f1f5f9; }
 .vf-compact .vf-main { flex: 1; min-width: 0; cursor: pointer; }
 .vf-compact .vf-word { font-size: 16px; font-weight: 700; color: var(--primary); }
@@ -369,9 +401,11 @@ body {
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.fav-search-clear:hover {
-  background: var(--text-secondary);
-  color: #fff;
+@media (hover: hover) {
+  .fav-search-clear:hover {
+    background: var(--text-secondary);
+    color: #fff;
+  }
 }
 .fav-search-clear.visible {
   display: inline-flex;
@@ -403,9 +437,11 @@ body {
 .fs-dd-item:last-child {
   border-bottom: none;
 }
-.fs-dd-item:hover,
 .fs-dd-item.key-selected {
   background: var(--primary-light);
+}
+@media (hover: hover) {
+  .fs-dd-item:hover { background: var(--primary-light); }
 }
 .fs-dd-item .fs-word {
   font-size: 15px;
@@ -466,9 +502,9 @@ body {
 <div class="container">
   <div class="header">
     <h1>CET-6 查词助手</h1>
-    <p>适合六级宝宝体质的查词器：<br>为您提供一切围绕六级的查询服务</p>
+    <p>适合六级宝宝体质的查词器：<br>为你提供一切围绕六级的查询服务</p>
     <div class="key-area" id="keyArea">
-      <input type="password" id="apiKeyInput" placeholder="输入您的 DeepSeek API Key" autocomplete="off">
+      <input type="password" id="apiKeyInput" placeholder="输入你的 DeepSeek API Key" autocomplete="off">
       <button class="btn-sm" id="btnSaveKey">保存</button>
       <span class="key-status" id="keyStatus"></span>
     </div>
@@ -1158,8 +1194,10 @@ $modalVocabBody.addEventListener('click', e => {
   if (act === 'pinvfav') { closeAllMenus(); pinVFav(id); return; }
   if (act === 'morevfav') {
     e.stopPropagation();
+    const menu = document.querySelector(`[data-menu="vfav-${id}"]`);
+    const wasOpen = menu && menu.classList.contains('open');
     closeAllMenus();
-    document.querySelector(`[data-menu="vfav-${id}"]`).classList.add('open');
+    if (!wasOpen && menu) menu.classList.add('open');
     return;
   }
   // Expand/collapse (skip if clicking drag handle)
