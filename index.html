@@ -1554,35 +1554,86 @@ if ($favSearchDropdown) {
 
 // ==================== Drag and drop reorder for favorites ====================
 let dragSrcIdx = null;
-let dragScrollTimer = null;
-let dragActive = false; // true during custom pointer-drag
-let dragGhost = null;  // clone element following the pointer
-
-function clearDragScroll() {
-  if (dragScrollTimer) { clearInterval(dragScrollTimer); dragScrollTimer = null; }
-}
+let dragActive = false;
+let dragGhost = null;
+let dragFrame = null;
+let dragPointer = null;
+let dragIndicator = null;
+let dragIndicatorClass = '';
 
 function clearDragState() {
   dragSrcIdx = null;
   dragActive = false;
-  clearDragScroll();
+  dragPointer = null;
+  if (dragFrame) { cancelAnimationFrame(dragFrame); dragFrame = null; }
   if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+  dragIndicator = null;
+  dragIndicatorClass = '';
   var list = document.getElementById('favListContainer');
   if (list) list.querySelectorAll('.vf-compact.drag-over, .vf-compact.drag-over-top, .vf-compact.dragging').forEach(function (el) {
     el.classList.remove('drag-over', 'drag-over-top', 'dragging');
   });
 }
 
-// Helper: find the compact item under the pointer, accounting for scrolling container
+// Find only the card beneath the pointer instead of measuring every favorite card.
 function findCompactAt(clientX, clientY) {
-  var compacts = $favListContainer.querySelectorAll('.vf-compact');
-  for (var i = 0; i < compacts.length; i++) {
-    var r = compacts[i].getBoundingClientRect();
-    if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-      return compacts[i];
+  var el = document.elementFromPoint(clientX, clientY);
+  var compact = el && el.closest('.vf-compact');
+  return compact && $favListContainer.contains(compact) ? compact : null;
+}
+
+function setDragIndicator(compact, className) {
+  if (dragIndicator === compact && dragIndicatorClass === className) return;
+  if (dragIndicator) dragIndicator.classList.remove('drag-over', 'drag-over-top');
+  dragIndicator = compact;
+  dragIndicatorClass = className || '';
+  if (compact && className) compact.classList.add(className);
+}
+
+function scheduleDragFrame() {
+  if (!dragFrame) dragFrame = requestAnimationFrame(updateDragFrame);
+}
+
+function updateDragFrame() {
+  dragFrame = null;
+  if (!dragActive || dragSrcIdx === null || !dragPointer) return;
+
+  var clientX = dragPointer.x;
+  var clientY = dragPointer.y;
+  if (dragGhost) {
+    dragGhost.style.left = clientX + 'px';
+    dragGhost.style.top = clientY + 'px';
+  }
+
+  var scrollContainer = $modalVocabBody;
+  var rect = scrollContainer.getBoundingClientRect();
+  var edgeZone = 50;
+  var maxScrollStep = 18;
+  var scrollStep = 0;
+  if (clientY < rect.top + edgeZone) {
+    scrollStep = -Math.ceil(maxScrollStep * (rect.top + edgeZone - clientY) / edgeZone);
+  } else if (clientY > rect.bottom - edgeZone) {
+    scrollStep = Math.ceil(maxScrollStep * (clientY - (rect.bottom - edgeZone)) / edgeZone);
+  }
+  if (scrollStep) scrollContainer.scrollTop += scrollStep;
+
+  var target = findCompactAt(clientX, clientY);
+  if (target && parseInt(target.dataset.vfidx, 10) !== dragSrcIdx) {
+    setDragIndicator(target, 'drag-over');
+  } else {
+    var firstCompact = $favListContainer.querySelector('.vf-compact');
+    if (firstCompact) {
+      var fr = firstCompact.getBoundingClientRect();
+      if (clientY < fr.top && clientX >= fr.left && clientX <= fr.right) {
+        setDragIndicator(firstCompact, 'drag-over-top');
+      } else {
+        setDragIndicator(null, '');
+      }
     }
   }
-  return null;
+
+  // Keep edge scrolling moving smoothly even while the pointer is held still.
+  if (scrollStep) scheduleDragFrame();
 }
 
 // Pointer-based custom drag on drag handle
@@ -1594,6 +1645,7 @@ $favListContainer.addEventListener('pointerdown', function (e) {
   if (!compact) return;
   dragSrcIdx = parseInt(compact.dataset.vfidx, 10);
   dragActive = true;
+  dragPointer = { x: e.clientX, y: e.clientY };
   compact.classList.add('dragging');
 
   // Create ghost
@@ -1606,48 +1658,13 @@ $favListContainer.addEventListener('pointerdown', function (e) {
   document.body.appendChild(dragGhost);
 
   handle.setPointerCapture(e.pointerId);
+  scheduleDragFrame();
 });
 
 $favListContainer.addEventListener('pointermove', function (e) {
   if (!dragActive || dragSrcIdx === null) return;
-
-  // Move ghost
-  if (dragGhost) {
-    dragGhost.style.left = e.clientX + 'px';
-    dragGhost.style.top = e.clientY + 'px';
-  }
-
-  // Auto-scroll when near edges
-  var scrollContainer = $modalVocabBody;
-  var rect = scrollContainer.getBoundingClientRect();
-  var edgeZone = 50;
-  clearDragScroll();
-  if (e.clientY < rect.top + edgeZone) {
-    dragScrollTimer = setInterval(function () { scrollContainer.scrollTop -= 10; }, 30);
-  } else if (e.clientY > rect.bottom - edgeZone) {
-    dragScrollTimer = setInterval(function () { scrollContainer.scrollTop += 10; }, 30);
-  }
-
-  // Update drop indicator
-  var target = findCompactAt(e.clientX, e.clientY);
-  $favListContainer.querySelectorAll('.vf-compact.drag-over, .vf-compact.drag-over-top').forEach(function (el) {
-    el.classList.remove('drag-over', 'drag-over-top');
-  });
-  if (target) {
-    var targetIdx = parseInt(target.dataset.vfidx, 10);
-    if (targetIdx !== dragSrcIdx) {
-      target.classList.add('drag-over');
-    }
-  } else {
-    // Check if pointer is above the first item (drop at position 0)
-    var firstCompact = $favListContainer.querySelector('.vf-compact');
-    if (firstCompact) {
-      var fr = firstCompact.getBoundingClientRect();
-      if (e.clientY < fr.top && e.clientX >= fr.left && e.clientX <= fr.right) {
-        firstCompact.classList.add('drag-over-top');
-      }
-    }
-  }
+  dragPointer = { x: e.clientX, y: e.clientY };
+  scheduleDragFrame();
 });
 
 $favListContainer.addEventListener('pointerup', function (e) {
@@ -1679,10 +1696,6 @@ $favListContainer.addEventListener('pointerup', function (e) {
     }
   }
   clearDragState();
-});
-
-$favListContainer.addEventListener('pointerleave', function (e) {
-  if (dragActive) clearDragState();
 });
 
 $favListContainer.addEventListener('pointercancel', function (e) {
