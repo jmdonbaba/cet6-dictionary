@@ -283,8 +283,8 @@ body {
 .vf-drag-handle:hover::after { background: var(--text); }
 .vf-drag-handle:active { cursor: grabbing; }
 .vf-compact.dragging { opacity: 0.4; }
-.vf-compact.drag-over { border-bottom: 2px solid var(--primary); }
-	.vf-compact.drag-over-top { border-top: 2px solid var(--primary); }
+.vf-compact.drag-over { box-shadow: inset 0 -2px 0 var(--primary); }
+.vf-compact.drag-over-top { box-shadow: inset 0 2px 0 var(--primary); }
 
 /* Drag ghost */
 .vf-drag-ghost {
@@ -1108,7 +1108,7 @@ function openModal(modal, skipFocus) {
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
   // Focus search input when opening vocab favorites (skip when navigating from "open in favorites")
-  if (modal === $modalVocabFav && !skipFocus) {
+  if (modal === $modalVocabFav && !skipFocus && !window.matchMedia('(max-width: 500px)').matches) {
     setTimeout(function () {
       var si = document.getElementById('favSearchInput');
       if (si && getVFavs().length) si.focus();
