@@ -25,4 +25,5 @@
 
 ## 使用方式
 
-直接用浏览器打开 `index.html` 即可使用。
+- **在线使用**：https://jmdonbaba.github.io/cet6-dictionary/
+- **本地使用**：直接用浏览器打开 `index.html` 即可使用。
