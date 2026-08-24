@@ -17,7 +17,7 @@
 - DeepSeek API（deepseek-v4-flash）
 - localStorage 数据持久化
 
-## 与原项目的关系
+## 与Cet6Writing的关系
 
 - 共享 `cet6_api_key` — API Key 两个项目只需配置一次
 - 共享 `cet6_vocab_favorites` — 任一项目中收藏/删除的词汇会自动同步
