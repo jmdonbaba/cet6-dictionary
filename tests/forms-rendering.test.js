@@ -15,7 +15,7 @@ test('keeps mobile search controls at their natural widths and right-aligns them
 
 test('keeps the longer unfavorite button on the mobile word heading row', () => {
   assert.match(source, /@media \(max-width: 500px\) \{[\s\S]*?\.word-result \.word-header\s*\{[^}]*flex-wrap:\s*nowrap;/);
-  assert.match(source, /@media \(max-width: 500px\) \{[\s\S]*?\.word-result \.btn-favorite\s*\{[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*white-space:\s*nowrap;/);
+  assert.match(source, /@media \(max-width: 500px\) \{[\s\S]*?\.word-result \.btn-favorite\s*\{[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*white-space:\s*nowrap;[^}]*min-width:\s*88px;[^}]*font-size:\s*14px;/);
 });
 
 test('keeps touch gestures on a favorite drag handle out of browser scrolling', () => {
