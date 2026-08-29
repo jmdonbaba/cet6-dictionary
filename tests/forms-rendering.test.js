@@ -13,6 +13,11 @@ test('keeps mobile search controls at their natural widths and right-aligns them
   assert.doesNotMatch(source, /\.word-search-wrapper\s+\.word-search-submit\s*\{\s*flex:\s*1;/);
 });
 
+test('keeps the longer unfavorite button on the mobile word heading row', () => {
+  assert.match(source, /@media \(max-width: 500px\) \{[\s\S]*?\.word-result \.word-header\s*\{[^}]*flex-wrap:\s*nowrap;/);
+  assert.match(source, /@media \(max-width: 500px\) \{[\s\S]*?\.word-result \.btn-favorite\s*\{[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*white-space:\s*nowrap;/);
+});
+
 test('keeps touch gestures on a favorite drag handle out of browser scrolling', () => {
   assert.match(source, /\.vf-drag-handle\s*\{[^}]*touch-action:\s*none;/);
   assert.match(source, /\$favListContainer\.addEventListener\('pointercancel',\s*function\s*\(e\)\s*\{\s*if\s*\(dragActive\)\s*clearDragState\(\);/);
