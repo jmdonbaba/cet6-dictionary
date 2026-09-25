@@ -46,6 +46,22 @@ test('Markdown treats HTML-looking stored text as text', () => {
   assert.doesNotMatch(md, /<script>/);
 });
 
+test('Markdown keeps multiline definitions while escaping line-start blocks', () => {
+  const md = StudyExport.renderMarkdown([{
+    word: 'plain', phonetic: '', pos: '',
+    definitions: ['- nested', 'first\r# injected'], forms: '', examples: []
+  }], { generatedAt: new Date(2026, 8, 25) });
+  assert.match(md, /- \\- nested/);
+  assert.match(md, /- first\n\\# injected/);
+  assert.doesNotMatch(md, /first # injected/);
+});
+
+test('Markdown escapes neighboring line-start list and quote markers', () => {
+  const escaped = StudyExport.escapeMarkdown('+ item\r\n1. ordered\n2) next\n- [ ] task\n   - nested\n* bullet\n> quote');
+  assert.equal(escaped,
+    '\\+ item\n1\\. ordered\n2\\) next\n\\- \\[ \\] task\n   \\- nested\n\\* bullet\n&gt; quote');
+});
+
 test('renderers omit empty optional sections and cap direct input examples', () => {
   const direct = [{
     word: 'plain', phonetic: '', pos: '', definitions: [], forms: '',

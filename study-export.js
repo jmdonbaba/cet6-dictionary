@@ -72,9 +72,11 @@
   }
 
   function escapeMarkdown(value) {
-    return clean(value).replace(/\r?\n/g, ' ')
+    return clean(value).replace(/\r\n?|\n/g, '\n')
       .replace(/[&<>]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character])
-      .replace(/([\\`*_{}\[\]()#+!|~])/g, '\\$1');
+      .replace(/([\\`*_{}\[\]()#+!|~])/g, '\\$1')
+      .replace(/(^|\n)([ \t]{0,3})(-|\d{1,9}\.)(?=[ \t])/g, (_, lineStart, indent, marker) =>
+        `${lineStart}${indent}${marker === '-' ? '\\-' : `${marker.slice(0, -1)}\\.`}`);
   }
 
   function studyDate(options) {
