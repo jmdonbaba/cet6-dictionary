@@ -7,7 +7,8 @@ const source = fs.readFileSync('index.html', 'utf8');
 test('uses the shared shadow language for cards and the export button', () => {
   assert.match(source, /--shadow-hover:\s*0 6px 20px rgba\(15, 23, 42, 0\.08\),\s*0 2px 6px rgba\(15, 23, 42, 0\.05\);/);
   assert.match(source, /@media \(hover: hover\) \{[\s\S]*?\.card:hover\s*\{[^}]*box-shadow:\s*var\(--shadow-hover\);[^}]*\}/);
-  assert.match(source, /\.btn-study-export:hover\s*\{[^}]*box-shadow:\s*var\(--shadow\);[^}]*\}/);
+  assert.match(source, /\.btn-study-export\s*\{[^}]*box-shadow:\s*var\(--shadow\);[^}]*\}/s);
+  assert.match(source, /\.btn-study-export:hover\s*\{[^}]*box-shadow:\s*var\(--shadow-hover\);[^}]*\}/);
 });
 
 test('adds restrained spring entrances and button press feedback', () => {

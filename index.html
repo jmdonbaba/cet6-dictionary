@@ -322,9 +322,10 @@ body {
   padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--card-bg); color: var(--text); font: inherit; font-size: 13px;
   cursor: pointer; white-space: nowrap;
+  box-shadow: var(--shadow); transition: box-shadow 0.2s ease;
 }
 @media (hover: hover) {
-  .btn-study-export:hover { box-shadow: var(--shadow); }
+  .btn-study-export:hover { box-shadow: var(--shadow-hover); }
 }
 .study-export-chevron {
   width: 7px; height: 7px; margin: -3px 1px 0 2px;
