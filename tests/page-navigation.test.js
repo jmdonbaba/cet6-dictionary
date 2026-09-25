@@ -9,12 +9,15 @@ test('renders accessible top and bottom controls', () => {
   assert.match(source, /id="pageJumpControls"/);
   assert.match(source, /id="btnJumpTop"[^>]*aria-label="回到页面顶部"[^>]*title="回到顶部"/);
   assert.match(source, /id="btnJumpBottom"[^>]*aria-label="前往页面底部"[^>]*title="前往底部"/);
+  assert.match(source, /id="btnJumpTop"[\s\S]*?<svg[^>]*class="page-jump-icon"[\s\S]*?<path[^>]*d="M12 19V5M6\.5 10\.5 12 5l5\.5 5\.5"/);
+  assert.match(source, /id="btnJumpBottom"[\s\S]*?<path[^>]*d="M12 5v14m-5\.5-5\.5L12 19l5\.5-5\.5"/);
+  assert.match(source, /\.page-jump-icon\s*\{[^}]*stroke-linecap:\s*round;[^}]*stroke-linejoin:\s*round;/s);
 });
 
-test('controls are touch-safe and honor mobile safe areas', () => {
+test('controls sit outside the desktop content column and hide on narrow screens', () => {
   assert.match(source, /\.page-jump-btn\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/s);
-  assert.match(source, /env\(safe-area-inset-right/);
-  assert.match(source, /env\(safe-area-inset-bottom/);
+  assert.match(source, /\.page-jump-controls\s*\{[^}]*top:\s*50%;[^}]*left:\s*calc\(50% \+ 426px\);[^}]*transform:\s*translateY\(-50%\);/s);
+  assert.match(source, /@media \(max-width:\s*1000px\)\s*\{\s*\.page-jump-controls\s*\{[^}]*display:\s*none\s*!important;/s);
 });
 
 test('updates visibility and disabled state from scroll geometry and modal state', () => {

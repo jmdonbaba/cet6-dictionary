@@ -18,6 +18,9 @@
   --radius: 12px;
   --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
   --shadow-hover: 0 6px 20px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.05);
+  --spotlight-x: 50vw;
+  --spotlight-y: 45vh;
+  --spotlight-opacity: 0;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -41,18 +44,35 @@ button:not(:disabled):active { transform: scale(.98); }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 12% 14%, rgba(139, 131, 238, 0.10), transparent 32%),
+    radial-gradient(circle at 88% 72%, rgba(255, 255, 255, 0.82), transparent 34%),
+    var(--bg);
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(circle 280px at var(--spotlight-x) var(--spotlight-y),
+    rgba(255, 255, 255, 0.76) 0%, rgba(238, 242, 255, 0.28) 44%, transparent 72%);
+  opacity: var(--spotlight-opacity);
+  transition: opacity 0.35s ease;
+  pointer-events: none;
 }
 
-.container { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+.container { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
 
 .page-jump-controls {
   position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(18px, calc(env(safe-area-inset-bottom) + 12px));
+  top: 50%;
+  left: calc(50% + 426px);
+  transform: translateY(-50%);
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -68,12 +88,25 @@ body {
   color: var(--primary);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
   cursor: pointer;
-  font-size: 20px;
+  padding: 0;
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
 }
-.page-jump-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.page-jump-icon {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.page-jump-btn-primary { background: #8f88ea; color: #fff; border-color: #8f88ea; }
 .page-jump-btn:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
-@media (max-width: 500px) {
-  .page-jump-controls { right: max(10px, env(safe-area-inset-right)); }
+@media (hover: hover) {
+  .page-jump-btn:not(:disabled):hover { box-shadow: var(--shadow-hover); }
+}
+@media (max-width: 1000px) {
+  .page-jump-controls { display: none !important; }
 }
 
 .header { text-align: center; padding: 32px 0 24px; }
@@ -669,10 +702,14 @@ body {
 
 <nav class="page-jump-controls" id="pageJumpControls" aria-label="页面快捷导航" hidden>
   <button class="page-jump-btn" id="btnJumpTop" type="button" aria-label="回到页面顶部" title="回到顶部">
-    <span aria-hidden="true">↑</span>
+    <svg class="page-jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"></path>
+    </svg>
   </button>
   <button class="page-jump-btn page-jump-btn-primary" id="btnJumpBottom" type="button" aria-label="前往页面底部" title="前往底部">
-    <span aria-hidden="true">↓</span>
+    <svg class="page-jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M12 5v14m-5.5-5.5L12 19l5.5-5.5"></path>
+    </svg>
   </button>
 </nav>
 <div class="toast" id="toast"></div>
@@ -791,6 +828,28 @@ const pageJumpObserver = new MutationObserver(schedulePageJumpUpdate);
 [$wsModules, document.querySelector('.footer'), $modalOverlay].forEach(element => {
   pageJumpObserver.observe(element, { childList: true, subtree: true, attributes: true });
 });
+
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+if (finePointer.matches && !reducedMotion.matches) {
+  let spotlightFrame = 0;
+  let spotlightX = window.innerWidth / 2;
+  let spotlightY = window.innerHeight / 2;
+  function paintPointerSpotlight() {
+    spotlightFrame = 0;
+    document.documentElement.style.setProperty('--spotlight-x', spotlightX + 'px');
+    document.documentElement.style.setProperty('--spotlight-y', spotlightY + 'px');
+    document.documentElement.style.setProperty('--spotlight-opacity', '1');
+  }
+  document.addEventListener('pointermove', event => {
+    spotlightX = event.clientX;
+    spotlightY = event.clientY;
+    if (!spotlightFrame) spotlightFrame = requestAnimationFrame(paintPointerSpotlight);
+  }, { passive: true });
+  document.documentElement.addEventListener('pointerleave', () => {
+    document.documentElement.style.setProperty('--spotlight-opacity', '0');
+  });
+}
 
 // ==================== Utils ====================
 let toastTimer;
