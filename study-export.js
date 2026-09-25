@@ -84,21 +84,23 @@
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
-  function renderStudyCardHtml(word, index) {
+  function renderStudyCardHtml(word, index, options) {
+    const continuation = Boolean(options && options.continuation);
+    const includeNotes = !options || options.includeNotes !== false;
     const definitions = Array.isArray(word.definitions) ? word.definitions.filter(clean) : [];
     const examples = Array.isArray(word.examples) ? word.examples.slice(0, MAX_EXAMPLES) : [];
-    const detail = [word.phonetic, word.pos].filter(clean).map(value => `<span>${escapeHtml(value)}</span>`).join(' ');
-    const definitionBlock = definitions.length
+    const detail = continuation ? '' : [word.phonetic, word.pos].filter(clean).map(value => `<span>${escapeHtml(value)}</span>`).join(' ');
+    const definitionBlock = !continuation && definitions.length
       ? `<div class="field"><strong>释义</strong><ul>${definitions.map(value => `<li>${escapeHtml(value)}</li>`).join('')}</ul></div>` : '';
-    const formsBlock = clean(word.forms)
+    const formsBlock = !continuation && clean(word.forms)
       ? `<div class="field"><strong>词形</strong><p>${escapeHtml(word.forms)}</p></div>` : '';
     const exampleBlock = examples.length
       ? `<div class="field"><strong>例句</strong><ol>${examples.map(example => `<li>${clean(example && example.en) ? `<span>${escapeHtml(example.en)}</span>` : ''}${clean(example && example.cn) ? `<span class="translation">${escapeHtml(example.cn)}</span>` : ''}</li>`).join('')}</ol></div>` : '';
     return `<section class="study-card">
-      <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}</h2><span class="checkbox">□ 已掌握</span></div>
+      <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
       ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
       ${definitionBlock}${formsBlock}${exampleBlock}
-      <div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>
+      ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
     </section>`;
   }
 
@@ -165,6 +167,172 @@
     return [`# CET-6 收藏词汇背诵讲义`, '', `生成日期：${studyDate(options)} · 共 ${items.length} 词`, '', ...cards].join('\n');
   }
 
+  function buildPdfPages(words, doc) {
+    if (!Array.isArray(words)) throw new TypeError('PDF export requires an array of words');
+    if (!doc || typeof doc.createElement !== 'function' || !doc.body || typeof doc.body.appendChild !== 'function') {
+      throw new TypeError('PDF export requires a document with a body');
+    }
+
+    const host = doc.createElement('div');
+    host.className = 'study-pdf-host';
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;pointer-events:none;';
+    const pages = [];
+    try {
+      doc.body.appendChild(host);
+      const style = doc.createElement('style');
+      style.textContent = `
+        .study-pdf-host, .study-pdf-host * { box-sizing: border-box; }
+        .study-pdf-page { width: 794px; height: 1123px; overflow: hidden; padding: 68px; background: #fff;
+          color: #111; font: 16px/1.6 system-ui, -apple-system, "Microsoft YaHei", sans-serif; }
+        .study-pdf-page header { border-bottom: 2px solid #111; margin-bottom: 24px; padding-bottom: 14px; }
+        .study-pdf-page h1 { font-size: 27px; margin: 0 0 8px; }
+        .study-pdf-page h2 { font-size: 21px; margin: 0; overflow-wrap: anywhere; }
+        .study-pdf-page p, .study-pdf-page ul, .study-pdf-page ol { margin: 4px 0 10px; }
+        .study-pdf-page .meta { color: #444; }
+        .study-pdf-page .study-card { border: 1px solid #555; border-radius: 6px; margin: 0 0 20px; padding: 15px 18px; }
+        .study-pdf-page .word-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+        .study-pdf-page .checkbox { white-space: nowrap; font-size: 14px; }
+        .study-pdf-page .pronunciation, .study-pdf-page .translation { color: #333; }
+        .study-pdf-page .pronunciation span + span { margin-left: 12px; }
+        .study-pdf-page .field { margin-top: 10px; }
+        .study-pdf-page .field strong, .study-pdf-page .notes strong { display: block; font-size: 14px; }
+        .study-pdf-page .field li { padding-left: 2px; }
+        .study-pdf-page .translation { display: block; }
+        .study-pdf-page .notes { margin-top: 14px; }
+        .study-pdf-page .note-line { border-bottom: 1px solid #999; height: 25px; }
+        .study-pdf-page .study-card--splittable { break-inside: auto; page-break-inside: auto; }
+      `;
+      host.appendChild(style);
+
+      const addPage = () => {
+        const next = doc.createElement('div');
+        next.className = 'study-pdf-page';
+        host.appendChild(next);
+        pages.push(next);
+        return next;
+      };
+      let page = addPage();
+      const header = doc.createElement('header');
+      header.innerHTML = `<h1>CET-6 收藏词汇背诵讲义</h1><div class="meta">生成日期：${studyDate()} · 共 ${words.length} 词</div>`;
+      page.appendChild(header);
+
+      const makeCard = (word, index, options) => {
+        const wrapper = doc.createElement('div');
+        wrapper.innerHTML = renderStudyCardHtml(word, index, options);
+        const card = wrapper.firstElementChild;
+        if (options && options.splittable) card.classList.add('study-card--splittable');
+        return card;
+      };
+
+      const fitOversizedCard = (word, index) => {
+        const examples = Array.isArray(word.examples) ? word.examples.slice(0, MAX_EXAMPLES) : [];
+        const fragment = (items, continuation, includeNotes) =>
+          makeCard({ ...word, examples: items }, index, { continuation, includeNotes, splittable: true });
+        let continuation = false;
+        let currentExamples = [];
+        let active = fragment([], false, false);
+        page.appendChild(active);
+        if (page.scrollHeight > page.clientHeight) {
+          active.remove();
+          page = addPage();
+          page.appendChild(active);
+          if (page.scrollHeight > page.clientHeight) {
+            throw new RangeError('PDF card content cannot fit on an A4 page');
+          }
+        }
+
+        for (const example of examples) {
+          active.remove();
+          const candidate = fragment([...currentExamples, example], continuation, false);
+          page.appendChild(candidate);
+          if (page.scrollHeight <= page.clientHeight) {
+            currentExamples.push(example);
+            active = candidate;
+            continue;
+          }
+          candidate.remove();
+          page.appendChild(active);
+          page = addPage();
+          continuation = true;
+          currentExamples = [example];
+          active = fragment(currentExamples, true, false);
+          page.appendChild(active);
+          if (page.scrollHeight > page.clientHeight) {
+            throw new RangeError('PDF example cannot fit on an A4 page');
+          }
+        }
+
+        active.remove();
+        const withNotes = fragment(currentExamples, continuation, true);
+        page.appendChild(withNotes);
+        if (page.scrollHeight > page.clientHeight) {
+          withNotes.remove();
+          page.appendChild(active);
+          page = addPage();
+          const notes = fragment([], true, true);
+          page.appendChild(notes);
+          if (page.scrollHeight > page.clientHeight) {
+            throw new RangeError('PDF notes cannot fit on an A4 page');
+          }
+        }
+      };
+
+      words.forEach((word, index) => {
+        const card = makeCard(word, index);
+        page.appendChild(card);
+        if (page.scrollHeight > page.clientHeight) {
+          card.remove();
+          const previousPage = page;
+          page = addPage();
+          page.appendChild(card);
+          if (page.scrollHeight > page.clientHeight) {
+            card.remove();
+            page.remove();
+            pages.pop();
+            page = previousPage;
+            fitOversizedCard(word, index);
+          }
+        }
+      });
+      return { host, pages };
+    } catch (error) {
+      host.remove();
+      throw error;
+    }
+  }
+
+  async function createPdfBlob(words, dependencies) {
+    if (!Array.isArray(words)) throw new TypeError('PDF export requires an array of words');
+    if (!dependencies || !dependencies.document || typeof dependencies.document.createElement !== 'function' ||
+        !dependencies.document.body || typeof dependencies.document.body.appendChild !== 'function') {
+      throw new TypeError('PDF export requires a document with a body');
+    }
+    if (typeof dependencies.html2canvas !== 'function') throw new TypeError('PDF export requires html2canvas');
+    if (typeof dependencies.jsPDF !== 'function') throw new TypeError('PDF export requires jsPDF');
+
+    let host;
+    try {
+      const built = buildPdfPages(words, dependencies.document);
+      host = built.host;
+      const pdf = new dependencies.jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+      for (const [pageIndex, page] of built.pages.entries()) {
+        const canvas = await dependencies.html2canvas(page, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          logging: false,
+          useCORS: false,
+          windowWidth: 794
+        });
+        const image = canvas.toDataURL('image/jpeg', 0.96);
+        if (pageIndex > 0) pdf.addPage('a4', 'portrait');
+        pdf.addImage(image, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+      }
+      return pdf.output('blob');
+    } finally {
+      if (host) host.remove();
+    }
+  }
+
   function downloadBlob(blob, filename, doc) {
     const targetDocument = doc || document;
     const url = URL.createObjectURL(blob);
@@ -179,6 +347,7 @@
 
   return {
     MAX_EXAMPLES, normalizeFavorites, createFilename,
-    escapeHtml, escapeMarkdown, renderStudyCardHtml, renderHtml, renderMarkdown, downloadBlob
+    escapeHtml, escapeMarkdown, renderStudyCardHtml, renderHtml, renderMarkdown,
+    buildPdfPages, createPdfBlob, downloadBlob
   };
 });
