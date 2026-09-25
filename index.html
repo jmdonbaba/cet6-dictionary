@@ -700,6 +700,9 @@ function setApiKey(key) {
 // ==================== DOM refs ====================
 const $toast = document.getElementById('toast');
 const $wsModules = document.getElementById('wordSearchModules');
+const $pageJumpControls = document.getElementById('pageJumpControls');
+const $btnJumpTop = document.getElementById('btnJumpTop');
+const $btnJumpBottom = document.getElementById('btnJumpBottom');
 const $vocabFavCnt = document.getElementById('vocabFavCount');
 const $modalOverlay = document.getElementById('modalOverlay');
 const $modalVocabFav = document.getElementById('modalVocabFav');
@@ -714,6 +717,39 @@ const $keyArea = document.getElementById('keyArea');
 const $apiKeyInput = document.getElementById('apiKeyInput');
 const $btnSaveKey = document.getElementById('btnSaveKey');
 const $keyStatus = document.getElementById('keyStatus');
+
+let pageJumpFrame = 0;
+function updatePageJumpControls() {
+  pageJumpFrame = 0;
+  const root = document.scrollingElement || document.documentElement;
+  const { scrollTop, scrollHeight, clientHeight } = root;
+  const scrollable = scrollHeight > clientHeight + 1;
+  const modalOpen = $modalOverlay.style.display !== 'none';
+  $pageJumpControls.hidden = !scrollable || modalOpen;
+  $btnJumpTop.disabled = scrollTop <= 1;
+  $btnJumpBottom.disabled = scrollTop + clientHeight >= scrollHeight - 1;
+}
+
+function schedulePageJumpUpdate() {
+  if (!pageJumpFrame) pageJumpFrame = requestAnimationFrame(updatePageJumpControls);
+}
+
+function jumpToPageEdge(edge) {
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({
+    top: edge === 'top' ? 0 : document.documentElement.scrollHeight,
+    behavior: reducedMotion ? 'auto' : 'smooth'
+  });
+}
+
+$btnJumpTop.addEventListener('click', () => jumpToPageEdge('top'));
+$btnJumpBottom.addEventListener('click', () => jumpToPageEdge('bottom'));
+window.addEventListener('scroll', schedulePageJumpUpdate, { passive: true });
+window.addEventListener('resize', schedulePageJumpUpdate);
+const pageJumpObserver = new MutationObserver(schedulePageJumpUpdate);
+[$wsModules, document.querySelector('.footer'), $modalOverlay].forEach(element => {
+  pageJumpObserver.observe(element, { childList: true, subtree: true, attributes: true });
+});
 
 // ==================== Utils ====================
 let toastTimer;
@@ -1322,6 +1358,7 @@ function syncSlider(toggle) {
 // Modal open/close
 function openModal(modal, skipFocus) {
   $modalOverlay.style.display = 'flex';
+  schedulePageJumpUpdate();
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
   // Focus search input when opening vocab favorites (skip when navigating from "open in favorites")
@@ -1335,6 +1372,7 @@ function openModal(modal, skipFocus) {
 function closeModal() {
   closeStudyExportMenu();
   $modalOverlay.style.display = 'none';
+  schedulePageJumpUpdate();
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
 
   // Clear search state
@@ -1442,6 +1480,7 @@ $wsModules.addEventListener('click', async e => {
     if (act === 'add') {
       const newModule = createWordSearchModule();
       wrapper.after(newModule);
+      schedulePageJumpUpdate();
       updateMinusButtons();
       newModule.scrollIntoView({ behavior: 'smooth', block: 'center' });
       syncSlider(newModule.querySelector('.ws-mode-toggle'));
@@ -1453,6 +1492,7 @@ $wsModules.addEventListener('click', async e => {
       const modules = document.querySelectorAll('.word-search-wrapper');
       if (modules.length <= 1) return;
       wrapper.remove();
+      schedulePageJumpUpdate();
       updateMinusButtons();
     }
     return;
@@ -2194,6 +2234,7 @@ renderVFavs();
 $wsModules.appendChild(createWordSearchModule());
 updateMinusButtons();
 syncSlider($wsModules.querySelector('.ws-mode-toggle'));
+schedulePageJumpUpdate();
 </script>
 </body>
 </html>
