@@ -18,9 +18,6 @@
   --radius: 12px;
   --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
   --shadow-hover: 0 6px 20px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.05);
-  --spotlight-x: 50vw;
-  --spotlight-y: 45vh;
-  --spotlight-opacity: 0;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -44,30 +41,14 @@ button:not(:disabled):active { transform: scale(.98); }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
-  background:
-    radial-gradient(circle at 12% 14%, rgba(139, 131, 238, 0.12), transparent 32%),
-    radial-gradient(circle at 88% 72%, rgba(255, 255, 255, 0.50), transparent 34%),
-    var(--bg);
+  background: var(--bg);
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
-  position: relative;
-  isolation: isolate;
   overflow-x: hidden;
 }
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  background: radial-gradient(circle 240px at var(--spotlight-x) var(--spotlight-y),
-    rgba(255, 255, 255, 0.58) 0%, rgba(238, 242, 255, 0.22) 44%, transparent 72%);
-  opacity: var(--spotlight-opacity);
-  transition: opacity 0.35s ease;
-  pointer-events: none;
-}
 
-.container { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
+.container { max-width: 860px; margin: 0 auto; padding: 24px 20px 60px; }
 
 .page-jump-controls {
   position: fixed;
@@ -83,6 +64,9 @@ body::before {
 .page-jump-btn {
   width: 44px;
   height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: #fff;
@@ -829,28 +813,6 @@ const pageJumpObserver = new MutationObserver(schedulePageJumpUpdate);
 [$wsModules, document.querySelector('.footer'), $modalOverlay].forEach(element => {
   pageJumpObserver.observe(element, { childList: true, subtree: true, attributes: true });
 });
-
-const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-if (finePointer.matches && !reducedMotion.matches) {
-  let spotlightFrame = 0;
-  let spotlightX = window.innerWidth / 2;
-  let spotlightY = window.innerHeight / 2;
-  function paintPointerSpotlight() {
-    spotlightFrame = 0;
-    document.documentElement.style.setProperty('--spotlight-x', spotlightX + 'px');
-    document.documentElement.style.setProperty('--spotlight-y', spotlightY + 'px');
-    document.documentElement.style.setProperty('--spotlight-opacity', '1');
-  }
-  document.addEventListener('pointermove', event => {
-    spotlightX = event.clientX;
-    spotlightY = event.clientY;
-    if (!spotlightFrame) spotlightFrame = requestAnimationFrame(paintPointerSpotlight);
-  }, { passive: true });
-  document.documentElement.addEventListener('pointerleave', () => {
-    document.documentElement.style.setProperty('--spotlight-opacity', '0');
-  });
-}
 
 // ==================== Utils ====================
 let toastTimer;
