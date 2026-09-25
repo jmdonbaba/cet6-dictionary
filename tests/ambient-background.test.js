@@ -5,8 +5,10 @@ const test = require('node:test');
 const source = fs.readFileSync('index.html', 'utf8');
 
 test('adds gentle static ambient light behind the application', () => {
+  assert.match(source, /--bg:\s*#eef0f6;/);
   assert.match(source, /body\s*\{[^}]*background:\s*radial-gradient/s);
-  assert.match(source, /body::before\s*\{[^}]*radial-gradient\([\s\S]*?var\(--spotlight-x\)[\s\S]*?var\(--spotlight-y\)[\s\S]*?pointer-events:\s*none;/s);
+  assert.match(source, /body\s*\{[^}]*isolation:\s*isolate;/s);
+  assert.match(source, /body::before\s*\{[^}]*radial-gradient\(circle 240px[\s\S]*?var\(--spotlight-x\)[\s\S]*?var\(--spotlight-y\)[\s\S]*?pointer-events:\s*none;/s);
   assert.match(source, /\.container\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*1;/s);
 });
 
