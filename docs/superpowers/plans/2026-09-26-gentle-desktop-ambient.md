@@ -78,3 +78,48 @@ Commit with:
 git add index.html tests/page-navigation.test.js tests/ambient-background.test.js
 git commit -m "style: add gentle desktop ambient effects"
 ```
+
+---
+
+### Task 2: Deepen and Isolate the Ambient Background
+
+**Files:**
+- Modify: `tests/ambient-background.test.js`
+- Modify: `index.html`
+
+**Interfaces:**
+- Consumes: the existing `body`, `body::before`, `.container`, and spotlight CSS variables.
+- Produces: a darker lavender-gray page background and an explicitly isolated spotlight layer that cannot affect application surfaces.
+
+- [ ] **Step 1: Tighten the background structure test**
+
+Require `--bg: #eef0f6`, `isolation: isolate` on `body`, and the spotlight behind application content while retaining `pointer-events: none`.
+
+- [ ] **Step 2: Run the focused test and verify RED**
+
+Run `node --test tests/ambient-background.test.js`.
+
+Expected: failure because the current background is `#f8fafc` and the body does not yet create an explicit isolated stacking context.
+
+- [ ] **Step 3: Implement the minimal visual refinement**
+
+Change the background token to `#eef0f6`, add `isolation: isolate` to `body`, reduce the spotlight diameter from `280px` to `240px`, and keep `body::before` below `.container`, page controls, modals, and Toasts.
+
+- [ ] **Step 4: Verify and commit**
+
+Run:
+
+```powershell
+node --test tests/ambient-background.test.js
+node --test
+git diff --check
+```
+
+Expected: all tests pass with no whitespace errors.
+
+Commit with:
+
+```powershell
+git add index.html tests/ambient-background.test.js
+git commit -m "style: deepen isolated ambient background"
+```
