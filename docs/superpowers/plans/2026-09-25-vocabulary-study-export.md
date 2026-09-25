@@ -44,12 +44,13 @@
 - Create: `vendor/jspdf-4.2.1.umd.min.js`
 - Create: `vendor/docx-9.7.1.iife.js`
 - Create: `vendor/THIRD_PARTY_NOTICES.md`
+- Create: `study-export.js`
 - Create: `tests/study-export-ui.test.js`
 - Modify: `index.html:608`
 
 **Interfaces:**
 - Consumes: npm registry archives for exactly `html2canvas@1.4.1`, `jspdf@4.2.1`, and `docx@9.7.1`.
-- Produces: browser globals `window.html2canvas`, `window.jspdf.jsPDF`, and `window.docx` before `study-export.js` and the inline app script execute.
+- Produces: browser globals `window.html2canvas`, `window.jspdf.jsPDF`, `window.docx`, and an initially empty `window.StudyExport` namespace before the inline app script executes.
 
 - [ ] **Step 1: Write the failing dependency test**
 
@@ -115,6 +116,19 @@ Add these script tags immediately before the existing inline `<script>` in `inde
 <script src="study-export.js"></script>
 ```
 
+Create the initial `study-export.js` module so the page never references a missing asset between tasks:
+
+```js
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.StudyExport = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+  return {};
+});
+```
+
 - [ ] **Step 4: Run the dependency test**
 
 Run: `node --test tests/study-export-ui.test.js`
@@ -124,7 +138,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add vendor tests/study-export-ui.test.js index.html
+git add vendor tests/study-export-ui.test.js study-export.js index.html
 git commit -m "build: vendor study export libraries"
 ```
 
@@ -133,7 +147,7 @@ git commit -m "build: vendor study export libraries"
 ### Task 2: Normalize Favorites into a Stable Export Model
 
 **Files:**
-- Create: `study-export.js`
+- Modify: `study-export.js`
 - Create: `tests/study-export-model.test.js`
 
 **Interfaces:**
@@ -195,7 +209,7 @@ test('builds a deterministic timestamped filename', () => {
 
 Run: `node --test tests/study-export-model.test.js`
 
-Expected: FAIL with `Cannot find module '../study-export.js'`.
+Expected: FAIL because `StudyExport.normalizeFavorites` is undefined.
 
 - [ ] **Step 3: Implement the UMD module and pure model functions**
 
