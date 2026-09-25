@@ -57,5 +57,5 @@ test('normalizes structured forms into readable inflection and derivative text',
 
 test('builds a deterministic timestamped filename', () => {
   const date = new Date(2026, 8, 25, 14, 3, 9);
-  assert.equal(StudyExport.createFilename('pdf', date), 'cet6-vocabulary-20260925-140309.pdf');
+  assert.equal(StudyExport.createFilename('html', date), 'cet6-vocabulary-20260925-140309.html');
 });

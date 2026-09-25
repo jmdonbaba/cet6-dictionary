@@ -1,5 +1,7 @@
 # Vocabulary Study Export Implementation Plan
 
+> **Final scope update (2026-09-26):** PDF export and its local dependencies were rolled back because client-side raster generation was too slow on mobile. The shipped formats are HTML and Markdown only. PDF tasks below remain as implementation history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a compact favorites-menu export that downloads every saved word as polished PDF, standalone HTML, or Markdown study material.

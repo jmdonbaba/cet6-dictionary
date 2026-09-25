@@ -305,6 +305,11 @@ body {
   background: var(--card-bg); color: var(--text); font: inherit; font-size: 13px;
   cursor: pointer; white-space: nowrap;
 }
+.study-export-chevron {
+  width: 7px; height: 7px; margin: -3px 1px 0 2px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); flex: 0 0 auto;
+}
 .btn-study-export:disabled { opacity: .5; cursor: not-allowed; }
 .study-export-menu {
   position: absolute; top: calc(100% + 5px); right: 0; z-index: 30;
@@ -642,9 +647,8 @@ body {
       <span class="modal-header-title">词汇收藏 (<span id="modalVocabCount">0</span>)</span>
       <div class="modal-header-actions">
         <div class="study-export-wrap" id="studyExportWrap">
-          <button class="btn-study-export" id="btnStudyExport" type="button" aria-haspopup="menu" aria-expanded="false">导出<span aria-hidden="true">⌄</span></button>
+          <button class="btn-study-export" id="btnStudyExport" type="button" aria-haspopup="menu" aria-expanded="false">导出<span class="study-export-chevron" aria-hidden="true"></span></button>
           <div class="study-export-menu" id="studyExportMenu" role="menu" hidden>
-            <button type="button" role="menuitem" data-study-format="pdf">PDF</button>
             <button type="button" role="menuitem" data-study-format="html">HTML</button>
             <button type="button" role="menuitem" data-study-format="markdown">Markdown</button>
           </div>
@@ -679,9 +683,6 @@ body {
   </div>
 </div>
 
-<div id="studyPdfRenderHost" aria-hidden="true" hidden></div>
-<script src="vendor/html2canvas-1.4.1.min.js"></script>
-<script src="vendor/jspdf-4.2.1.umd.min.js"></script>
 <script src="study-export.js"></script>
 <script>
 // ==================== 配置 ====================
@@ -1214,7 +1215,6 @@ function updateAllVocabButtons() {
 function renderVFavs() {
   const favs = getVFavs();
   $btnStudyExport.disabled = !favs.length;
-  if (studyExportBusy) $btnStudyExport.disabled = true;
   if (!favs.length) closeStudyExportMenu();
   $vocabFavCnt.textContent = `(${favs.length})`;
   $modalVocabCount.textContent = favs.length;
@@ -1257,8 +1257,6 @@ function renderVFavs() {
 }
 
 // ==================== Study Export ====================
-let studyExportBusy = false;
-
 function closeStudyExportMenu(returnFocus = false) {
   const wasOpen = !$studyExportMenu.hidden;
   $studyExportMenu.hidden = true;
@@ -1266,30 +1264,15 @@ function closeStudyExportMenu(returnFocus = false) {
   if (returnFocus && wasOpen) $btnStudyExport.focus();
 }
 
-function setStudyExportBusy(isBusy) {
-  studyExportBusy = isBusy;
-  $btnStudyExport.disabled = isBusy || !getVFavs().length;
-  $btnStudyExport.setAttribute('aria-busy', String(isBusy));
-  $btnStudyExport.innerHTML = isBusy ? '正在生成…' : '导出<span aria-hidden="true">⌄</span>';
-}
-
-async function exportStudyDocument(format) {
-  if (studyExportBusy || !['pdf', 'html', 'markdown'].includes(format)) return;
+function exportStudyDocument(format) {
+  if (!['html', 'markdown'].includes(format)) return;
   const words = StudyExport.normalizeFavorites(getVFavs());
   if (!words.length) { toast('收藏夹为空，暂无可导出的单词'); return; }
   closeStudyExportMenu();
-  setStudyExportBusy(true);
   try {
     let blob;
     let extension;
-    if (format === 'pdf') {
-      blob = await StudyExport.createPdfBlob(words, {
-        document,
-        html2canvas: window.html2canvas,
-        jsPDF: window.jspdf && window.jspdf.jsPDF
-      });
-      extension = 'pdf';
-    } else if (format === 'html') {
+    if (format === 'html') {
       blob = new Blob([StudyExport.renderHtml(words, { generatedAt: new Date() })], { type: 'text/html;charset=utf-8' });
       extension = 'html';
     } else {
@@ -1301,8 +1284,6 @@ async function exportStudyDocument(format) {
   } catch (error) {
     console.error(error);
     toast(error && error.message ? error.message : '导出失败，请重试');
-  } finally {
-    setStudyExportBusy(false);
   }
 }
 
