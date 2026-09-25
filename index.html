@@ -85,7 +85,7 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.page-jump-btn-primary { background: #8f88ea; color: #fff; border-color: #8f88ea; }
+.page-jump-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
 .page-jump-btn:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
 @media (hover: hover) {
   .page-jump-btn:not(:disabled):hover { box-shadow: var(--shadow-hover); }
@@ -686,12 +686,12 @@ body {
 </div>
 
 <nav class="page-jump-controls" id="pageJumpControls" aria-label="页面快捷导航" hidden>
-  <button class="page-jump-btn" id="btnJumpTop" type="button" aria-label="回到页面顶部" title="回到顶部">
+  <button class="page-jump-btn" id="btnJumpTop" type="button" aria-label="回到页面顶部">
     <svg class="page-jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"></path>
     </svg>
   </button>
-  <button class="page-jump-btn page-jump-btn-primary" id="btnJumpBottom" type="button" aria-label="前往页面底部" title="前往底部">
+  <button class="page-jump-btn page-jump-btn-primary" id="btnJumpBottom" type="button" aria-label="前往页面底部">
     <svg class="page-jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M12 5v14m-5.5-5.5L12 19l5.5-5.5"></path>
     </svg>

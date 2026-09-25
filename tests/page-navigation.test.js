@@ -7,8 +7,9 @@ const source = fs.readFileSync('index.html', 'utf8');
 
 test('renders accessible top and bottom controls', () => {
   assert.match(source, /id="pageJumpControls"/);
-  assert.match(source, /id="btnJumpTop"[^>]*aria-label="回到页面顶部"[^>]*title="回到顶部"/);
-  assert.match(source, /id="btnJumpBottom"[^>]*aria-label="前往页面底部"[^>]*title="前往底部"/);
+  assert.match(source, /id="btnJumpTop"[^>]*aria-label="回到页面顶部"/);
+  assert.match(source, /id="btnJumpBottom"[^>]*aria-label="前往页面底部"/);
+  assert.doesNotMatch(source, /id="btnJump(?:Top|Bottom)"[^>]*\btitle=/);
   assert.match(source, /id="btnJumpTop"[\s\S]*?<svg[^>]*class="page-jump-icon"[\s\S]*?<path[^>]*d="M12 19V5M6\.5 10\.5 12 5l5\.5 5\.5"/);
   assert.match(source, /id="btnJumpBottom"[\s\S]*?<path[^>]*d="M12 5v14m-5\.5-5\.5L12 19l5\.5-5\.5"/);
   assert.match(source, /\.page-jump-icon\s*\{[^}]*stroke-linecap:\s*round;[^}]*stroke-linejoin:\s*round;/s);
