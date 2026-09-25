@@ -27,13 +27,33 @@
     }).filter(example => example.en || example.cn);
   }
 
+  function normalizeForms(forms) {
+    if (typeof forms === 'string') return clean(forms);
+    if (!forms || typeof forms !== 'object') return clean(forms);
+
+    const inflections = Array.isArray(forms.inflections) ? forms.inflections : [];
+    const derivatives = Array.isArray(forms.derivatives) ? forms.derivatives : [];
+    const inflectionText = inflections
+      .filter(item => item && clean(item.type) && clean(item.word))
+      .map(item => `${clean(item.type)} ${clean(item.word)}`)
+      .join('；');
+    const derivativeText = derivatives
+      .filter(item => item && clean(item.word) && clean(item.meaning))
+      .map(item => `${clean(item.pos) ? `${clean(item.pos)} ` : ''}${clean(item.word)} ${clean(item.meaning)}`)
+      .join('；');
+    const groups = [];
+    if (inflectionText) groups.push(`词形变化：${inflectionText}`);
+    if (derivativeText) groups.push(`同根派生：${derivativeText}`);
+    return groups.join('；') || '无';
+  }
+
   function normalizeFavorites(favorites) {
     return (Array.isArray(favorites) ? favorites : []).map(favorite => ({
       word: clean(favorite && favorite.word),
       phonetic: clean(favorite && favorite.phonetic),
       pos: clean(favorite && favorite.pos),
       definitions: normalizeDefinitions(favorite || {}),
-      forms: clean(favorite && favorite.forms),
+      forms: normalizeForms(favorite && favorite.forms),
       examples: normalizeExamples(favorite || {})
     }));
   }

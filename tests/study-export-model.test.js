@@ -37,6 +37,24 @@ test('does not invent content for missing fields', () => {
   });
 });
 
+test('normalizes structured forms into readable inflection and derivative text', () => {
+  const result = StudyExport.normalizeFavorites([{
+    word: 'aspire',
+    forms: {
+      inflections: [
+        { type: '过去式', word: 'aspired' },
+        { type: '现在分词', word: 'aspiring' }
+      ],
+      derivatives: [
+        { pos: 'n.', word: 'aspiration', meaning: '抱负；渴望' }
+      ]
+    }
+  }]);
+
+  assert.equal(result[0].forms,
+    '词形变化：过去式 aspired；现在分词 aspiring；同根派生：n. aspiration 抱负；渴望');
+});
+
 test('builds a deterministic timestamped filename', () => {
   const date = new Date(2026, 8, 25, 14, 3, 9);
   assert.equal(StudyExport.createFilename('pdf', date), 'cet6-vocabulary-20260925-140309.pdf');
