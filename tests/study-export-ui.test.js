@@ -164,7 +164,8 @@ test('PDF continues oversized definitions and forms without losing source text',
     assert.ok(pages.every(page => page.scrollHeight <= page.clientHeight));
     assert.equal(renderedSource(pages, 'definition-0'), definition);
     assert.equal(renderedSource(pages, 'forms'), forms);
-    assert.ok(pages.slice(1).every(page => page.children.some(node => node.markup && node.markup.includes('long（续）'))));
+    const cards = pages.flatMap(page => page.children.filter(node => node.classList.contains('study-card')));
+    assert.ok(cards.slice(1).every(card => card.markup.includes('long（续）')));
   } finally {
     host.remove();
   }
@@ -191,6 +192,45 @@ test('PDF continues one oversized bilingual example and retains all three exampl
     assert.equal(renderedSource(pages, 'example-1-cn'), '第二句。');
     assert.equal(renderedSource(pages, 'example-2-en'), 'Third sentence.');
     assert.equal(renderedSource(pages, 'example-2-cn'), '第三句。');
+  } finally {
+    host.remove();
+  }
+});
+
+test('the first PDF fragment keeps its checkbox when moved before source text fits', () => {
+  const document = fakeDocument(markup => 180 + markup.replace(/<[^>]*>/g, '').length * 8);
+  const definition = 'D'.repeat(300);
+  const words = StudyExport.normalizeFavorites([{ word: 'relocated', definitions: [definition] }]);
+  const { host, pages } = StudyExport.buildPdfPages(words, document);
+  try {
+    const cards = pages.flatMap(page => page.children.filter(node => node.classList.contains('study-card')));
+    assert.equal(pages[0].children.filter(node => node.classList.contains('study-card')).length, 0);
+    assert.ok(cards.length > 1);
+    assert.match(cards[0].markup, /□ 已掌握/);
+    assert.doesNotMatch(cards[0].markup, /relocated（续）/);
+    assert.ok(cards.slice(1).every(card => card.markup.includes('relocated（续）')));
+    assert.equal((cards.map(card => card.markup).join('').match(/□ 已掌握/g) || []).length, 1);
+    assert.equal(renderedSource(pages, 'definition-0'), definition);
+  } finally {
+    host.remove();
+  }
+});
+
+test('ordinary PDF cards wrap unbroken definitions, forms, and both example languages', () => {
+  const document = fakeDocument([400]);
+  const words = StudyExport.normalizeFavorites([{
+    word: 'ordinary', definitions: ['D'.repeat(40)], forms: 'F'.repeat(40),
+    examples: [{ en: 'E'.repeat(40), cn: '中'.repeat(40) }]
+  }]);
+  const { host, pages } = StudyExport.buildPdfPages(words, document);
+  try {
+    const style = host.children.find(node => node.tagName === 'style').textContent;
+    const card = pages[0].children.find(node => node.classList.contains('study-card'));
+    assert.ok(card && !card.classList.contains('study-card--splittable'));
+    assert.match(card.markup, /<ul><li>D{40}<\/li><\/ul>/);
+    assert.match(card.markup, /<p>F{40}<\/p>/);
+    assert.match(card.markup, /<li><span>E{40}<\/span><span class="translation">中{40}<\/span><\/li>/);
+    assert.match(style, /\.study-pdf-page \.field p,\s*\.study-pdf-page \.field li,\s*\.study-pdf-page \.translation\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*word-break:\s*break-word/s);
   } finally {
     host.remove();
   }

@@ -218,6 +218,8 @@
         .study-pdf-page .field strong, .study-pdf-page .notes strong { display: block; font-size: 14px; }
         .study-pdf-page .field li { padding-left: 2px; }
         .study-pdf-page .translation { display: block; }
+        .study-pdf-page .field p, .study-pdf-page .field li, .study-pdf-page .translation {
+          overflow-wrap: anywhere; word-break: break-word; }
         .study-pdf-page .study-pdf-value { white-space: pre-wrap; overflow-wrap: anywhere; }
         .study-pdf-page .notes { margin-top: 14px; }
         .study-pdf-page .note-line { border-bottom: 1px solid #999; height: 25px; }
@@ -289,11 +291,11 @@
           page.appendChild(active);
         };
         const nextPage = () => {
+          continuation = continuation || currentParts.length > 0;
           if (currentParts.length === 0) active.remove();
           page = addPage();
-          continuation = true;
           currentParts = [];
-          active = fragment([], true, false);
+          active = fragment([], continuation, false);
           page.appendChild(active);
         };
 
