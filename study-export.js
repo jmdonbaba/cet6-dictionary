@@ -4,5 +4,46 @@
   else root.StudyExport = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
-  return {};
+
+  const MAX_EXAMPLES = 3;
+  const clean = value => value == null ? '' : String(value).trim();
+
+  function normalizeDefinitions(favorite) {
+    const values = Array.isArray(favorite.definitions)
+      ? favorite.definitions.map(clean).filter(Boolean)
+      : [];
+    if (values.length) return values;
+    const meaning = clean(favorite.meaning);
+    return meaning ? [meaning] : [];
+  }
+
+  function normalizeExamples(favorite) {
+    const source = Array.isArray(favorite.examples)
+      ? favorite.examples
+      : (Array.isArray(favorite.sentences) ? favorite.sentences : []);
+    return source.slice(0, MAX_EXAMPLES).map(example => {
+      if (typeof example === 'string') return { en: clean(example), cn: '' };
+      return { en: clean(example && example.en), cn: clean(example && example.cn) };
+    }).filter(example => example.en || example.cn);
+  }
+
+  function normalizeFavorites(favorites) {
+    return (Array.isArray(favorites) ? favorites : []).map(favorite => ({
+      word: clean(favorite && favorite.word),
+      phonetic: clean(favorite && favorite.phonetic),
+      pos: clean(favorite && favorite.pos),
+      definitions: normalizeDefinitions(favorite || {}),
+      forms: clean(favorite && favorite.forms),
+      examples: normalizeExamples(favorite || {})
+    }));
+  }
+
+  function createFilename(extension, date) {
+    const d = date instanceof Date ? date : new Date();
+    const pad = value => String(value).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    return `cet6-vocabulary-${stamp}.${String(extension).replace(/^\./, '')}`;
+  }
+
+  return { MAX_EXAMPLES, normalizeFavorites, createFilename };
 });
