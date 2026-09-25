@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
+const vm = require('node:vm');
 
 const source = fs.readFileSync('index.html', 'utf8');
 
@@ -40,4 +41,24 @@ test('refreshes controls after scrolling, resizing, modal changes, and content c
   assert.match(source, /wrapper\.after\(newModule\);\s*schedulePageJumpUpdate\(\);/);
   assert.match(source, /wrapper\.remove\(\);\s*schedulePageJumpUpdate\(\);/);
   assert.match(source, /requestAnimationFrame\(updatePageJumpControls\)/);
+});
+
+test('refreshes page controls when the optional API key guide toggles', () => {
+  const hook = source.match(/const \$keyGuide = document\.querySelector\('\.key-guide'\);\s*if \(\$keyGuide\) \$keyGuide\.addEventListener\('toggle', schedulePageJumpUpdate\);/);
+  assert.ok(hook, 'the guide must schedule a page update on toggle');
+
+  let listener;
+  let updates = 0;
+  const document = { querySelector: () => ({ addEventListener: (event, callback) => {
+    assert.equal(event, 'toggle');
+    listener = callback;
+  } }) };
+  const schedulePageJumpUpdate = () => { updates += 1; };
+  vm.runInNewContext(hook[0], { document, schedulePageJumpUpdate });
+  listener();
+  assert.equal(updates, 1);
+
+  assert.doesNotThrow(() => vm.runInNewContext(hook[0], {
+    document: { querySelector: () => null }, schedulePageJumpUpdate
+  }));
 });

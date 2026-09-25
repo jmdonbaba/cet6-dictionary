@@ -746,6 +746,8 @@ $btnJumpTop.addEventListener('click', () => jumpToPageEdge('top'));
 $btnJumpBottom.addEventListener('click', () => jumpToPageEdge('bottom'));
 window.addEventListener('scroll', schedulePageJumpUpdate, { passive: true });
 window.addEventListener('resize', schedulePageJumpUpdate);
+const $keyGuide = document.querySelector('.key-guide');
+if ($keyGuide) $keyGuide.addEventListener('toggle', schedulePageJumpUpdate);
 const pageJumpObserver = new MutationObserver(schedulePageJumpUpdate);
 [$wsModules, document.querySelector('.footer'), $modalOverlay].forEach(element => {
   pageJumpObserver.observe(element, { childList: true, subtree: true, attributes: true });
