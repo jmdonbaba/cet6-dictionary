@@ -67,14 +67,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--border);
+  border: none;
   border-radius: 50%;
   background: #fff;
   color: var(--primary);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.14);
   cursor: pointer;
   padding: 0;
-  transition: transform 0.32s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.32s cubic-bezier(.34, 1.56, .64, 1), box-shadow 0.2s ease, background-color 0.2s ease;
 }
 .page-jump-icon {
   width: 21px;
@@ -85,7 +85,7 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.page-jump-btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.page-jump-btn-primary { background: var(--primary); color: #fff; }
 .page-jump-btn:disabled { opacity: 0.35; cursor: default; box-shadow: none; }
 .page-jump-btn:not(:disabled):active {
   transform: scale(.9);
@@ -95,11 +95,9 @@ body {
   .page-jump-btn:not(:disabled):hover {
     box-shadow: var(--shadow-hover);
     background: var(--primary-light);
-    border-color: var(--primary);
   }
   .page-jump-btn-primary:not(:disabled):hover {
     background: var(--primary-hover);
-    border-color: var(--primary-hover);
   }
 }
 @media (max-width: 1000px) {
