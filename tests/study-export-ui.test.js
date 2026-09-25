@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
+const vm = require('node:vm');
 const StudyExport = require('../study-export.js');
 
 const source = fs.readFileSync('index.html', 'utf8');
@@ -15,6 +16,79 @@ test('loads pinned study-export dependencies from local files', () => {
 test('does not load or advertise the cancelled Word export', () => {
   assert.doesNotMatch(source, /docx-9\.7\.1|data-study-format="word"|>Word</i);
   assert.equal(fs.existsSync('vendor/docx-9.7.1.iife.js'), false);
+});
+
+test('favorites modal offers exactly PDF, HTML, and Markdown in a compact menu', () => {
+  assert.match(source, /id="btnStudyExport"[^>]*aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*>导出<span aria-hidden="true">⌄<\/span><\/button>/);
+  assert.match(source, /id="studyExportMenu"[^>]*role="menu"[^>]*hidden/);
+  const items = [...source.matchAll(/data-study-format="([^"]+)"[^>]*>([^<]+)<\/button>/g)];
+  assert.deepEqual(items.map(([, format, label]) => [format, label]), [
+    ['pdf', 'PDF'], ['html', 'HTML'], ['markdown', 'Markdown']
+  ]);
+  assert.doesNotMatch(source, />导出全部/);
+});
+
+test('study export snapshots all favorites, independent of search, without API keys', () => {
+  assert.match(source, /StudyExport\.normalizeFavorites\(getVFavs\(\)\)/);
+  const workflow = source.match(/async function exportStudyDocument\(format\) \{[\s\S]*?\n\}/);
+  assert.ok(workflow, 'study export workflow exists');
+  assert.doesNotMatch(workflow[0], /getApiKey|favSearch|searchTerm/);
+  assert.match(workflow[0], /StudyExport\.downloadBlob\(blob, StudyExport\.createFilename\(extension\), document\)/);
+});
+
+test('empty favorites disable study export and busy state recovers after errors', () => {
+  assert.match(source, /\$btnStudyExport\.disabled\s*=\s*!favs\.length/);
+  assert.match(source, /function setStudyExportBusy\(isBusy\)/);
+  assert.match(source, /setStudyExportBusy\(true\)/);
+  assert.match(source, /finally\s*\{\s*setStudyExportBusy\(false\)/);
+  assert.match(source, /aria-busy/);
+  assert.match(source, /正在生成…/);
+});
+
+test('study export menu closes on outside click and Escape, returning focus to its trigger', () => {
+  assert.match(source, /function closeStudyExportMenu\([^)]*\)/);
+  assert.match(source, /\$btnStudyExport\.focus\(\)/);
+  assert.match(source, /e\.key === 'Escape'[\s\S]*?closeStudyExportMenu\(true\)/);
+  assert.match(source, /!\$studyExportWrap\.contains\(e\.target\)[\s\S]*?closeStudyExportMenu\(\)/);
+});
+
+test('favorites refresh cannot re-enable export while a PDF is pending, and errors recover', async () => {
+  const script = source.slice(source.indexOf('function renderVFavs()'), source.indexOf('// ==================== Word Search Modules ===================='));
+  const favorites = [{ id: '1', word: 'alpha', meaning: 'first' }, { id: '2', word: 'beta', meaning: 'second' }];
+  const messages = [];
+  const button = { disabled: false, innerHTML: '', setAttribute() {}, focus() {} };
+  const menu = { hidden: false };
+  let rejectPdf;
+  let pdfCalls = 0;
+  let snapshot;
+  const context = vm.createContext({
+    $vocabFavCnt: { textContent: '' }, $modalVocabCount: { textContent: '' },
+    $favSearch: { style: {} }, $favListContainer: { innerHTML: '' },
+    $btnStudyExport: button, $studyExportMenu: menu,
+    getVFavs: () => favorites, hideSearchDropdown() {}, esc: value => value,
+    escAttr: value => value, renderForms: () => '', toast: message => messages.push(message),
+    document: { getElementById: () => null }, window: { html2canvas() {}, jspdf: { jsPDF: class {} } },
+    StudyExport: {
+      normalizeFavorites: favs => { snapshot = [...favs]; return [...favs]; },
+      createPdfBlob: () => { pdfCalls++; return new Promise((_, reject) => { rejectPdf = reject; }); },
+      downloadBlob() { throw new Error('unexpected download'); }
+    },
+    console: { error() {} }, Blob
+  });
+  vm.runInContext(script, context);
+  const pending = vm.runInContext("exportStudyDocument('pdf')", context);
+  assert.deepEqual(snapshot, favorites);
+  assert.equal(button.disabled, true);
+  assert.match(button.innerHTML, /正在生成…/);
+  vm.runInContext('renderVFavs()', context);
+  assert.equal(button.disabled, true);
+  await vm.runInContext("exportStudyDocument('pdf')", context);
+  assert.equal(pdfCalls, 1);
+  rejectPdf(new Error('canvas failure'));
+  await pending;
+  assert.equal(button.disabled, false);
+  assert.match(button.innerHTML, /导出/);
+  assert.equal(messages.at(-1), 'canvas failure');
 });
 
 test('PDF generation is high-resolution and never opens the print dialog', () => {

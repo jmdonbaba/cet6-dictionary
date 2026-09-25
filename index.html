@@ -265,9 +265,38 @@ body {
 }
 .modal-card.active { display: flex; }
 .modal-header {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
   padding: 18px 20px; border-bottom: 1px solid var(--border);
   font-size: 17px; font-weight: 700;
+}
+.modal-header-title { min-width: 0; overflow-wrap: anywhere; }
+.modal-header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.study-export-wrap { position: relative; }
+.btn-study-export {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 36px;
+  padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--card-bg); color: var(--text); font: inherit; font-size: 13px;
+  cursor: pointer; white-space: nowrap;
+}
+.btn-study-export:disabled { opacity: .5; cursor: not-allowed; }
+.study-export-menu {
+  position: absolute; top: calc(100% + 5px); right: 0; z-index: 30;
+  min-width: 136px; max-width: min(220px, calc(90vw - 40px));
+  padding: 4px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card-bg); box-shadow: 0 8px 24px rgba(0,0,0,.14);
+}
+.study-export-menu[hidden] { display: none; }
+.study-export-menu button {
+  display: block; width: 100%; min-height: 44px; padding: 8px 12px;
+  border: 0; border-radius: 5px; background: transparent; color: var(--text);
+  font-size: 14px; text-align: left; cursor: pointer;
+}
+.study-export-menu button:focus-visible { background: var(--primary-light); }
+@media (hover: hover) {
+  .study-export-menu button:hover { background: var(--primary-light); }
+}
+@media (max-width: 500px) {
+  #modalVocabFav .modal-header { flex-wrap: wrap; }
 }
 .modal-close {
   background: none; border: none; font-size: 24px;
@@ -575,8 +604,18 @@ body {
 <div class="modal-overlay" id="modalOverlay" style="display:none">
   <div class="modal-card" id="modalVocabFav">
     <div class="modal-header">
-      <span>词汇收藏 (<span id="modalVocabCount">0</span>)</span>
-      <button class="modal-close" data-close="modalVocabFav">&times;</button>
+      <span class="modal-header-title">词汇收藏 (<span id="modalVocabCount">0</span>)</span>
+      <div class="modal-header-actions">
+        <div class="study-export-wrap" id="studyExportWrap">
+          <button class="btn-study-export" id="btnStudyExport" type="button" aria-haspopup="menu" aria-expanded="false">导出<span aria-hidden="true">⌄</span></button>
+          <div class="study-export-menu" id="studyExportMenu" role="menu" hidden>
+            <button type="button" role="menuitem" data-study-format="pdf">PDF</button>
+            <button type="button" role="menuitem" data-study-format="html">HTML</button>
+            <button type="button" role="menuitem" data-study-format="markdown">Markdown</button>
+          </div>
+        </div>
+        <button class="modal-close" data-close="modalVocabFav" aria-label="关闭词汇收藏">&times;</button>
+      </div>
     </div>
     <div class="modal-body" id="modalVocabBody">
       <div class="fav-search" id="favSearch" style="display:none">
@@ -605,6 +644,7 @@ body {
   </div>
 </div>
 
+<div id="studyPdfRenderHost" aria-hidden="true" hidden></div>
 <script src="vendor/html2canvas-1.4.1.min.js"></script>
 <script src="vendor/jspdf-4.2.1.umd.min.js"></script>
 <script src="study-export.js"></script>
@@ -632,6 +672,9 @@ const $modalVocabBody = document.getElementById('modalVocabBody');
 const $favListContainer = document.getElementById('favListContainer');
 const $favSearch = document.getElementById('favSearch');
 const $modalVocabCount = document.getElementById('modalVocabCount');
+const $btnStudyExport = document.getElementById('btnStudyExport');
+const $studyExportWrap = document.getElementById('studyExportWrap');
+const $studyExportMenu = document.getElementById('studyExportMenu');
 const $keyArea = document.getElementById('keyArea');
 const $apiKeyInput = document.getElementById('apiKeyInput');
 const $btnSaveKey = document.getElementById('btnSaveKey');
@@ -1097,6 +1140,9 @@ function updateAllVocabButtons() {
 
 function renderVFavs() {
   const favs = getVFavs();
+  $btnStudyExport.disabled = !favs.length;
+  if (studyExportBusy) $btnStudyExport.disabled = true;
+  if (!favs.length) closeStudyExportMenu();
   $vocabFavCnt.textContent = `(${favs.length})`;
   $modalVocabCount.textContent = favs.length;
   // Show/hide search box
@@ -1135,6 +1181,56 @@ function renderVFavs() {
   var si = document.getElementById('favSearchInput');
   if (si) si.value = '';
   hideSearchDropdown();
+}
+
+// ==================== Study Export ====================
+let studyExportBusy = false;
+
+function closeStudyExportMenu(returnFocus = false) {
+  const wasOpen = !$studyExportMenu.hidden;
+  $studyExportMenu.hidden = true;
+  $btnStudyExport.setAttribute('aria-expanded', 'false');
+  if (returnFocus && wasOpen) $btnStudyExport.focus();
+}
+
+function setStudyExportBusy(isBusy) {
+  studyExportBusy = isBusy;
+  $btnStudyExport.disabled = isBusy || !getVFavs().length;
+  $btnStudyExport.setAttribute('aria-busy', String(isBusy));
+  $btnStudyExport.innerHTML = isBusy ? '正在生成…' : '导出<span aria-hidden="true">⌄</span>';
+}
+
+async function exportStudyDocument(format) {
+  if (studyExportBusy || !['pdf', 'html', 'markdown'].includes(format)) return;
+  const words = StudyExport.normalizeFavorites(getVFavs());
+  if (!words.length) { toast('收藏夹为空，暂无可导出的单词'); return; }
+  closeStudyExportMenu();
+  setStudyExportBusy(true);
+  try {
+    let blob;
+    let extension;
+    if (format === 'pdf') {
+      blob = await StudyExport.createPdfBlob(words, {
+        document,
+        html2canvas: window.html2canvas,
+        jsPDF: window.jspdf && window.jspdf.jsPDF
+      });
+      extension = 'pdf';
+    } else if (format === 'html') {
+      blob = new Blob([StudyExport.renderHtml(words, { generatedAt: new Date() })], { type: 'text/html;charset=utf-8' });
+      extension = 'html';
+    } else {
+      blob = new Blob([StudyExport.renderMarkdown(words, { generatedAt: new Date() })], { type: 'text/markdown;charset=utf-8' });
+      extension = 'md';
+    }
+    StudyExport.downloadBlob(blob, StudyExport.createFilename(extension), document);
+    toast('背诵讲义已下载');
+  } catch (error) {
+    console.error(error);
+    toast(error && error.message ? error.message : '导出失败，请重试');
+  } finally {
+    setStudyExportBusy(false);
+  }
 }
 
 // ==================== Word Search Modules ====================
@@ -1202,6 +1298,7 @@ function openModal(modal, skipFocus) {
   }
 }
 function closeModal() {
+  closeStudyExportMenu();
   $modalOverlay.style.display = 'none';
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
 
@@ -1221,8 +1318,50 @@ $modalOverlay.addEventListener('click', e => {
   if (e.target === $modalOverlay && !_modalMousedownInside) closeModal();
 });
 document.querySelectorAll('.modal-close').forEach(btn => btn.addEventListener('click', closeModal));
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && $modalOverlay.style.display === 'flex') closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$studyExportMenu.hidden) {
+    e.preventDefault();
+    closeStudyExportMenu(true);
+    return;
+  }
+  if (e.key === 'Escape' && $modalOverlay.style.display === 'flex') closeModal();
+});
 document.getElementById('btnOpenVocabFav').addEventListener('click', () => openModal($modalVocabFav));
+
+$btnStudyExport.addEventListener('click', () => {
+  if ($btnStudyExport.disabled) return;
+  const opening = $studyExportMenu.hidden;
+  closeStudyExportMenu();
+  if (opening) {
+    $studyExportMenu.hidden = false;
+    $btnStudyExport.setAttribute('aria-expanded', 'true');
+    $studyExportMenu.querySelector('[role="menuitem"]').focus();
+  }
+});
+$btnStudyExport.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' && !$btnStudyExport.disabled) {
+    e.preventDefault();
+    if ($studyExportMenu.hidden) $btnStudyExport.click();
+    else $studyExportMenu.querySelector('[role="menuitem"]').focus();
+  }
+});
+$studyExportMenu.addEventListener('click', e => {
+  const item = e.target.closest('[data-study-format]');
+  if (item) exportStudyDocument(item.dataset.studyFormat);
+});
+$studyExportMenu.addEventListener('keydown', e => {
+  const items = [...$studyExportMenu.querySelectorAll('[role="menuitem"]')];
+  const index = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    items[(index + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length].focus();
+  } else if (e.key === 'Tab') {
+    closeStudyExportMenu();
+  }
+});
+document.addEventListener('click', e => {
+  if (!$studyExportWrap.contains(e.target)) closeStudyExportMenu();
+});
 
 // Close all open menus
 function closeAllMenus() {
