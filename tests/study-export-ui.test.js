@@ -31,6 +31,13 @@ test('favorites modal offers exactly HTML and Markdown with a font-independent c
   assert.doesNotMatch(source, />导出全部/);
 });
 
+test('adds a subtle export-button shadow only on hover-capable devices', () => {
+  assert.match(source, /@media \(hover: hover\) \{[\s\S]*?\.btn-study-export:hover\s*\{[^}]*box-shadow:\s*0 3px 10px rgba\(15, 23, 42, \.14\);[^}]*\}/);
+  const hoverRule = source.match(/\.btn-study-export:hover\s*\{([^}]*)\}/);
+  assert.ok(hoverRule);
+  assert.doesNotMatch(hoverRule[1], /transform|background|color|padding|width|height/);
+});
+
 test('study export snapshots all favorites, independent of search, without API keys', () => {
   assert.match(source, /StudyExport\.normalizeFavorites\(getVFavs\(\)\)/);
   const workflow = source.match(/function exportStudyDocument\(format\) \{[\s\S]*?\n\}/);
