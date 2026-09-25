@@ -2,20 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a compact favorites-menu export that downloads every saved word as polished PDF, editable Word, standalone HTML, or Markdown study material.
+**Goal:** Add a compact favorites-menu export that downloads every saved word as polished PDF, standalone HTML, or Markdown study material.
 
-**Architecture:** Keep the existing application build-free and add one UMD-style `study-export.js` module that is usable both from the browser and Node tests. Pure normalization and text renderers live in that module; browser-only PDF and DOCX adapters accept their dependencies explicitly. `index.html` owns the menu state, busy feedback, download trigger, and connection to `getVFavs()`.
+**Architecture:** Keep the existing application build-free and add one UMD-style `study-export.js` module that is usable both from the browser and Node tests. Pure normalization and text renderers live in that module; the browser-only PDF adapter accepts its dependencies explicitly. `index.html` owns the menu state, busy feedback, download trigger, and connection to `getVFavs()`.
 
-**Tech Stack:** Vanilla HTML/CSS/JavaScript, Node.js built-in test runner, html2canvas 1.4.1, jsPDF 4.2.1 UMD, docx 9.7.1 IIFE.
+**Tech Stack:** Vanilla HTML/CSS/JavaScript, Node.js built-in test runner, html2canvas 1.4.1, jsPDF 4.2.1 UMD.
 
 ## Global Constraints
 
 - The export range is always all favorites; search never changes the export set.
-- The visible button copy is exactly `导出`; the menu contains `PDF`, `Word`, `HTML`, and `Markdown` without an “export all” heading.
+- The visible button copy is exactly `导出`; the menu contains `PDF`, `HTML`, and `Markdown` without an “export all” heading.
 - Each word contains its stored word, phonetic, part of speech, definitions/meaning, forms, at most 3 stored bilingual examples, an unchecked “已掌握” box, and a review-notes area.
 - Never synthesize missing examples or translations.
 - PDF downloads directly and must not call `window.print()`.
-- PDF prioritizes visual quality and may rasterize high-resolution A4 pages; Word, HTML, and Markdown remain editable text.
+- PDF prioritizes visual quality and may rasterize high-resolution A4 pages; HTML and Markdown remain editable text.
 - Study exports never include, read, or mutate the DeepSeek API key.
 - Preserve the existing JSON backup/import behavior unchanged.
 - All third-party browser assets are pinned and committed locally; runtime CDN access is forbidden.
@@ -25,10 +25,9 @@
 
 ## File Structure
 
-- Create `study-export.js`: normalization, escaping, filename generation, HTML/Markdown renderers, DOCX generator, printable-page builder, and PDF generator.
+- Create `study-export.js`: normalization, escaping, filename generation, HTML/Markdown renderers, printable-page builder, and PDF generator.
 - Create `vendor/html2canvas-1.4.1.min.js`: pinned browser bundle.
 - Create `vendor/jspdf-4.2.1.umd.min.js`: pinned browser bundle.
-- Create `vendor/docx-9.7.1.iife.js`: pinned browser bundle.
 - Create `vendor/THIRD_PARTY_NOTICES.md`: source, version, and license notes for vendored dependencies.
 - Modify `index.html`: load local dependencies, add export menu markup/styles, wire the export workflow, and add the hidden PDF rendering host.
 - Create `tests/study-export-model.test.js`: pure normalization, ordering, limits, and filename tests.
@@ -379,27 +378,27 @@ git commit -m "feat: render editable study documents"
 
 ---
 
-### Task 4: Generate a Real Editable DOCX
+### Task 4: Remove the Cancelled Word/DOCX Dependency
 
 **Files:**
-- Modify: `study-export.js`
+- Delete: `vendor/docx-9.7.1.iife.js`
+- Delete: `vendor/licenses/docx-9.7.1-MIT.txt`
+- Modify: `vendor/THIRD_PARTY_NOTICES.md`
+- Modify: `index.html`
 - Modify: `tests/study-export-ui.test.js`
 
 **Interfaces:**
-- Consumes: normalized `Array<StudyWord>` and the `window.docx` IIFE global.
-- Produces: `createDocxBlob(words, docxLib) -> Promise<Blob>`.
+- Consumes: the completed Task 1 dependency setup and the user's revised three-format scope.
+- Produces: a dependency surface containing only `window.html2canvas`, `window.jspdf.jsPDF`, and `window.StudyExport`.
 
-- [ ] **Step 1: Add a failing DOCX contract test**
+- [ ] **Step 1: Change the dependency test to reject DOCX assets**
 
-Append to `tests/study-export-ui.test.js`:
+Replace the DOCX expectation in `tests/study-export-ui.test.js` and add absence checks:
 
 ```js
-test('exposes a real DOCX generator rather than HTML renamed as docx', () => {
-  const moduleSource = fs.readFileSync('study-export.js', 'utf8');
-  assert.match(moduleSource, /async function createDocxBlob\(words, docxLib\)/);
-  assert.match(moduleSource, /new lib\.Document\(/);
-  assert.match(moduleSource, /lib\.Packer\.toBlob\(/);
-  assert.doesNotMatch(moduleSource, /application\/msword/);
+test('does not load or advertise the cancelled Word export', () => {
+  assert.doesNotMatch(source, /docx-9\.7\.1|data-study-format="word"|>Word</i);
+  assert.equal(fs.existsSync('vendor/docx-9.7.1.iife.js'), false);
 });
 ```
 
@@ -407,53 +406,23 @@ test('exposes a real DOCX generator rather than HTML renamed as docx', () => {
 
 Run: `node --test tests/study-export-ui.test.js`
 
-Expected: FAIL because `createDocxBlob` is absent.
+Expected: FAIL because the DOCX script and vendor file still exist.
 
-- [ ] **Step 3: Implement DOCX paragraphs and page-safe cards**
+- [ ] **Step 3: Remove the cancelled dependency completely**
 
-Add `createDocxBlob(words, docxLib)` to `study-export.js`. Destructure `Document`, `Packer`, `Paragraph`, `TextRun`, `BorderStyle`, `HeadingLevel`, `AlignmentType`, and `PageBreak` from the injected library. Build a title, metadata line, and one block per word. Start each word with a paragraph using `keepNext: true`; apply `keepNext` through its definitions/forms/first two examples; use indigo word headings, gray metadata, numbered examples, `□ 已掌握`, and four underscore note lines. Configure A4 portrait dimensions and margins in the document section. Return only `Packer.toBlob(document)` and export the function.
-
-The function must begin with this validation so a missing local bundle produces a useful error:
-
-```js
-async function createDocxBlob(words, docxLib) {
-  const lib = docxLib;
-  if (!lib || !lib.Document || !lib.Packer) {
-    throw new Error('Word 导出组件未加载');
-  }
-```
-
-Close the function after constructing the document with:
-
-```js
-  const documentFile = new lib.Document({
-    creator: 'CET-6 查词助手',
-    title: 'CET-6 收藏词汇背诵讲义',
-    sections: [{
-      properties: {
-        page: {
-          size: { width: 11906, height: 16838 },
-          margin: { top: 900, right: 850, bottom: 900, left: 850 }
-        }
-      },
-      children
-    }]
-  });
-  return lib.Packer.toBlob(documentFile);
-}
-```
+Delete the DOCX IIFE and its copied license, remove the DOCX `<script>` tag from `index.html`, and remove the DOCX entry from `vendor/THIRD_PARTY_NOTICES.md`. Leave html2canvas and jsPDF pinned exactly as they are. Do not add a Word menu item or Word generator.
 
 - [ ] **Step 4: Run all export tests**
 
-Run: `node --test tests/study-export-model.test.js tests/study-export-formats.test.js tests/study-export-ui.test.js`
+Run: `node --test tests/study-export-ui.test.js`
 
 Expected: all tests PASS.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
-git add study-export.js tests/study-export-ui.test.js
-git commit -m "feat: generate editable vocabulary docx"
+git add -A vendor index.html tests/study-export-ui.test.js
+git commit -m "chore: remove cancelled Word export dependency"
 ```
 
 ---
@@ -543,7 +512,7 @@ git commit -m "feat: generate printable vocabulary pdf"
 - Modify: `tests/study-export-ui.test.js`
 
 **Interfaces:**
-- Consumes: `getVFavs()`, `toast(message)`, `StudyExport.*`, `window.html2canvas`, `window.jspdf.jsPDF`, and `window.docx`.
+- Consumes: `getVFavs()`, `toast(message)`, `StudyExport.*`, `window.html2canvas`, and `window.jspdf.jsPDF`.
 - Produces: `setStudyExportBusy(isBusy)`, `closeStudyExportMenu()`, `exportStudyDocument(format)`, and accessible DOM IDs `btnStudyExport`, `studyExportMenu`.
 
 - [ ] **Step 1: Add failing UI tests**
@@ -551,10 +520,10 @@ git commit -m "feat: generate printable vocabulary pdf"
 Append tests asserting exact markup and behavior contracts:
 
 ```js
-test('favorites modal offers a compact four-format export menu', () => {
+test('favorites modal offers a compact three-format export menu', () => {
   assert.match(source, /id="btnStudyExport"[^>]*>导出<span aria-hidden="true">⌄<\/span><\/button>/);
   assert.match(source, /id="studyExportMenu"/);
-  for (const format of ['PDF', 'Word', 'HTML', 'Markdown']) {
+  for (const format of ['PDF', 'HTML', 'Markdown']) {
     assert.match(source, new RegExp(`data-study-format="${format.toLowerCase()}"[^>]*>${format}<`));
   }
   assert.doesNotMatch(source, />导出全部/);
@@ -588,7 +557,6 @@ Inside `.modal-header`, wrap the existing title and actions so the title can shr
     <button class="btn-study-export" id="btnStudyExport" type="button" aria-haspopup="menu" aria-expanded="false">导出<span aria-hidden="true">⌄</span></button>
     <div class="study-export-menu" id="studyExportMenu" role="menu" hidden>
       <button type="button" role="menuitem" data-study-format="pdf">PDF</button>
-      <button type="button" role="menuitem" data-study-format="word">Word</button>
       <button type="button" role="menuitem" data-study-format="html">HTML</button>
       <button type="button" role="menuitem" data-study-format="markdown">Markdown</button>
     </div>
@@ -619,9 +587,6 @@ async function exportStudyDocument(format) {
         jsPDF: window.jspdf && window.jspdf.jsPDF
       });
       extension = 'pdf';
-    } else if (format === 'word') {
-      blob = await StudyExport.createDocxBlob(words, window.docx);
-      extension = 'docx';
     } else if (format === 'html') {
       blob = new Blob([StudyExport.renderHtml(words, { generatedAt: new Date() })], { type: 'text/html;charset=utf-8' });
       extension = 'html';
@@ -664,7 +629,7 @@ git commit -m "feat: add favorites study export menu"
 
 **Interfaces:**
 - Consumes: completed export workflow and a local browser.
-- Produces: four downloadable artifacts verified with representative favorites data.
+- Produces: three downloadable artifacts verified with representative favorites data.
 
 - [ ] **Step 1: Run the full automated suite**
 
@@ -680,15 +645,15 @@ In browser DevTools, set `cet6_vfav_v1` to a JSON array containing: a long word,
 
 - [ ] **Step 3: Verify interaction and responsive layout**
 
-At desktop width and 390px width, verify the modal header does not overflow, the button reads `导出`, the menu lists exactly PDF/Word/HTML/Markdown, click-outside and Escape close it, and empty favorites disable it.
+At desktop width and 390px width, verify the modal header does not overflow, the button reads `导出`, the menu lists exactly PDF/HTML/Markdown, click-outside and Escape close it, and empty favorites disable it.
 
-- [ ] **Step 4: Download and inspect all four artifacts**
+- [ ] **Step 4: Download and inspect all three artifacts**
 
-Verify PDF downloads without a print dialog, is sharp at 200% zoom, uses A4 pages, contains three bilingual examples, and avoids splitting normal cards. Open DOCX in Word and edit text. Open HTML without the app and print-preview its A4 styling. Open Markdown in a renderer and verify escaped punctuation and the unchecked mastery box.
+Verify PDF downloads without a print dialog, is sharp at 200% zoom, uses A4 pages, contains three bilingual examples, and avoids splitting normal cards. Open HTML without the app and print-preview its A4 styling. Open Markdown in a renderer and verify escaped punctuation and the unchecked mastery box.
 
 - [ ] **Step 5: Verify privacy and regression boundaries**
 
-Search the four generated files for the saved API key; it must not appear. Then run the existing JSON “导出数据” and “导入数据” flows to confirm their filename, payload, and behavior remain unchanged.
+Search the three generated files for the saved API key; it must not appear. Then run the existing JSON “导出数据” and “导入数据” flows to confirm their filename, payload, and behavior remain unchanged.
 
 - [ ] **Step 6: Commit any verification fixes**
 
