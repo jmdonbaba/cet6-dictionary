@@ -104,6 +104,26 @@
     </section>`;
   }
 
+  function renderPdfFragment(word, index, parts, continuation, includeNotes) {
+    const detail = [word.phonetic, word.pos].filter(clean).map(value => `<span>${escapeHtml(value)}</span>`).join(' ');
+    const escapePart = value => String(value).replace(/[&<>"']/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
+    const fields = parts.map(part => {
+      const value = `<span class="study-pdf-value" data-source="${part.source}">${escapePart(part.text)}</span>`;
+      if (part.kind === 'definition') return `<div class="field"><strong>释义 ${part.index + 1}</strong><ul><li>${value}</li></ul></div>`;
+      if (part.kind === 'forms') return `<div class="field"><strong>词形</strong><p>${value}</p></div>`;
+      if (part.kind === 'example-en') return `<div class="field"><strong>例句 ${part.index + 1}</strong><p>${value}</p></div>`;
+      return `<div class="field"><strong>例句 ${part.index + 1} 译文</strong><p class="translation">${value}</p></div>`;
+    }).join('');
+    return `<section class="study-card study-card--splittable">
+      <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
+      ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
+      ${fields}
+      ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
+    </section>`;
+  }
+
   function renderHtml(words, options) {
     const items = Array.isArray(words) ? words : [];
     return `<!doctype html>
@@ -198,6 +218,7 @@
         .study-pdf-page .field strong, .study-pdf-page .notes strong { display: block; font-size: 14px; }
         .study-pdf-page .field li { padding-left: 2px; }
         .study-pdf-page .translation { display: block; }
+        .study-pdf-page .study-pdf-value { white-space: pre-wrap; overflow-wrap: anywhere; }
         .study-pdf-page .notes { margin-top: 14px; }
         .study-pdf-page .note-line { border-bottom: 1px solid #999; height: 25px; }
         .study-pdf-page .study-card--splittable { break-inside: auto; page-break-inside: auto; }
@@ -225,11 +246,22 @@
       };
 
       const fitOversizedCard = (word, index) => {
-        const examples = Array.isArray(word.examples) ? word.examples.slice(0, MAX_EXAMPLES) : [];
-        const fragment = (items, continuation, includeNotes) =>
-          makeCard({ ...word, examples: items }, index, { continuation, includeNotes, splittable: true });
+        const parts = [];
+        (Array.isArray(word.definitions) ? word.definitions : []).forEach((value, definitionIndex) => {
+          if (clean(value)) parts.push({ kind: 'definition', index: definitionIndex, source: `definition-${definitionIndex}`, text: clean(value) });
+        });
+        if (clean(word.forms)) parts.push({ kind: 'forms', source: 'forms', text: clean(word.forms) });
+        (Array.isArray(word.examples) ? word.examples.slice(0, MAX_EXAMPLES) : []).forEach((example, exampleIndex) => {
+          if (clean(example && example.en)) parts.push({ kind: 'example-en', index: exampleIndex, source: `example-${exampleIndex}-en`, text: clean(example.en) });
+          if (clean(example && example.cn)) parts.push({ kind: 'example-cn', index: exampleIndex, source: `example-${exampleIndex}-cn`, text: clean(example.cn) });
+        });
+        const fragment = (items, continued, notes) => {
+          const wrapper = doc.createElement('div');
+          wrapper.innerHTML = renderPdfFragment(word, index, items, continued, notes);
+          return wrapper.firstElementChild;
+        };
         let continuation = false;
-        let currentExamples = [];
+        let currentParts = [];
         let active = fragment([], false, false);
         page.appendChild(active);
         if (page.scrollHeight > page.clientHeight) {
@@ -241,29 +273,64 @@
           }
         }
 
-        for (const example of examples) {
+        const fits = candidateParts => {
           active.remove();
-          const candidate = fragment([...currentExamples, example], continuation, false);
+          const candidate = fragment(candidateParts, continuation, false);
           page.appendChild(candidate);
-          if (page.scrollHeight <= page.clientHeight) {
-            currentExamples.push(example);
-            active = candidate;
-            continue;
-          }
+          const result = page.scrollHeight <= page.clientHeight;
           candidate.remove();
           page.appendChild(active);
+          return result;
+        };
+        const replace = nextParts => {
+          active.remove();
+          currentParts = nextParts;
+          active = fragment(currentParts, continuation, false);
+          page.appendChild(active);
+        };
+        const nextPage = () => {
+          if (currentParts.length === 0) active.remove();
           page = addPage();
           continuation = true;
-          currentExamples = [example];
-          active = fragment(currentExamples, true, false);
+          currentParts = [];
+          active = fragment([], true, false);
           page.appendChild(active);
-          if (page.scrollHeight > page.clientHeight) {
-            throw new RangeError('PDF example cannot fit on an A4 page');
+        };
+
+        for (const part of parts) {
+          let remaining = Array.from(part.text);
+          while (remaining.length) {
+            const whole = { ...part, text: remaining.join('') };
+            if (fits([...currentParts, whole])) {
+              replace([...currentParts, whole]);
+              break;
+            }
+            if (currentParts.length || page.children.length > 1) {
+              nextPage();
+              continue;
+            }
+
+            let low = 1;
+            let high = remaining.length - 1;
+            let best = 0;
+            while (low <= high) {
+              const middle = Math.floor((low + high) / 2);
+              if (fits([{ ...part, text: remaining.slice(0, middle).join('') }])) {
+                best = middle;
+                low = middle + 1;
+              } else {
+                high = middle - 1;
+              }
+            }
+            if (!best) throw new RangeError('PDF content cannot fit on an A4 page');
+            replace([{ ...part, text: remaining.slice(0, best).join('') }]);
+            remaining = remaining.slice(best);
+            if (remaining.length) nextPage();
           }
         }
 
         active.remove();
-        const withNotes = fragment(currentExamples, continuation, true);
+        const withNotes = fragment(currentParts, continuation, true);
         page.appendChild(withNotes);
         if (page.scrollHeight > page.clientHeight) {
           withNotes.remove();

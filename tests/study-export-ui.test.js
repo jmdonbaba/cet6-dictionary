@@ -53,9 +53,9 @@ function fakeDocument(cardHeights = []) {
     }
     set innerHTML(value) {
       this.markup = value;
-      if (this.tagName === 'div' && value.includes('<section class="study-card">')) {
+      if (this.tagName === 'div' && value.includes('<section class="study-card')) {
         const card = new Element('section');
-        card.className = 'study-card';
+        card.className = value.match(/<section class="([^"]+)"/)[1];
         card.height = typeof cardHeights === 'function' ? cardHeights(value) : cardHeights[cards.length] || 0;
         card.markup = value;
         cards.push(card);
@@ -142,6 +142,55 @@ test('oversized PDF cards flow examples across A4 pages without clipping', () =>
     for (const number of [1, 2, 3]) {
       assert.equal((content.match(new RegExp(`Example ${number}`, 'g')) || []).length, 1);
     }
+  } finally {
+    host.remove();
+  }
+});
+
+function renderedSource(pages, source) {
+  const cards = pages.flatMap(page => page.children.filter(node => node.classList.contains('study-card')));
+  const pattern = new RegExp(`<span class="study-pdf-value" data-source="${source}">([^<]*)<\\/span>`, 'g');
+  return cards.flatMap(card => [...card.markup.matchAll(pattern)].map(match => match[1])).join('');
+}
+
+test('PDF continues oversized definitions and forms without losing source text', () => {
+  const document = fakeDocument(markup => 180 + markup.replace(/<[^>]*>/g, '').length * 8);
+  const definition = 'D'.repeat(300);
+  const forms = 'F'.repeat(280);
+  const words = StudyExport.normalizeFavorites([{ word: 'long', definitions: [definition], forms }]);
+  const { host, pages } = StudyExport.buildPdfPages(words, document);
+  try {
+    assert.ok(pages.length > 2);
+    assert.ok(pages.every(page => page.scrollHeight <= page.clientHeight));
+    assert.equal(renderedSource(pages, 'definition-0'), definition);
+    assert.equal(renderedSource(pages, 'forms'), forms);
+    assert.ok(pages.slice(1).every(page => page.children.some(node => node.markup && node.markup.includes('long（续）'))));
+  } finally {
+    host.remove();
+  }
+});
+
+test('PDF continues one oversized bilingual example and retains all three examples', () => {
+  const document = fakeDocument(markup => 180 + markup.replace(/<[^>]*>/g, '').length * 8);
+  const firstEn = 'E'.repeat(260);
+  const firstCn = '中'.repeat(240);
+  const words = StudyExport.normalizeFavorites([{
+    word: 'bilingual', examples: [
+      { en: firstEn, cn: firstCn },
+      { en: 'Second sentence.', cn: '第二句。' },
+      { en: 'Third sentence.', cn: '第三句。' }
+    ]
+  }]);
+  const { host, pages } = StudyExport.buildPdfPages(words, document);
+  try {
+    assert.ok(pages.length > 2);
+    assert.ok(pages.every(page => page.scrollHeight <= page.clientHeight));
+    assert.equal(renderedSource(pages, 'example-0-en'), firstEn);
+    assert.equal(renderedSource(pages, 'example-0-cn'), firstCn);
+    assert.equal(renderedSource(pages, 'example-1-en'), 'Second sentence.');
+    assert.equal(renderedSource(pages, 'example-1-cn'), '第二句。');
+    assert.equal(renderedSource(pages, 'example-2-en'), 'Third sentence.');
+    assert.equal(renderedSource(pages, 'example-2-cn'), '第三句。');
   } finally {
     host.remove();
   }
