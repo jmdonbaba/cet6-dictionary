@@ -249,7 +249,7 @@ body {
 }
 
 /* Favorites nav */
-.fav-btns { display: flex; gap: 10px; margin-top: 16px; }
+.fav-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .btn-fav-nav {
   flex: 1; padding: 14px 20px; background: var(--card-bg);
   border: 2px solid var(--border); border-radius: var(--radius);
@@ -259,6 +259,10 @@ body {
 }
 @media (hover: hover) {
   .btn-fav-nav:hover { border-color: var(--primary); color: var(--primary); }
+}
+@media (max-width: 500px) {
+  #btnOpenVocabFav { flex-basis: 100%; }
+  #btnSavePage, #btnRestorePage { padding-inline: 12px; }
 }
 
 /* Word search result */
@@ -392,6 +396,18 @@ body {
   .modal-close:hover { color: var(--danger); }
 }
 .modal-body { flex: 1; overflow-y: auto; padding: 8px 20px 20px; }
+.page-record-hint { margin: 12px 0; color: var(--text-secondary); font-size: 13px; }
+.page-record-item {
+  display: flex; flex-direction: column; gap: 6px; width: 100%;
+  margin-top: 10px; padding: 14px 16px; text-align: left;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card-bg); color: var(--text); font: inherit; cursor: pointer;
+}
+.page-record-meta { color: var(--text-secondary); font-size: 12px; }
+.page-record-preview { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+@media (hover: hover) {
+  .page-record-item:hover { border-color: var(--primary); background: var(--primary-light); }
+}
 
 /* Three-dot menu */
 .more-btn {
@@ -696,6 +712,8 @@ body {
   <!-- Favorites button -->
   <div class="fav-btns">
     <button class="btn-fav-nav" id="btnOpenVocabFav">词汇收藏 <span id="vocabFavCount">(0)</span></button>
+    <button class="btn-fav-nav" id="btnSavePage" type="button">保存页面</button>
+    <button class="btn-fav-nav" id="btnRestorePage" type="button" aria-haspopup="dialog">恢复页面</button>
   </div>
 
   <div class="footer">
@@ -748,6 +766,16 @@ body {
       <div id="favListContainer"></div>
     </div>
   </div>
+  <div class="modal-card" id="modalRestorePage" role="dialog" aria-modal="true" aria-labelledby="restorePageTitle">
+    <div class="modal-header">
+      <span id="restorePageTitle">恢复页面</span>
+      <button class="modal-close" data-close="modalRestorePage" aria-label="关闭恢复页面">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="page-record-hint">选择一条记录恢复，恢复成功后该记录会自动删除。</p>
+      <div id="pageRecordList"></div>
+    </div>
+  </div>
   <div class="modal-card" id="modalImportChoice">
     <div class="modal-header">
       <span>导入数据</span>
@@ -774,6 +802,7 @@ const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions';
 const VFAV_KEY = 'cet6_vocab_favorites';
 const KEY_STORAGE = 'cet6_api_key';
 const WORD_SEARCH_SESSION_KEY = 'cet6_dictionary_cards';
+const PAGE_RECORD_PREFIX = 'cet6_dictionary_page_record_';
 
 function getApiKey() {
   try { return localStorage.getItem(KEY_STORAGE) || ''; }
@@ -803,6 +832,8 @@ const $keyArea = document.getElementById('keyArea');
 const $apiKeyInput = document.getElementById('apiKeyInput');
 const $btnSaveKey = document.getElementById('btnSaveKey');
 const $keyStatus = document.getElementById('keyStatus');
+const $modalRestorePage = document.getElementById('modalRestorePage');
+const $pageRecordList = document.getElementById('pageRecordList');
 
 let pageJumpFrame = 0;
 function updatePageJumpControls() {
@@ -1481,31 +1512,33 @@ function normalizeWordSearchCard(card) {
   return normalized;
 }
 
-function saveWordSearchSession() {
-  if (restoringWordSearchSession) return;
-  try {
-    const cards = Array.from($wsModules.querySelectorAll('.word-search-wrapper'), wrapper => normalizeWordSearchCard({
-      input: wrapper.querySelector('.word-search-input').value,
-      mode: getSearchMode(wrapper),
-      result: wrapper._wordData
-    }));
-    localStorage.setItem(WORD_SEARCH_SESSION_KEY, JSON.stringify({ version: 1, cards }));
-    wordSearchStorageFailed = false;
-  } catch {
-    if (!wordSearchStorageFailed) toast('卡片保存失败，刷新后可能无法恢复');
-    wordSearchStorageFailed = true;
-  }
+function captureWordSearchCards() {
+  return Array.from($wsModules.querySelectorAll('.word-search-wrapper'), wrapper => normalizeWordSearchCard({
+    input: wrapper.querySelector('.word-search-input').value,
+    mode: getSearchMode(wrapper),
+    result: wrapper._wordData
+  }));
 }
 
-function restoreWordSearchSession() {
-  let cards = [];
+function saveWordSearchSession() {
+  if (restoringWordSearchSession) return false;
+  let savedInTab = false;
+  let savedLongTerm = false;
   try {
-    const saved = JSON.parse(localStorage.getItem(WORD_SEARCH_SESSION_KEY) || 'null');
-    if (saved && saved.version === 1 && Array.isArray(saved.cards)) {
-      cards = saved.cards.map(normalizeWordSearchCard).filter(Boolean);
-    }
+    const snapshot = JSON.stringify({ version: 1, cards: captureWordSearchCards() });
+    try { sessionStorage.setItem(WORD_SEARCH_SESSION_KEY, snapshot); savedInTab = true; } catch {}
+    try { localStorage.setItem(WORD_SEARCH_SESSION_KEY, snapshot); savedLongTerm = true; } catch {}
   } catch {}
-  if (!cards.length) cards = [{ input: '', mode: 'lemma', result: null }];
+  if (!savedInTab || !savedLongTerm) {
+    if (!wordSearchStorageFailed) toast('卡片未完整保存，请检查浏览器存储设置或空间');
+    wordSearchStorageFailed = true;
+  } else wordSearchStorageFailed = false;
+  return savedInTab || savedLongTerm;
+}
+
+function applyWordSearchCards(cards) {
+  const previousNodes = Array.from($wsModules.childNodes);
+  const wasRestoring = restoringWordSearchSession;
   restoringWordSearchSession = true;
   try {
     const fragment = document.createDocumentFragment();
@@ -1521,12 +1554,124 @@ function restoreWordSearchSession() {
       if (card.result) renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), card.input, card.result, favoriteWords);
       toggles.push(wrapper.querySelector('.ws-mode-toggle'));
     });
-    $wsModules.appendChild(fragment);
+    $wsModules.replaceChildren(fragment);
     updateMinusButtons();
     syncSliders(toggles);
+  } catch (error) {
+    $wsModules.replaceChildren(...previousNodes);
+    throw error;
   } finally {
-    restoringWordSearchSession = false;
+    restoringWordSearchSession = wasRestoring;
   }
+}
+
+function restoreWordSearchSession() {
+  const readCards = storage => {
+    try {
+      const saved = JSON.parse(storage.getItem(WORD_SEARCH_SESSION_KEY) || 'null');
+      if (saved && saved.version === 1 && Array.isArray(saved.cards)) {
+        return saved.cards.map(normalizeWordSearchCard).filter(Boolean);
+      }
+    } catch {}
+    return [];
+  };
+  let cards = [];
+  try { cards = readCards(sessionStorage); } catch {}
+  if (!cards.length) {
+    try { cards = readCards(localStorage); } catch {}
+  }
+  if (!cards.length) cards = [{ input: '', mode: 'lemma', result: null }];
+  applyWordSearchCards(cards);
+  // A tab keeps this snapshot even when another tab updates the latest page.
+  try { sessionStorage.setItem(WORD_SEARCH_SESSION_KEY, JSON.stringify({ version: 1, cards })); } catch {}
+}
+
+// ==================== One-time saved pages ====================
+function hasWordSearchContent() {
+  return Array.from($wsModules.querySelectorAll('.word-search-wrapper')).some(wrapper =>
+    (wrapper._wordData && wrapper._wordData.word) || wrapper.querySelector('.word-search-input').value.trim());
+}
+
+function readPageRecord(id) {
+  const raw = localStorage.getItem(PAGE_RECORD_PREFIX + id);
+  if (!raw) return null;
+  try {
+    const saved = JSON.parse(raw);
+    if (!saved || saved.version !== 1 || !Number.isFinite(saved.savedAt) || !Array.isArray(saved.cards) || !saved.cards.length) return null;
+    const cards = saved.cards.map(normalizeWordSearchCard);
+    if (cards.some(card => !card)) return null;
+    return { id, savedAt: saved.savedAt, cards };
+  } catch { return null; }
+}
+
+function getPageRecords() {
+  const records = [];
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (!key || !key.startsWith(PAGE_RECORD_PREFIX)) continue;
+    const record = readPageRecord(key.slice(PAGE_RECORD_PREFIX.length));
+    if (record) records.push(record);
+  }
+  return records.sort((a, b) => b.savedAt - a.savedAt || b.id.localeCompare(a.id));
+}
+
+function savePageRecord() {
+  if (!hasWordSearchContent()) { toast('当前页面没有可保存的单词'); return false; }
+  try {
+    const id = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    const record = { version: 1, savedAt: Date.now(), cards: captureWordSearchCards() };
+    // Separate keys prevent another tab's save from overwriting this record.
+    localStorage.setItem(PAGE_RECORD_PREFIX + id, JSON.stringify(record));
+    toast('页面已保存，可在“恢复页面”中找到');
+    return true;
+  } catch {
+    toast('页面保存失败，请检查浏览器存储设置或空间');
+    return false;
+  }
+}
+
+function renderPageRecords() {
+  try {
+    const records = getPageRecords();
+    $pageRecordList.innerHTML = records.length ? records.map(record => {
+      const words = record.cards.map(card => card.result ? card.result.word : card.input.trim()).filter(Boolean);
+      const preview = words.slice(0, 4).join(' · ') + (words.length > 4 ? ' …' : '');
+      return `<button type="button" class="page-record-item" data-page-record-id="${escAttr(record.id)}">
+        <span class="page-record-meta">${esc(fmtTime(record.savedAt))} · ${record.cards.length} 张卡片</span>
+        <span class="page-record-preview">${esc(preview || '空白页面')}</span>
+      </button>`;
+    }).join('') : '<div class="empty-state">还没有保存的页面，点击“保存页面”即可添加</div>';
+  } catch {
+    $pageRecordList.innerHTML = '<div class="empty-state">无法读取保存记录，请检查浏览器存储设置</div>';
+  }
+}
+
+function restorePageRecord(id) {
+  let record;
+  try { record = readPageRecord(id); } catch {}
+  if (!record) { toast('记录已被恢复或无法读取'); renderPageRecords(); return false; }
+  if (hasWordSearchContent() && !confirm('恢复此记录将覆盖当前页面，是否继续？')) return false;
+  const previousNodes = Array.from($wsModules.childNodes);
+  try {
+    // Recheck after confirmation in case another tab consumed the record.
+    record = readPageRecord(id);
+    if (!record) { toast('记录已被恢复或无法读取'); renderPageRecords(); return false; }
+    applyWordSearchCards(record.cards);
+    if (!saveWordSearchSession()) throw new Error('卡片保存失败');
+    localStorage.removeItem(PAGE_RECORD_PREFIX + id);
+  } catch {
+    $wsModules.replaceChildren(...previousNodes);
+    updateMinusButtons();
+    saveWordSearchSession();
+    schedulePageJumpUpdate();
+    toast('页面恢复失败，当前页面和保存记录已保留');
+    return false;
+  }
+  closeModal();
+  schedulePageJumpUpdate();
+  window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  return true;
 }
 
 function openFavoriteInCard(id) {
@@ -1606,6 +1751,21 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && $modalOverlay.style.display === 'flex') closeModal();
 });
 document.getElementById('btnOpenVocabFav').addEventListener('click', () => openModal($modalVocabFav));
+document.getElementById('btnSavePage').addEventListener('click', savePageRecord);
+document.getElementById('btnRestorePage').addEventListener('click', () => {
+  renderPageRecords();
+  openModal($modalRestorePage);
+  const firstChoice = $pageRecordList.querySelector('.page-record-item');
+  if (firstChoice) firstChoice.focus();
+  else $modalRestorePage.querySelector('.modal-close').focus();
+});
+$pageRecordList.addEventListener('click', e => {
+  const choice = e.target.closest('[data-page-record-id]');
+  if (choice) restorePageRecord(choice.dataset.pageRecordId);
+});
+window.addEventListener('storage', e => {
+  if ((e.key === null || e.key.startsWith(PAGE_RECORD_PREFIX)) && $modalRestorePage.classList.contains('active')) renderPageRecords();
+});
 
 $btnStudyExport.addEventListener('click', () => {
   if ($btnStudyExport.disabled) return;

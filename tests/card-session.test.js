@@ -6,6 +6,11 @@ const source = fs.readFileSync('index.html', 'utf8');
 const storageKey = 'cet6_dictionary_cards';
 
 function loadHelpers(names, context = {}) {
+  names = Array.from(new Set([
+    ...names,
+    ...(names.includes('saveWordSearchSession') ? ['captureWordSearchCards'] : []),
+    ...(names.includes('restoreWordSearchSession') ? ['applyWordSearchCards'] : [])
+  ]));
   const functions = names.map(name => {
     const match = source.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
     assert.ok(match, `${name} must exist`);
@@ -83,19 +88,26 @@ function card(input, mode = 'lemma', result = null) {
   };
 }
 
-function sessionHarness(saved, throws = false) {
+function sessionHarness(saved, throws = false, sharedStorage, tabStorage) {
   const modules = [];
   const notices = [];
   const metrics = { mounts: 0, favoriteReads: 0 };
-  const storage = new Map(saved === undefined ? [] : [[storageKey, saved]]);
+  const storage = sharedStorage || new Map(saved === undefined ? [] : [[storageKey, saved]]);
+  const tab = tabStorage || new Map();
   let helpers;
   const context = {
     $wsModules: {
+      get childNodes() { return modules; },
       querySelectorAll: () => modules,
       appendChild: item => {
         metrics.mounts += 1;
         if (item.nodeType === 11) modules.push(...item.children);
         else modules.push(item);
+      },
+      replaceChildren: (...items) => {
+        metrics.mounts += 1;
+        const nodes = items.flatMap(item => item.nodeType === 11 ? item.children : [item]);
+        modules.splice(0, modules.length, ...nodes);
       }
     },
     document: { createDocumentFragment: () => ({
@@ -104,6 +116,10 @@ function sessionHarness(saved, throws = false) {
     localStorage: {
       getItem: key => { if (throws) throw new Error('disabled'); return storage.get(key) || null; },
       setItem: (key, value) => { if (throws) throw new Error('full'); storage.set(key, value); }
+    },
+    sessionStorage: {
+      getItem: key => { if (throws) throw new Error('disabled'); return tab.get(key) || null; },
+      setItem: (key, value) => { if (throws) throw new Error('full'); tab.set(key, value); }
     },
     getSearchMode: item => item.mode,
     createWordSearchModule: () => card(''),
@@ -117,7 +133,7 @@ function sessionHarness(saved, throws = false) {
   };
   helpers = loadHelpers(['normalizeWordSearchCard', 'saveWordSearchSession', 'restoreWordSearchSession'], context);
   return {
-    ...helpers, modules, storage, notices, context, metrics
+    ...helpers, modules, storage, tabStorage: tab, notices, context, metrics
   };
 }
 
@@ -137,6 +153,65 @@ test('round-trips card order, blank drafts, query modes and complete results', (
   assert.equal(second.modules[0]._wordData.word, 'aspire');
   assert.equal(second.modules[0]._wordData.sourceForm, 'aspiring');
   assert.equal(second.modules[1]._wordData, null);
+});
+
+test('tabs sharing a browser keep their own cards when another tab saves and they reload', () => {
+  const shared = new Map();
+  const first = sessionHarness(undefined, false, shared);
+  const second = sessionHarness(undefined, false, shared);
+  first.modules.push(card('first', 'original', { word: 'first' }));
+  second.modules.push(card('second', 'lemma', { word: 'second' }));
+  first.saveWordSearchSession();
+  second.saveWordSearchSession();
+  const reloadFirst = sessionHarness(undefined, false, shared, first.tabStorage);
+  const reloadSecond = sessionHarness(undefined, false, shared, second.tabStorage);
+  reloadFirst.restoreWordSearchSession();
+  reloadSecond.restoreWordSearchSession();
+  assert.equal(reloadFirst.modules[0]._wordData.word, 'first');
+  assert.equal(reloadFirst.modules[0].mode, 'original');
+  assert.equal(reloadSecond.modules[0]._wordData.word, 'second');
+  const newTab = sessionHarness(undefined, false, shared);
+  newTab.restoreWordSearchSession();
+  assert.equal(newTab.modules[0]._wordData.word, 'second');
+});
+
+test('failed card replacement keeps the existing page intact', () => {
+  const h = sessionHarness();
+  const original = card('current', 'original', { word: 'current' });
+  h.modules.push(original);
+  const { applyWordSearchCards } = loadHelpers(['applyWordSearchCards'], {
+    ...h.context,
+    renderWordResult: () => { throw new Error('bad rendering'); }
+  });
+  assert.throws(() => applyWordSearchCards([{ input: 'saved', mode: 'lemma', result: { word: 'saved' } }]), /bad rendering/);
+  assert.equal(h.modules[0], original);
+});
+
+test('manual recovery uses the actual renderer, updates both snapshots and consumes the record', () => {
+  const h = sessionHarness();
+  const prefix = 'cet6_dictionary_page_record_';
+  h.modules.push(card('current', 'lemma', { word: 'current' }));
+  h.storage.set(prefix + 'saved', JSON.stringify({ version: 1, savedAt: 123, cards: [{
+    input: 'aspiring', mode: 'original', result: { word: 'aspire', definitions: ['渴望'] }
+  }] }));
+  const { restorePageRecord } = loadHelpers([
+    'normalizeWordSearchCard', 'captureWordSearchCards', 'saveWordSearchSession', 'applyWordSearchCards',
+    'readPageRecord', 'hasWordSearchContent', 'restorePageRecord', 'renderWordResult', 'renderForms'
+  ], {
+    ...h.context,
+    PAGE_RECORD_PREFIX: prefix,
+    localStorage: { ...h.context.localStorage, removeItem: key => h.storage.delete(key) },
+    confirm: () => true, esc: value => String(value),
+    renderPageRecords: () => {}, closeModal: () => {}, schedulePageJumpUpdate: () => {},
+    window: { scrollTo: () => {} }, matchMedia: () => ({ matches: true })
+  });
+  assert.equal(restorePageRecord('saved'), true);
+  assert.equal(h.modules.length, 1);
+  assert.equal(h.modules[0].mode, 'original');
+  assert.match(h.modules[0].querySelector('.word-search-result').innerHTML, /渴望/);
+  assert.equal(JSON.parse(h.storage.get(storageKey)).cards[0].result.word, 'aspire');
+  assert.equal(JSON.parse(h.tabStorage.get(storageKey)).cards[0].result.word, 'aspire');
+  assert.equal(h.storage.has(prefix + 'saved'), false);
 });
 
 test('restores many result cards with one DOM insertion and one favorites read', t => {
