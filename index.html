@@ -1071,7 +1071,7 @@ function scrollToVFavItem(favId) {
   }, 100);
 }
 
-function renderWordResult(wrapper, resultEl, searchWord_, info) {
+function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
   const displayWord = info.word;
   const baseFormHint = info.sourceForm
     ? `<div class="base-form-hint">你搜的 <strong>"${esc(searchWord_)}"</strong> 是 <strong>${esc(displayWord)}</strong> 的<span>${esc(info.inflection || '变形')}</span>，以下为原形查询结果</div>`
@@ -1097,8 +1097,10 @@ function renderWordResult(wrapper, resultEl, searchWord_, info) {
     </div>`;
   wrapper._wordData = { ...info, word: displayWord };
   // Check if already favorited
-  const vfavs = getVFavs();
-  if (vfavs.some(f => f.word.toLowerCase() === displayWord.toLowerCase())) {
+  const isFavorite = favoriteWords
+    ? favoriteWords.has(displayWord.toLowerCase())
+    : getVFavs().some(f => f.word.toLowerCase() === displayWord.toLowerCase());
+  if (isFavorite) {
     const btn = wrapper.querySelector('.btn-favorite');
     if (btn) { btn.textContent = '取消收藏'; btn.classList.add('favorited'); }
   }
@@ -1420,11 +1422,22 @@ function getSearchMode(wrapper) {
 }
 
 function syncSlider(toggle) {
-  const slider = toggle.querySelector('.ws-mode-slider');
-  const activeBtn = toggle.querySelector('button.active');
-  if (!slider || !activeBtn) return;
-  slider.style.left = activeBtn.offsetLeft + 'px';
-  slider.style.width = activeBtn.offsetWidth + 'px';
+  syncSliders([toggle]);
+}
+
+function syncSliders(toggles) {
+  // Measure the whole batch before style writes invalidate layout.
+  const positions = Array.from(toggles, toggle => {
+    const slider = toggle.querySelector('.ws-mode-slider');
+    const activeBtn = toggle.querySelector('button.active');
+    return slider && activeBtn
+      ? { slider, left: activeBtn.offsetLeft, width: activeBtn.offsetWidth } : null;
+  });
+  positions.forEach(position => {
+    if (!position) return;
+    position.slider.style.left = position.left + 'px';
+    position.slider.style.width = position.width + 'px';
+  });
 }
 
 // ==================== Card persistence ====================
@@ -1495,17 +1508,22 @@ function restoreWordSearchSession() {
   if (!cards.length) cards = [{ input: '', mode: 'lemma', result: null }];
   restoringWordSearchSession = true;
   try {
+    const fragment = document.createDocumentFragment();
+    const toggles = [];
+    const favoriteWords = new Set(getVFavs().map(favorite => favorite.word.toLowerCase()));
     cards.forEach(card => {
       const wrapper = createWordSearchModule();
-      $wsModules.appendChild(wrapper);
+      fragment.appendChild(wrapper);
       wrapper.querySelector('.word-search-input').value = card.input;
       wrapper.querySelectorAll('.ws-mode-toggle button').forEach(button => {
         button.classList.toggle('active', button.dataset.mode === card.mode);
       });
-      if (card.result) renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), card.input, card.result);
-      syncSlider(wrapper.querySelector('.ws-mode-toggle'));
+      if (card.result) renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), card.input, card.result, favoriteWords);
+      toggles.push(wrapper.querySelector('.ws-mode-toggle'));
     });
+    $wsModules.appendChild(fragment);
     updateMinusButtons();
+    syncSliders(toggles);
   } finally {
     restoringWordSearchSession = false;
   }

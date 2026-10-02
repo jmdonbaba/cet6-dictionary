@@ -86,17 +86,29 @@ function card(input, mode = 'lemma', result = null) {
 function sessionHarness(saved, throws = false) {
   const modules = [];
   const notices = [];
+  const metrics = { mounts: 0, favoriteReads: 0 };
   const storage = new Map(saved === undefined ? [] : [[storageKey, saved]]);
   let helpers;
   const context = {
-    $wsModules: { querySelectorAll: () => modules, appendChild: item => modules.push(item) },
+    $wsModules: {
+      querySelectorAll: () => modules,
+      appendChild: item => {
+        metrics.mounts += 1;
+        if (item.nodeType === 11) modules.push(...item.children);
+        else modules.push(item);
+      }
+    },
+    document: { createDocumentFragment: () => ({
+      nodeType: 11, children: [], appendChild(item) { this.children.push(item); }
+    }) },
     localStorage: {
       getItem: key => { if (throws) throw new Error('disabled'); return storage.get(key) || null; },
       setItem: (key, value) => { if (throws) throw new Error('full'); storage.set(key, value); }
     },
     getSearchMode: item => item.mode,
     createWordSearchModule: () => card(''),
-    syncSlider: () => {}, updateMinusButtons: () => {},
+    syncSlider: () => {}, syncSliders: () => {}, updateMinusButtons: () => {},
+    getVFavs: () => { metrics.favoriteReads += 1; return []; },
     toast: message => notices.push(message),
     renderWordResult: (item, _, input, result) => {
       item._wordData = result;
@@ -105,7 +117,7 @@ function sessionHarness(saved, throws = false) {
   };
   helpers = loadHelpers(['normalizeWordSearchCard', 'saveWordSearchSession', 'restoreWordSearchSession'], context);
   return {
-    ...helpers, modules, storage, notices, context
+    ...helpers, modules, storage, notices, context, metrics
   };
 }
 
@@ -125,6 +137,42 @@ test('round-trips card order, blank drafts, query modes and complete results', (
   assert.equal(second.modules[0]._wordData.word, 'aspire');
   assert.equal(second.modules[0]._wordData.sourceForm, 'aspiring');
   assert.equal(second.modules[1]._wordData, null);
+});
+
+test('restores many result cards with one DOM insertion and one favorites read', t => {
+  const cards = Array.from({ length: 100 }, (_, index) => ({
+    input: `word-${index}`, result: { word: `word-${index}`, definitions: ['释义'], sentences: [] }
+  }));
+  const harness = sessionHarness(JSON.stringify({ version: 1, cards }));
+  const { restoreWordSearchSession } = loadHelpers([
+    'normalizeWordSearchCard', 'saveWordSearchSession', 'restoreWordSearchSession', 'renderWordResult', 'renderForms'
+  ], { ...harness.context, esc: value => String(value) });
+  restoreWordSearchSession();
+  t.diagnostic(JSON.stringify(harness.metrics));
+  assert.equal(harness.modules.length, 100);
+  assert.equal(harness.metrics.mounts, 1, 'mount restored cards as one batch');
+  assert.equal(harness.metrics.favoriteReads, 1, 'read favorites once for the entire restore');
+});
+
+test('measures all mode sliders before writing styles to avoid repeated layout flushes', () => {
+  const { syncSliders } = loadHelpers(['syncSliders']);
+  const events = [];
+  const toggles = [10, 50, 90].map(left => {
+    const style = {};
+    for (const property of ['left', 'width']) {
+      Object.defineProperty(style, property, { set(value) { events.push(`write ${property} ${value}`); } });
+    }
+    const button = {
+      get offsetLeft() { events.push('read left'); return left; },
+      get offsetWidth() { events.push('read width'); return 40; }
+    };
+    return { querySelector: selector => selector === '.ws-mode-slider' ? { style } : button };
+  });
+  syncSliders(toggles);
+  assert.ok(events.slice(0, 6).every(event => event.startsWith('read')));
+  assert.ok(events.slice(6).every(event => event.startsWith('write')));
+  assert.ok(events.includes('write left 90px'));
+  assert.ok(events.includes('write width 40px'));
 });
 
 test('restored results render their meanings, inflections and examples through the actual renderer', () => {
