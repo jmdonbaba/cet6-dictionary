@@ -711,7 +711,8 @@ body {
   <div class="fav-btns">
     <button class="btn-fav-nav" id="btnOpenVocabFav">词汇收藏 <span id="vocabFavCount">(0)</span></button>
   </div>
-  <div class="page-actions" role="group" aria-label="页面保存与恢复">
+  <div class="page-actions" role="group" aria-label="页面操作">
+    <button class="btn-sm" id="btnClearPage" type="button">清空页面</button>
     <button class="btn-sm" id="btnSavePage" type="button">保存页面</button>
     <button class="btn-sm" id="btnRestorePage" type="button" aria-haspopup="dialog">恢复页面</button>
   </div>
@@ -1581,6 +1582,24 @@ function restoreWordSearchSession() {
   try { sessionStorage.setItem(WORD_SEARCH_SESSION_KEY, JSON.stringify({ version: 1, cards })); } catch {}
 }
 
+function clearPage() {
+  if (!confirm('确定要清空当前页面吗？')) return false;
+  const previousNodes = Array.from($wsModules.childNodes);
+  try {
+    applyWordSearchCards([{ input: '', mode: 'lemma', result: null }]);
+    if (!saveWordSearchSession()) throw new Error('卡片保存失败');
+  } catch {
+    $wsModules.replaceChildren(...previousNodes);
+    updateMinusButtons();
+    schedulePageJumpUpdate();
+    toast('页面清空失败，当前页面已保留');
+    return false;
+  }
+  schedulePageJumpUpdate();
+  window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  return true;
+}
+
 // ==================== One-time saved pages ====================
 function hasWordSearchContent() {
   return Array.from($wsModules.querySelectorAll('.word-search-wrapper')).some(wrapper =>
@@ -1746,6 +1765,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && $modalOverlay.style.display === 'flex') closeModal();
 });
 document.getElementById('btnOpenVocabFav').addEventListener('click', () => openModal($modalVocabFav));
+document.getElementById('btnClearPage').addEventListener('click', clearPage);
 document.getElementById('btnSavePage').addEventListener('click', savePageRecord);
 document.getElementById('btnRestorePage').addEventListener('click', () => {
   renderPageRecords();

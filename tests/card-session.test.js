@@ -269,6 +269,77 @@ test('manual recovery uses the actual renderer, updates the tab snapshot and con
   assert.equal(newTab.modules[0]._wordData, null);
 });
 
+test('confirmed page clearing leaves one blank card and keeps it blank after reload', () => {
+  const shared = new Map([
+    ['cet6_dictionary_page_record_saved', 'saved record'],
+    ['cet6_vocab_favorites', 'favorites'], ['cet6_api_key', 'key']
+  ]);
+  const before = Array.from(shared);
+  const h = sessionHarness(undefined, false, shared);
+  h.modules.push(card('word', 'original', { word: 'word' }), card('unfinished'), card(''));
+  h.saveWordSearchSession();
+  const other = sessionHarness(undefined, false, shared);
+  other.modules.push(card('other', 'lemma', { word: 'other' }));
+  other.saveWordSearchSession();
+  let confirmations = 0;
+  const { clearPage } = loadHelpers(['clearPage'], {
+    ...h.context, ...h,
+    confirm: () => { confirmations += 1; return true; },
+    schedulePageJumpUpdate: () => {},
+    window: { scrollTo: () => {} }, matchMedia: () => ({ matches: true })
+  });
+  let clickHandler;
+  const binding = source.match(/document\.getElementById\('btnClearPage'\)\.addEventListener\('click', clearPage\);/);
+  assert.ok(binding, 'clear button must invoke the page clearing action');
+  new Function('document', 'clearPage', binding[0])({
+    getElementById: () => ({ addEventListener: (_, callback) => { clickHandler = callback; } })
+  }, clearPage);
+  assert.equal(clickHandler(), true);
+  assert.equal(confirmations, 1);
+  assert.equal(h.modules.length, 1);
+  assert.equal(h.modules[0].input.value, '');
+  assert.equal(h.modules[0].mode, 'lemma');
+  assert.equal(h.modules[0]._wordData, null);
+  const reloaded = sessionHarness(undefined, false, shared, h.tabStorage);
+  reloaded.restoreWordSearchSession();
+  assert.equal(reloaded.modules.length, 1);
+  assert.equal(reloaded.modules[0].input.value, '');
+  assert.equal(reloaded.modules[0]._wordData, null);
+  const reloadOther = sessionHarness(undefined, false, shared, other.tabStorage);
+  reloadOther.restoreWordSearchSession();
+  assert.equal(reloadOther.modules[0]._wordData.word, 'other');
+  assert.deepEqual(Array.from(shared), before);
+});
+
+test('canceling page clearing preserves cards and the refresh snapshot', () => {
+  const h = sessionHarness();
+  const original = card('current', 'original', { word: 'current' });
+  h.modules.push(original, card('unfinished'));
+  h.saveWordSearchSession();
+  const snapshot = h.tabStorage.get(storageKey);
+  const { clearPage } = loadHelpers(['clearPage'], { ...h.context, ...h, confirm: () => false });
+  assert.equal(clearPage(), false);
+  assert.equal(h.modules.length, 2);
+  assert.equal(h.modules[0], original);
+  assert.equal(h.tabStorage.get(storageKey), snapshot);
+});
+
+test('failed snapshot saving cancels page clearing and preserves the existing cards', () => {
+  const h = sessionHarness();
+  const original = card('current', 'original', { word: 'current' });
+  h.modules.push(original);
+  h.saveWordSearchSession();
+  const snapshot = h.tabStorage.get(storageKey);
+  const { clearPage } = loadHelpers(['clearPage', 'saveWordSearchSession'], {
+    ...h.context, ...h, confirm: () => true,
+    sessionStorage: { setItem: () => { throw new Error('storage full'); } },
+    schedulePageJumpUpdate: () => {}
+  });
+  assert.equal(clearPage(), false);
+  assert.equal(h.modules[0], original);
+  assert.equal(h.tabStorage.get(storageKey), snapshot);
+});
+
 test('restores many result cards with one DOM insertion and one favorites read', t => {
   const cards = Array.from({ length: 100 }, (_, index) => ({
     input: `word-${index}`, result: { word: `word-${index}`, definitions: ['释义'], sentences: [] }
