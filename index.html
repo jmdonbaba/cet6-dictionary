@@ -1538,7 +1538,7 @@ function openFavoriteInCard(id) {
     });
     schedulePageJumpUpdate();
   });
-  toast(alreadyOpen ? '已定位到背景卡片' : '已在背景打开卡片');
+  if (alreadyOpen) toast('你已经打开过该卡片');
 }
 
 // ==================== Events ====================
