@@ -249,7 +249,7 @@ body {
 }
 
 /* Favorites nav */
-.fav-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.fav-btns { display: flex; margin-top: 16px; }
 .btn-fav-nav {
   flex: 1; padding: 14px 20px; background: var(--card-bg);
   border: 2px solid var(--border); border-radius: var(--radius);
@@ -260,10 +260,8 @@ body {
 @media (hover: hover) {
   .btn-fav-nav:hover { border-color: var(--primary); color: var(--primary); }
 }
-@media (max-width: 500px) {
-  #btnOpenVocabFav { flex-basis: 100%; }
-  #btnSavePage, #btnRestorePage { padding-inline: 12px; }
-}
+.page-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.page-actions .btn-sm { min-height: 36px; }
 
 /* Word search result */
 .word-result { padding: 16px; background: #f8fafc; border-radius: 8px; }
@@ -712,8 +710,10 @@ body {
   <!-- Favorites button -->
   <div class="fav-btns">
     <button class="btn-fav-nav" id="btnOpenVocabFav">词汇收藏 <span id="vocabFavCount">(0)</span></button>
-    <button class="btn-fav-nav" id="btnSavePage" type="button">保存页面</button>
-    <button class="btn-fav-nav" id="btnRestorePage" type="button" aria-haspopup="dialog">恢复页面</button>
+  </div>
+  <div class="page-actions" role="group" aria-label="页面保存与恢复">
+    <button class="btn-sm" id="btnSavePage" type="button">保存页面</button>
+    <button class="btn-sm" id="btnRestorePage" type="button" aria-haspopup="dialog">恢复页面</button>
   </div>
 
   <div class="footer">
