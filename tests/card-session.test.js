@@ -8,6 +8,7 @@ const storageKey = 'cet6_dictionary_cards';
 function loadHelpers(names, context = {}) {
   names = Array.from(new Set([
     ...names,
+    ...(names.includes('clearPage') ? ['hasWordSearchContent'] : []),
     ...(names.includes('saveWordSearchSession') ? ['captureWordSearchCards'] : []),
     ...(names.includes('restoreWordSearchSession') ? ['applyWordSearchCards'] : [])
   ]));
@@ -267,6 +268,25 @@ test('manual recovery uses the actual renderer, updates the tab snapshot and con
   newTab.restoreWordSearchSession();
   assert.equal(newTab.modules[0].input.value, '');
   assert.equal(newTab.modules[0]._wordData, null);
+});
+
+test('clearing an empty page shows the exact notice without confirmation or card changes', () => {
+  const h = sessionHarness();
+  const original = card('   ');
+  h.modules.push(original);
+  h.saveWordSearchSession();
+  const snapshot = h.tabStorage.get(storageKey);
+  let confirmations = 0;
+  const { clearPage } = loadHelpers(['clearPage'], {
+    ...h.context, ...h,
+    confirm: () => { confirmations += 1; return false; }
+  });
+  assert.equal(clearPage(), false);
+  assert.deepEqual(h.notices, ['当前页面已为空']);
+  assert.equal(confirmations, 0);
+  assert.equal(h.modules.length, 1);
+  assert.equal(h.modules[0], original);
+  assert.equal(h.tabStorage.get(storageKey), snapshot);
 });
 
 test('confirmed page clearing leaves one blank card and keeps it blank after reload', () => {

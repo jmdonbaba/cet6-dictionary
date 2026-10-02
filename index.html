@@ -1583,6 +1583,7 @@ function restoreWordSearchSession() {
 }
 
 function clearPage() {
+  if (!hasWordSearchContent()) { toast('当前页面已为空'); return false; }
   if (!confirm('确定要清空当前页面吗？')) return false;
   const previousNodes = Array.from($wsModules.childNodes);
   try {
