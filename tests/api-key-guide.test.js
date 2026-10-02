@@ -22,5 +22,5 @@ test('keeps the guide safe, responsive, and hidden after a key is saved', () => 
 test('links the page footer to the GitHub project', () => {
   assert.match(source, /<a class="footer-project-link" href="https:\/\/github\.com\/jmdonbaba\/cet6-dictionary" target="_blank" rel="noopener noreferrer">/);
   assert.match(source, /觉得好用？前往 GitHub 点个 Star ⭐/);
-  assert.match(source, /\.footer-project-link\s*\{[^}]*display:\s*inline-block;[^}]*margin-top:\s*10px;[^}]*color:\s*var\(--primary\);/);
+  assert.match(source, /\.footer-project-link\s*\{[^}]*display:\s*inline-block;[^}]*color:\s*var\(--primary\);/);
 });

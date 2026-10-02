@@ -260,7 +260,7 @@ body {
 @media (hover: hover) {
   .btn-fav-nav:hover { border-color: var(--primary); color: var(--primary); }
 }
-.page-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.page-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .page-actions .btn-sm { min-height: 36px; }
 
 /* Word search result */
@@ -674,11 +674,11 @@ body {
   overflow-y: auto;
 }
 
-.footer { text-align: center; padding: 16px; color: var(--text-secondary); font-size: 12px; }
-.footer-actions { margin-top: 8px; display: flex; gap: 10px; justify-content: center; }
+.footer { text-align: center; padding: 4px 16px 8px; color: var(--text-secondary); font-size: 12px; }
+.footer-actions { margin-top: 6px; display: flex; gap: 10px; justify-content: center; }
 .footer-project-link {
   display: inline-block;
-  margin-top: 10px;
+  margin-top: 6px;
   color: var(--primary);
 }
 </style>
@@ -1523,17 +1523,16 @@ function captureWordSearchCards() {
 function saveWordSearchSession() {
   if (restoringWordSearchSession) return false;
   let savedInTab = false;
-  let savedLongTerm = false;
   try {
     const snapshot = JSON.stringify({ version: 1, cards: captureWordSearchCards() });
-    try { sessionStorage.setItem(WORD_SEARCH_SESSION_KEY, snapshot); savedInTab = true; } catch {}
-    try { localStorage.setItem(WORD_SEARCH_SESSION_KEY, snapshot); savedLongTerm = true; } catch {}
+    sessionStorage.setItem(WORD_SEARCH_SESSION_KEY, snapshot);
+    savedInTab = true;
   } catch {}
-  if (!savedInTab || !savedLongTerm) {
+  if (!savedInTab) {
     if (!wordSearchStorageFailed) toast('卡片未完整保存，请检查浏览器存储设置或空间');
     wordSearchStorageFailed = true;
   } else wordSearchStorageFailed = false;
-  return savedInTab || savedLongTerm;
+  return savedInTab;
 }
 
 function applyWordSearchCards(cards) {
@@ -1566,23 +1565,19 @@ function applyWordSearchCards(cards) {
 }
 
 function restoreWordSearchSession() {
-  const readCards = storage => {
-    try {
-      const saved = JSON.parse(storage.getItem(WORD_SEARCH_SESSION_KEY) || 'null');
-      if (saved && saved.version === 1 && Array.isArray(saved.cards)) {
-        return saved.cards.map(normalizeWordSearchCard).filter(Boolean);
-      }
-    } catch {}
-    return [];
-  };
   let cards = [];
-  try { cards = readCards(sessionStorage); } catch {}
-  if (!cards.length) {
-    try { cards = readCards(localStorage); } catch {}
-  }
+  try {
+    // New tabs can inherit sessionStorage from their opener; only reload restores it.
+    if (performance.getEntriesByType('navigation')[0]?.type === 'reload') {
+      const saved = JSON.parse(sessionStorage.getItem(WORD_SEARCH_SESSION_KEY) || 'null');
+      if (saved && saved.version === 1 && Array.isArray(saved.cards)) {
+        cards = saved.cards.map(normalizeWordSearchCard).filter(Boolean);
+      }
+    }
+  } catch {}
   if (!cards.length) cards = [{ input: '', mode: 'lemma', result: null }];
   applyWordSearchCards(cards);
-  // A tab keeps this snapshot even when another tab updates the latest page.
+  // Replace any inherited snapshot so refreshing a new blank tab stays blank.
   try { sessionStorage.setItem(WORD_SEARCH_SESSION_KEY, JSON.stringify({ version: 1, cards })); } catch {}
 }
 

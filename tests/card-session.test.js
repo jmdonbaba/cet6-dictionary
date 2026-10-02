@@ -88,14 +88,15 @@ function card(input, mode = 'lemma', result = null) {
   };
 }
 
-function sessionHarness(saved, throws = false, sharedStorage, tabStorage) {
+function sessionHarness(saved, throws = false, sharedStorage, tabStorage, navigationType = 'reload') {
   const modules = [];
   const notices = [];
   const metrics = { mounts: 0, favoriteReads: 0 };
-  const storage = sharedStorage || new Map(saved === undefined ? [] : [[storageKey, saved]]);
-  const tab = tabStorage || new Map();
+  const storage = sharedStorage || new Map();
+  const tab = tabStorage || new Map(saved === undefined ? [] : [[storageKey, saved]]);
   let helpers;
   const context = {
+    performance: { getEntriesByType: () => [{ type: navigationType }] },
     $wsModules: {
       get childNodes() { return modules; },
       querySelectorAll: () => modules,
@@ -144,10 +145,10 @@ test('round-trips card order, blank drafts, query modes and complete results', (
     sentences: [{ en: 'We aspire to improve.', cn: '我们渴望进步。' }]
   }), card('unfinished'), card(''));
   first.saveWordSearchSession();
-  const saved = first.storage.get(storageKey);
+  const saved = first.tabStorage.get(storageKey);
   const second = sessionHarness(saved);
   second.restoreWordSearchSession();
-  assert.equal(second.storage.get(storageKey), saved, 'rendering during restore must not overwrite the snapshot');
+  assert.equal(second.tabStorage.get(storageKey), saved, 'rendering during restore must not overwrite the snapshot');
   assert.deepEqual(second.modules.map(item => item.input.value), ['aspiring', 'unfinished', '']);
   assert.deepEqual(second.modules.map(item => item.mode), ['original', 'lemma', 'lemma']);
   assert.equal(second.modules[0]._wordData.word, 'aspire');
@@ -170,9 +171,56 @@ test('tabs sharing a browser keep their own cards when another tab saves and the
   assert.equal(reloadFirst.modules[0]._wordData.word, 'first');
   assert.equal(reloadFirst.modules[0].mode, 'original');
   assert.equal(reloadSecond.modules[0]._wordData.word, 'second');
-  const newTab = sessionHarness(undefined, false, shared);
+  const newTab = sessionHarness(undefined, false, shared, undefined, 'navigate');
   newTab.restoreWordSearchSession();
-  assert.equal(newTab.modules[0]._wordData.word, 'second');
+  assert.equal(newTab.modules[0].input.value, '');
+  assert.equal(newTab.modules[0]._wordData, null);
+});
+
+test('new pages start blank even with inherited tab data and stay blank after reload', () => {
+  const original = sessionHarness();
+  original.modules.push(card('existing', 'original', { word: 'existing' }));
+  original.saveWordSearchSession();
+  const inherited = new Map(original.tabStorage);
+  const fresh = sessionHarness(undefined, false, original.storage, inherited, 'navigate');
+  fresh.restoreWordSearchSession();
+  assert.equal(fresh.modules.length, 1);
+  assert.equal(fresh.modules[0].input.value, '');
+  assert.equal(fresh.modules[0]._wordData, null);
+  const reloaded = sessionHarness(undefined, false, original.storage, fresh.tabStorage);
+  reloaded.restoreWordSearchSession();
+  assert.equal(reloaded.modules[0].input.value, '');
+  assert.equal(reloaded.modules[0]._wordData, null);
+  const reloadOriginal = sessionHarness(undefined, false, original.storage, original.tabStorage);
+  reloadOriginal.restoreWordSearchSession();
+  assert.equal(reloadOriginal.modules[0]._wordData.word, 'existing');
+});
+
+test('legacy shared card snapshots never populate a new page or an empty tab reload', () => {
+  const oldSnapshot = JSON.stringify({ version: 1, cards: [{
+    input: 'old page', mode: 'lemma', result: { word: 'old page' }
+  }] });
+  const shared = new Map([[storageKey, oldSnapshot]]);
+  for (const navigationType of ['navigate', 'reload']) {
+    const fresh = sessionHarness(undefined, false, shared, undefined, navigationType);
+    fresh.restoreWordSearchSession();
+    assert.equal(fresh.modules[0].input.value, '');
+    assert.equal(fresh.modules[0]._wordData, null);
+  }
+  assert.equal(shared.get(storageKey), oldSnapshot);
+});
+
+test('automatic card snapshots use only the current tab and do not change saved records or favorites', () => {
+  const shared = new Map([
+    ['cet6_dictionary_page_record_saved', 'saved record'],
+    ['cet6_vocab_favorites', 'favorites'], ['cet6_api_key', 'key']
+  ]);
+  const before = Array.from(shared);
+  const h = sessionHarness(undefined, false, shared);
+  h.modules.push(card('current', 'lemma', { word: 'current' }));
+  assert.equal(h.saveWordSearchSession(), true);
+  assert.equal(JSON.parse(h.tabStorage.get(storageKey)).cards[0].result.word, 'current');
+  assert.deepEqual(Array.from(shared), before);
 });
 
 test('failed card replacement keeps the existing page intact', () => {
@@ -187,7 +235,7 @@ test('failed card replacement keeps the existing page intact', () => {
   assert.equal(h.modules[0], original);
 });
 
-test('manual recovery uses the actual renderer, updates both snapshots and consumes the record', () => {
+test('manual recovery uses the actual renderer, updates the tab snapshot and consumes the record', () => {
   const h = sessionHarness();
   const prefix = 'cet6_dictionary_page_record_';
   h.modules.push(card('current', 'lemma', { word: 'current' }));
@@ -209,9 +257,16 @@ test('manual recovery uses the actual renderer, updates both snapshots and consu
   assert.equal(h.modules.length, 1);
   assert.equal(h.modules[0].mode, 'original');
   assert.match(h.modules[0].querySelector('.word-search-result').innerHTML, /渴望/);
-  assert.equal(JSON.parse(h.storage.get(storageKey)).cards[0].result.word, 'aspire');
+  assert.equal(h.storage.has(storageKey), false);
   assert.equal(JSON.parse(h.tabStorage.get(storageKey)).cards[0].result.word, 'aspire');
   assert.equal(h.storage.has(prefix + 'saved'), false);
+  const reloaded = sessionHarness(undefined, false, h.storage, h.tabStorage);
+  reloaded.restoreWordSearchSession();
+  assert.equal(reloaded.modules[0]._wordData.word, 'aspire');
+  const newTab = sessionHarness(undefined, false, h.storage, undefined, 'navigate');
+  newTab.restoreWordSearchSession();
+  assert.equal(newTab.modules[0].input.value, '');
+  assert.equal(newTab.modules[0]._wordData, null);
 });
 
 test('restores many result cards with one DOM insertion and one favorites read', t => {
@@ -314,9 +369,9 @@ test('card add and remove events update the snapshot so deleted cards stay delet
     closest: selector => selector === '[data-ws-act]' ? { dataset: { wsAct, wsId } } : null
   } });
   await clickAction('add', '0');
-  assert.equal(JSON.parse(harness.storage.get(storageKey)).cards.length, 2);
+  assert.equal(JSON.parse(harness.tabStorage.get(storageKey)).cards.length, 2);
   await clickAction('remove', '1');
-  const reloaded = sessionHarness(harness.storage.get(storageKey));
+  const reloaded = sessionHarness(harness.tabStorage.get(storageKey));
   reloaded.restoreWordSearchSession();
   assert.equal(reloaded.modules.length, 1);
 });
@@ -332,7 +387,7 @@ test('typing saves an unsubmitted draft that survives reload', () => {
     searchFavorites: () => [], renderWSSearchDropdown: () => {}
   });
   handler({ target: { closest: () => wrapper.input } });
-  const reloaded = sessionHarness(harness.storage.get(storageKey));
+  const reloaded = sessionHarness(harness.tabStorage.get(storageKey));
   reloaded.restoreWordSearchSession();
   assert.equal(reloaded.modules[0].input.value, 'unfinished phrase');
 });
