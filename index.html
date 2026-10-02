@@ -492,6 +492,19 @@ body {
 .vf-detail .vf-sen { font-size: 13px; color: var(--primary-hover); margin: 3px 0 3px 8px; }
 .vf-detail .vf-sen-cn { color: var(--text-secondary); margin-left: 4px; }
 .vf-detail .vf-forms { font-size: 12px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.vf-detail-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px; margin-top: 12px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.btn-open-in-card {
+  padding: 8px 12px; min-height: 36px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--card-bg); color: var(--primary);
+  font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+@media (hover: hover) {
+  .btn-open-in-card:hover { border-color: var(--primary); background: var(--primary-light); }
+}
 
 /* Empty & error */
 .empty-state { text-align: center; padding: 32px 16px; color: var(--text-secondary); font-size: 14px; }
@@ -760,9 +773,11 @@ const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions';
 // 与原项目共享相同的 localStorage key，收藏自动同步
 const VFAV_KEY = 'cet6_vocab_favorites';
 const KEY_STORAGE = 'cet6_api_key';
+const WORD_SEARCH_SESSION_KEY = 'cet6_dictionary_cards';
 
 function getApiKey() {
-  return localStorage.getItem(KEY_STORAGE) || '';
+  try { return localStorage.getItem(KEY_STORAGE) || ''; }
+  catch { return ''; }
 }
 function setApiKey(key) {
   try { localStorage.setItem(KEY_STORAGE, key.trim()); } catch { toast('存储失败，请重试'); }
@@ -1087,11 +1102,14 @@ function renderWordResult(wrapper, resultEl, searchWord_, info) {
     const btn = wrapper.querySelector('.btn-favorite');
     if (btn) { btn.textContent = '取消收藏'; btn.classList.add('favorited'); }
   }
+  saveWordSearchSession();
 }
 
 // ==================== Word Search ====================
 async function searchWord(word, wrapper, mode) {
   const resultEl = wrapper.querySelector('.word-search-result');
+  wrapper._wordData = null;
+  saveWordSearchSession();
   if (!getApiKey()) { resultEl.innerHTML = '<div class="empty-state">请先在顶部输入 API Key</div>'; return; }
 
   const isOriginal = (mode === 'original');
@@ -1316,7 +1334,10 @@ function renderVFavs() {
         const cn = typeof ex === 'string' ? '' : (ex.cn || '');
         return `<div class="vf-sen">${ei + 1}. ${esc(en)}${cn ? `<span class="vf-sen-cn">${esc(cn)}</span>` : ''}</div>`;
       }).join('') : ''}
-      <div style="font-size:12px;color:var(--text-secondary);margin-top:8px">${esc(f.createdAt)}</div>
+      <div class="vf-detail-footer">
+        <span>${esc(f.createdAt)}</span>
+        <button type="button" class="btn-open-in-card" data-act="openvfavcard" data-id="${escAttr(f.id)}">在卡片中打开</button>
+      </div>
     </div>
   `).join('');
 
@@ -1404,6 +1425,120 @@ function syncSlider(toggle) {
   if (!slider || !activeBtn) return;
   slider.style.left = activeBtn.offsetLeft + 'px';
   slider.style.width = activeBtn.offsetWidth + 'px';
+}
+
+// ==================== Card persistence ====================
+let restoringWordSearchSession = false;
+let wordSearchStorageFailed = false;
+
+function normalizeWordSearchCard(card) {
+  if (!card || typeof card !== 'object' || Array.isArray(card)) return null;
+  const normalized = {
+    input: typeof card.input === 'string' ? card.input : '',
+    mode: card.mode === 'original' ? 'original' : 'lemma',
+    result: null
+  };
+  const info = card.result;
+  if (!info || typeof info.word !== 'string' || !info.word.trim()) return normalized;
+  const text = value => typeof value === 'string' ? value : '';
+  const examples = Array.isArray(info.sentences) ? info.sentences : info.examples;
+  let forms = '';
+  if (typeof info.forms === 'string') forms = info.forms;
+  else if (info.forms && typeof info.forms === 'object') {
+    forms = {
+      inflections: (Array.isArray(info.forms.inflections) ? info.forms.inflections : [])
+        .filter(item => item && typeof item.word === 'string' && typeof item.type === 'string')
+        .map(item => ({ type: item.type, word: item.word })),
+      derivatives: (Array.isArray(info.forms.derivatives) ? info.forms.derivatives : [])
+        .filter(item => item && typeof item.word === 'string' && typeof item.meaning === 'string')
+        .map(item => ({ pos: text(item.pos), word: item.word, meaning: item.meaning }))
+    };
+  }
+  normalized.result = {
+    word: info.word,
+    phonetic: text(info.phonetic), pos: text(info.pos),
+    definitions: Array.isArray(info.definitions) ? info.definitions.filter(item => typeof item === 'string') : [],
+    forms,
+    sentences: (Array.isArray(examples) ? examples : [])
+      .filter(item => typeof item === 'string' || (item && typeof item.en === 'string'))
+      .map(item => typeof item === 'string' ? item : { en: item.en, cn: text(item.cn) }),
+    sourceForm: text(info.sourceForm), inflection: text(info.inflection),
+    fromCache: info.fromCache === true, vfavId: text(info.vfavId)
+  };
+  return normalized;
+}
+
+function saveWordSearchSession() {
+  if (restoringWordSearchSession) return;
+  try {
+    const cards = Array.from($wsModules.querySelectorAll('.word-search-wrapper'), wrapper => normalizeWordSearchCard({
+      input: wrapper.querySelector('.word-search-input').value,
+      mode: getSearchMode(wrapper),
+      result: wrapper._wordData
+    }));
+    localStorage.setItem(WORD_SEARCH_SESSION_KEY, JSON.stringify({ version: 1, cards }));
+    wordSearchStorageFailed = false;
+  } catch {
+    if (!wordSearchStorageFailed) toast('卡片保存失败，刷新后可能无法恢复');
+    wordSearchStorageFailed = true;
+  }
+}
+
+function restoreWordSearchSession() {
+  let cards = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(WORD_SEARCH_SESSION_KEY) || 'null');
+    if (saved && saved.version === 1 && Array.isArray(saved.cards)) {
+      cards = saved.cards.map(normalizeWordSearchCard).filter(Boolean);
+    }
+  } catch {}
+  if (!cards.length) cards = [{ input: '', mode: 'lemma', result: null }];
+  restoringWordSearchSession = true;
+  try {
+    cards.forEach(card => {
+      const wrapper = createWordSearchModule();
+      $wsModules.appendChild(wrapper);
+      wrapper.querySelector('.word-search-input').value = card.input;
+      wrapper.querySelectorAll('.ws-mode-toggle button').forEach(button => {
+        button.classList.toggle('active', button.dataset.mode === card.mode);
+      });
+      if (card.result) renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), card.input, card.result);
+      syncSlider(wrapper.querySelector('.ws-mode-toggle'));
+    });
+    updateMinusButtons();
+  } finally {
+    restoringWordSearchSession = false;
+  }
+}
+
+function openFavoriteInCard(id) {
+  const favorite = getVFavs().find(item => item.id === id);
+  if (!favorite) { toast('未找到收藏记录'); return; }
+  let wrapper = Array.from($wsModules.querySelectorAll('.word-search-wrapper')).find(card =>
+    !card._searching && card._wordData && card._wordData.word.toLowerCase() === favorite.word.toLowerCase());
+  const alreadyOpen = Boolean(wrapper);
+  if (!wrapper) {
+    wrapper = createWordSearchModule();
+    $wsModules.appendChild(wrapper);
+    wrapper.querySelector('.word-search-input').value = favorite.word;
+    renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), favorite.word, {
+      word: favorite.word, phonetic: favorite.phonetic, pos: favorite.pos,
+      definitions: favorite.definitions && favorite.definitions.length
+        ? favorite.definitions : (favorite.meaning ? [favorite.meaning] : []),
+      forms: favorite.forms, sentences: favorite.examples,
+      fromCache: true, vfavId: favorite.id
+    });
+    updateMinusButtons();
+    syncSlider(wrapper.querySelector('.ws-mode-toggle'));
+  }
+  requestAnimationFrame(() => {
+    window.scrollTo({
+      top: Math.max(0, wrapper.getBoundingClientRect().top + window.scrollY - 24),
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    });
+    schedulePageJumpUpdate();
+  });
+  toast(alreadyOpen ? '已定位到背景卡片' : '已在背景打开卡片');
 }
 
 // ==================== Events ====================
@@ -1499,6 +1634,7 @@ $modalVocabBody.addEventListener('click', e => {
   const compact = e.target.closest('.vf-compact');
   const btn = e.target.closest('button');
   const { act, id } = (btn && btn.dataset) || {};
+  if (act === 'openvfavcard') { openFavoriteInCard(id); return; }
   if (act === 'delvfav') { closeAllMenus(); delVFav(id); return; }
   if (act === 'pinvfav') { closeAllMenus(); pinVFav(id); return; }
   if (act === 'morevfav') {
@@ -1537,6 +1673,7 @@ $wsModules.addEventListener('click', async e => {
       updateMinusButtons();
       newModule.scrollIntoView({ behavior: 'smooth', block: 'center' });
       syncSlider(newModule.querySelector('.ws-mode-toggle'));
+      saveWordSearchSession();
       setTimeout(() => {
         const newInput = newModule.querySelector('.word-search-input');
         if (newInput) newInput.focus();
@@ -1547,6 +1684,7 @@ $wsModules.addEventListener('click', async e => {
       wrapper.remove();
       schedulePageJumpUpdate();
       updateMinusButtons();
+      saveWordSearchSession();
     }
     return;
   }
@@ -1559,6 +1697,7 @@ $wsModules.addEventListener('click', async e => {
     toggle.querySelectorAll('button').forEach(b => b.classList.remove('active'));
     toggleBtn.classList.add('active');
     syncSlider(toggle);
+    saveWordSearchSession();
     return;
   }
 
@@ -1710,6 +1849,7 @@ function _finishToggleDrag(toggle) {
   syncSlider(toggle);
   toggle._wasDragging = d.moved;
   delete toggle._drag;
+  saveWordSearchSession();
 }
 
 document.addEventListener('pointerup', e => {
@@ -1785,6 +1925,7 @@ $wsModules.addEventListener('keydown', e => {
 $wsModules.addEventListener('input', e => {
   const input = e.target.closest('.word-search-input');
   if (!input) return;
+  saveWordSearchSession();
   const query = input.value;
   const wrapper = input.closest('.word-search-wrapper');
   const dropdown = wrapper.querySelector('.ws-search-dropdown');
@@ -2267,6 +2408,7 @@ function saveKey() {
   $apiKeyInput.value = '';
   document.querySelectorAll('.word-search-result').forEach(el => { el.innerHTML = ''; });
   document.querySelectorAll('.word-search-wrapper').forEach(w => { delete w._wordData; });
+  saveWordSearchSession();
   initKey();
   toast('Key 已保存');
 }
@@ -2283,10 +2425,8 @@ $keyStatus.addEventListener('click', () => {
 // ==================== Init ====================
 initKey();
 renderVFavs();
-// Create initial word search module
-$wsModules.appendChild(createWordSearchModule());
-updateMinusButtons();
-syncSlider($wsModules.querySelector('.ws-mode-toggle'));
+restoreWordSearchSession();
+window.addEventListener('pagehide', saveWordSearchSession);
 schedulePageJumpUpdate();
 </script>
 </body>
