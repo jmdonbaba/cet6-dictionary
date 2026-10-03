@@ -65,7 +65,7 @@ function harness(shared = new Map()) {
   };
   const helpers = loadHelpers([
     'normalizeWordSearchCard', 'captureWordSearchCards', 'hasWordSearchContent',
-    'readPageRecord', 'getPageRecords', 'savePageRecord', 'restorePageRecord'
+    'readPageRecord', 'getPageRecords', 'savePageRecord', 'restorePageRecord', 'deletePageRecord'
   ], context);
   return { ...helpers, modules, shared, notices, confirmations, controls, context };
 }
@@ -101,6 +101,64 @@ test('saved candidates survive closing every tab and reopening with fresh runtim
   assert.equal(after.modules[0]._wordData.word, 'aspire');
   assert.equal(after.getPageRecords().length, 0);
   assert.deepEqual(after.confirmations, []);
+});
+
+test('manual deletion removes only the chosen record across tabs and keeps the current page', () => {
+  const h = harness();
+  h.modules.push(makeCard('one'));
+  h.savePageRecord();
+  const firstId = h.getPageRecords()[0].id;
+  h.modules[0].input.value = 'two';
+  h.savePageRecord();
+  const current = makeCard('current', { word: 'current' });
+  h.modules.splice(0, h.modules.length, current);
+  h.shared.set('cet6_vocab_favorites', 'favorites');
+  h.shared.set('cet6_api_key', 'key');
+  assert.equal(h.deletePageRecord(firstId), true);
+  const reopened = harness(h.shared);
+  assert.equal(reopened.getPageRecords().length, 1);
+  assert.equal(reopened.getPageRecords()[0].cards[0].input, 'two');
+  assert.equal(h.modules[0], current);
+  assert.equal(h.shared.get('cet6_vocab_favorites'), 'favorites');
+  assert.equal(h.shared.get('cet6_api_key'), 'key');
+  assert.deepEqual(h.confirmations, []);
+});
+
+test('failed manual deletion retains the record and current cards', () => {
+  const h = harness();
+  const current = makeCard('saved', { word: 'saved' });
+  h.modules.push(current);
+  h.savePageRecord();
+  const id = h.getPageRecords()[0].id;
+  h.controls.failDelete = true;
+  assert.equal(h.deletePageRecord(id), false);
+  assert.equal(h.getPageRecords().length, 1);
+  assert.equal(h.modules[0], current);
+  assert.match(h.notices.at(-1), /删除失败/);
+});
+
+test('clicking a delete cross never restores a page and keeps keyboard focus in the dialog', () => {
+  const binding = source.match(/\$pageRecordList\.addEventListener\('click', e => \{[\s\S]*?\n\}\);/);
+  assert.ok(binding);
+  for (const lastRecord of [false, true]) {
+    let handler;
+    let deleted;
+    let focused;
+    const target = { dataset: { pageRecordDelete: 'selected' } };
+    const next = { focus: () => { focused = 'next'; } };
+    const list = {
+      addEventListener: (_, callback) => { handler = callback; },
+      querySelectorAll: () => deleted ? (lastRecord ? [] : [next]) : [target, next]
+    };
+    const modal = { querySelector: () => ({ focus: () => { focused = 'close'; } }) };
+    new Function('$pageRecordList', '$modalRestorePage', 'deletePageRecord', 'restorePageRecord', binding[0])(
+      list, modal, id => { deleted = id; return true; },
+      () => assert.fail('deleting must not restore the page')
+    );
+    handler({ target: { closest: selector => selector === '[data-page-record-delete]' ? target : null } });
+    assert.equal(deleted, 'selected');
+    assert.equal(focused, lastRecord ? 'close' : 'next');
+  }
 });
 
 test('restoring over a word card asks the exact confirmation and cancellation preserves both', () => {
@@ -208,5 +266,29 @@ test('candidate previews are escaped and retain the original word data', () => {
   assert.doesNotMatch(list.innerHTML, /<script>/);
   assert.match(list.innerHTML, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(list.innerHTML, /1 张卡片/);
+  assert.match(list.innerHTML, /<button[^>]*data-page-record-delete="record-1"[^>]*aria-label="删除此记录"/);
+  let depth = 0;
+  for (const button of list.innerHTML.matchAll(/<\/?button\b[^>]*>/g)) {
+    depth += button[0].startsWith('</') ? -1 : 1;
+    assert.ok(depth >= 0 && depth <= 1, 'restore and delete buttons must be siblings');
+  }
+  assert.equal(depth, 0);
   assert.equal(h.getPageRecords()[0].cards[0].result.word, '<script>alert(1)</script>');
+});
+
+test('deleting the final candidate updates the list to the empty state', () => {
+  const h = harness();
+  h.modules.push(makeCard('saved'));
+  h.savePageRecord();
+  const id = h.getPageRecords()[0].id;
+  const list = { innerHTML: '' };
+  const { renderPageRecords, deletePageRecord } = loadHelpers(['renderPageRecords', 'deletePageRecord'], {
+    ...h.context, getPageRecords: h.getPageRecords, $pageRecordList: list,
+    esc: value => String(value), escAttr: value => String(value), fmtTime: () => 'time'
+  });
+  renderPageRecords();
+  assert.match(list.innerHTML, /data-page-record-id/);
+  assert.equal(deletePageRecord(id), true);
+  assert.match(list.innerHTML, /还没有保存的页面/);
+  assert.doesNotMatch(list.innerHTML, /data-page-record-id/);
 });
