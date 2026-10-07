@@ -1191,7 +1191,7 @@ async function searchWord(word, wrapper, mode) {
         'Authorization': `Bearer ${getApiKey()}`
       },
       body: JSON.stringify({
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         messages: [
           { role: 'system', content: '你是英语词典专家。只返回 JSON，不要其他。' },
           { role: 'user', content: `查询"${word}"。${modeInstruction}

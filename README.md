@@ -18,7 +18,7 @@
 ## 技术栈
 
 - 纯前端 HTML/CSS/JS（无依赖）
-- DeepSeek API（deepseek-v4-flash）
+- DeepSeek API（deepseek-flash）
 - localStorage 数据持久化
 
 ## 与Cet6Writing的关系
