@@ -105,15 +105,21 @@ body {
 }
 .unfavorited-jump-btn {
   position: fixed;
-  right: max(24px, env(safe-area-inset-right));
+  left: calc(50% + 426px);
   bottom: max(24px, env(safe-area-inset-bottom));
   z-index: 30;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
 }
 .unfavorited-jump-btn[hidden] { display: none; }
-.unfavorited-jump-btn .page-jump-icon { width: 24px; height: 24px; }
+.unfavorited-jump-btn .page-jump-icon { width: 20px; height: 34px; }
+@media (max-width: 1000px) {
+  .unfavorited-jump-btn {
+    left: auto;
+    right: max(24px, env(safe-area-inset-right));
+  }
+}
 @media (max-width: 500px) {
   .unfavorited-jump-btn {
     right: max(16px, env(safe-area-inset-right));
@@ -765,8 +771,9 @@ body {
   </button>
 </nav>
 <button class="page-jump-btn page-jump-btn-primary unfavorited-jump-btn" id="btnJumpUnfavorited" type="button" aria-label="定位到第一个未收藏的卡片" hidden>
-  <svg class="page-jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-    <path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2L3.2 9.6l6-.9L12 3Z"></path>
+  <svg class="page-jump-icon" viewBox="0 0 24 42" aria-hidden="true" focusable="false">
+    <path d="m12 2 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9L12 2Z" fill="currentColor" stroke="none"></path>
+    <path d="m12 2 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9L12 2Z" transform="translate(0 20)" fill="none"></path>
   </svg>
 </button>
 <div class="toast" id="toast"></div>
