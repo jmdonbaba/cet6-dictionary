@@ -103,6 +103,23 @@ body {
 @media (max-width: 1000px) {
   .page-jump-controls { display: none !important; }
 }
+.unfavorited-jump-btn {
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 30;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+}
+.unfavorited-jump-btn[hidden] { display: none; }
+.unfavorited-jump-btn .page-jump-icon { width: 24px; height: 24px; }
+@media (max-width: 500px) {
+  .unfavorited-jump-btn {
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+  }
+}
 
 .header { text-align: center; padding: 32px 0 24px; }
 .header h1 { font-size: 28px; font-weight: 700; color: var(--primary); }
@@ -747,6 +764,11 @@ body {
     </svg>
   </button>
 </nav>
+<button class="page-jump-btn page-jump-btn-primary unfavorited-jump-btn" id="btnJumpUnfavorited" type="button" aria-label="定位到第一个未收藏的卡片" hidden>
+  <svg class="page-jump-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path d="m12 3 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2L3.2 9.6l6-.9L12 3Z"></path>
+  </svg>
+</button>
 <div class="toast" id="toast"></div>
 <input type="file" id="importFileInput" accept=".json,application/json" style="display:none">
 
@@ -827,6 +849,7 @@ const $wsModules = document.getElementById('wordSearchModules');
 const $pageJumpControls = document.getElementById('pageJumpControls');
 const $btnJumpTop = document.getElementById('btnJumpTop');
 const $btnJumpBottom = document.getElementById('btnJumpBottom');
+const $btnJumpUnfavorited = document.getElementById('btnJumpUnfavorited');
 const $vocabFavCnt = document.getElementById('vocabFavCount');
 const $modalOverlay = document.getElementById('modalOverlay');
 const $modalVocabFav = document.getElementById('modalVocabFav');
@@ -852,6 +875,7 @@ function updatePageJumpControls() {
   const scrollable = scrollHeight > clientHeight + 1;
   const modalOpen = $modalOverlay.style.display !== 'none';
   $pageJumpControls.hidden = !scrollable || modalOpen;
+  $btnJumpUnfavorited.hidden = modalOpen;
   $btnJumpTop.disabled = scrollTop <= 1;
   $btnJumpBottom.disabled = scrollTop + clientHeight >= scrollHeight - 1;
 }
@@ -868,8 +892,35 @@ function jumpToPageEdge(edge) {
   });
 }
 
+function jumpToFirstUnfavoritedCard() {
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reducedMotion) {
+    $btnJumpUnfavorited.getAnimations().forEach(animation => animation.cancel());
+    $btnJumpUnfavorited.animate([
+      { transform: 'scale(.9)', offset: 0 },
+      { transform: 'scale(1.1)', offset: .4 },
+      { transform: 'scale(.97)', offset: .7 },
+      { transform: 'scale(1)', offset: 1 }
+    ], { duration: 420, easing: 'cubic-bezier(.22, .8, .3, 1)' });
+  }
+  const favoriteWords = new Set(getVFavs().map(favorite => favorite.word.toLowerCase()));
+  const cards = Array.from($wsModules.querySelectorAll('.word-search-wrapper')).filter(card =>
+    !card._searching && card._wordData && card.querySelector('.btn-favorite'));
+  const target = cards.find(card => !favoriteWords.has(card._wordData.word.toLowerCase()));
+  if (!target) {
+    toast(cards.length ? '当前卡片都已收藏' : '当前没有可收藏的卡片');
+    return;
+  }
+  target.querySelector('.btn-favorite').focus({ preventScroll: true });
+  window.scrollTo({
+    top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - 24),
+    behavior: reducedMotion ? 'auto' : 'smooth'
+  });
+}
+
 $btnJumpTop.addEventListener('click', () => jumpToPageEdge('top'));
 $btnJumpBottom.addEventListener('click', () => jumpToPageEdge('bottom'));
+$btnJumpUnfavorited.addEventListener('click', jumpToFirstUnfavoritedCard);
 window.addEventListener('scroll', schedulePageJumpUpdate, { passive: true });
 window.addEventListener('resize', schedulePageJumpUpdate);
 const $keyGuide = document.querySelector('.key-guide');
