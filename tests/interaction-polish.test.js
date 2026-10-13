@@ -16,7 +16,7 @@ test('adds restrained spring entrances and button press feedback', () => {
   assert.match(source, /\.modal-card\.active\s*\{[^}]*animation:\s*surface-spring-in 260ms/);
   assert.match(source, /\.study-export-menu:not\(\[hidden\]\)\s*\{[^}]*animation:\s*surface-spring-in 180ms/);
   assert.match(source, /\.word-result\s*>\s*\*\s*\{[^}]*animation:\s*content-reveal 220ms/);
-  assert.match(source, /button:not\(:disabled\):active\s*\{[^}]*transform:\s*scale\(\.98\)/);
+  assert.match(source, /button:not\(:disabled\):active\s*\{[^}]*scale:\s*\.96;/);
 });
 
 test('animates toast movement and honors reduced motion', () => {
