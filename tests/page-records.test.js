@@ -343,11 +343,11 @@ test('restoring in another tab during confirmation leaves the saved page availab
   assert.equal(first.getPageRecords().length, 1);
 });
 
-test('the recovery dialog explains that records stay saved until manually deleted', () => {
+test('the recovery dialog explains that records stay saved after recovery', () => {
   const hint = source.match(/<p class="page-record-hint">([^<]*)<\/p>/);
   assert.ok(hint);
   assert.match(hint[1], /恢复后.*保留/);
-  assert.match(hint[1], /手动删除/);
+  assert.equal(hint[1], '选择一条记录恢复。恢复后记录仍会保留。');
 });
 
 test('candidate previews are escaped and retain the original word data', () => {
