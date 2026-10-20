@@ -13,7 +13,7 @@ function loadHelpers(names, context = {}) {
     ...(names.includes('restoreWordSearchSession') ? ['applyWordSearchCards'] : [])
   ]));
   const functions = names.map(name => {
-    const match = source.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
+    const match = source.match(new RegExp(`(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`));
     assert.ok(match, `${name} must exist`);
     return match[0];
   }).join('\n');
@@ -236,7 +236,7 @@ test('failed card replacement keeps the existing page intact', () => {
   assert.equal(h.modules[0], original);
 });
 
-test('manual recovery renders results and updates the tab snapshot while retaining the saved record', () => {
+test('manual recovery renders results and updates the tab snapshot while retaining the saved record', async () => {
   const h = sessionHarness();
   const prefix = 'cet6_dictionary_page_record_';
   h.modules.push(card('current', 'lemma', { word: 'current' }));
@@ -250,12 +250,13 @@ test('manual recovery renders results and updates the tab snapshot while retaini
   ], {
     ...h.context,
     PAGE_RECORD_PREFIX: prefix,
+    getSavedPageStore: () => ({ get: async id => h.storage.get(prefix + id) || null }),
     localStorage: { ...h.context.localStorage, removeItem: key => h.storage.delete(key) },
     confirm: () => true, esc: value => String(value),
     renderPageRecords: () => {}, closeModal: () => {}, schedulePageJumpUpdate: () => {},
     window: { scrollTo: () => {} }, matchMedia: () => ({ matches: true })
   });
-  assert.equal(restorePageRecord('saved'), true);
+  assert.equal(await restorePageRecord('saved'), true);
   assert.equal(h.modules.length, 1);
   assert.equal(h.modules[0].mode, 'original');
   assert.match(h.modules[0].querySelector('.word-search-result').innerHTML, /渴望/);

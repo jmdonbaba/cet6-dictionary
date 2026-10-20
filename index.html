@@ -896,6 +896,7 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
 </div>
 
 <script src="study-export.js"></script>
+<script src="saved-page-store.js"></script>
 <script>
 // ==================== 配置 ====================
 const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions';
@@ -904,6 +905,18 @@ const VFAV_KEY = 'cet6_vocab_favorites';
 const KEY_STORAGE = 'cet6_api_key';
 const WORD_SEARCH_SESSION_KEY = 'cet6_dictionary_cards';
 const PAGE_RECORD_PREFIX = 'cet6_dictionary_page_record_';
+let savedPageStore = null;
+let pageRecordRenderVersion = 0;
+const savedPageChannel = typeof BroadcastChannel === 'function'
+  ? new BroadcastChannel('cet6_dictionary_saved_pages') : null;
+
+function getSavedPageStore() {
+  if (!savedPageStore) savedPageStore = SavedPageStore.create({
+    indexedDB: window.indexedDB, legacyStorage: () => localStorage, prefix: PAGE_RECORD_PREFIX,
+    onChange: () => { try { savedPageChannel?.postMessage(null); } catch {} }
+  });
+  return savedPageStore;
+}
 
 function getApiKey() {
   try { return localStorage.getItem(KEY_STORAGE) || ''; }
@@ -1736,8 +1749,8 @@ function hasWordSearchContent() {
     (wrapper._wordData && wrapper._wordData.word) || wrapper.querySelector('.word-search-input').value.trim());
 }
 
-function readPageRecord(id) {
-  const raw = localStorage.getItem(PAGE_RECORD_PREFIX + id);
+async function readPageRecord(id, raw) {
+  if (raw === undefined) raw = await getSavedPageStore().get(id);
   if (!raw) return null;
   try {
     const saved = JSON.parse(raw);
@@ -1748,19 +1761,17 @@ function readPageRecord(id) {
   } catch { return null; }
 }
 
-function getPageRecords(onUnreadable) {
+async function getPageRecords(onUnreadable) {
   const records = [];
-  for (let index = 0; index < localStorage.length; index++) {
-    const key = localStorage.key(index);
-    if (!key || !key.startsWith(PAGE_RECORD_PREFIX)) continue;
-    const record = readPageRecord(key.slice(PAGE_RECORD_PREFIX.length));
+  for (const [id, raw] of await getSavedPageStore().entries()) {
+    const record = await readPageRecord(id, raw);
     if (record) records.push(record);
     else if (onUnreadable) onUnreadable();
   }
   return records.sort((a, b) => b.savedAt - a.savedAt || b.id.localeCompare(a.id));
 }
 
-function savePageRecord() {
+async function savePageRecord() {
   if (Array.from($wsModules.querySelectorAll('.word-search-wrapper')).some(wrapper => wrapper._searching)) {
     toast('仍有单词正在查询，请等待查询完成后再保存页面');
     return false;
@@ -1770,10 +1781,10 @@ function savePageRecord() {
     const id = typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
     const record = { version: 1, savedAt: Date.now(), cards: captureWordSearchCards() };
-    // Separate keys prevent another tab's save from overwriting this record.
+    // A readback from localStorage does not acknowledge a disk commit.
     const snapshot = JSON.stringify(record);
-    localStorage.setItem(PAGE_RECORD_PREFIX + id, snapshot);
-    if (localStorage.getItem(PAGE_RECORD_PREFIX + id) !== snapshot) throw new Error('保存校验失败');
+    await getSavedPageStore().addMany([{ id, raw: snapshot }]);
+    if (await getSavedPageStore().get(id) !== snapshot) throw new Error('保存校验失败');
     // Best effort protection from automatic eviction; browsers may deny this request.
     try {
       if (typeof navigator !== 'undefined' && typeof navigator.storage?.persist === 'function') {
@@ -1788,10 +1799,12 @@ function savePageRecord() {
   }
 }
 
-function renderPageRecords() {
+async function renderPageRecords() {
+  const version = ++pageRecordRenderVersion;
   try {
     let unreadable = 0;
-    const records = getPageRecords(() => { unreadable++; });
+    const records = await getPageRecords(() => { unreadable++; });
+    if (version !== pageRecordRenderVersion) return;
     $pageRecordList.innerHTML = records.length ? records.map(record => {
       const words = record.cards.map(card => card.result ? card.result.word : card.input.trim()).filter(Boolean);
       const preview = words.slice(0, 4).join(' · ') + (words.length > 4 ? ' …' : '');
@@ -1805,31 +1818,36 @@ function renderPageRecords() {
     }).join('') : (unreadable ? '' : '<div class="empty-state">还没有保存的页面，点击“保存页面”即可添加</div>');
     if (unreadable) $pageRecordList.innerHTML += `<div class="empty-state">${unreadable} 条保存记录读取失败，原始数据仍保留。</div>`;
   } catch {
+    if (version !== pageRecordRenderVersion) return;
     $pageRecordList.innerHTML = '<div class="empty-state">无法读取保存记录，请检查浏览器存储设置</div>';
   }
 }
 
-function deletePageRecord(id) {
+async function deletePageRecord(id) {
   try {
-    localStorage.removeItem(PAGE_RECORD_PREFIX + id);
+    await getSavedPageStore().removeMany([id]);
   } catch {
     toast('记录删除失败，请重试');
     return false;
   }
-  renderPageRecords();
+  await renderPageRecords();
   return true;
 }
 
-function restorePageRecord(id) {
+async function restorePageRecord(id) {
   let record;
-  try { record = readPageRecord(id); } catch {}
-  if (!record) { toast('记录已被删除或无法读取'); renderPageRecords(); return false; }
-  if (hasWordSearchContent() && !confirm('恢复此记录将覆盖当前页面，是否继续？')) return false;
+  let approvedSnapshot;
+  // Re-read after confirmation, and protect edits made while an async read was pending.
+  while (true) {
+    try { record = await readPageRecord(id); } catch { record = null; }
+    if (!record) { toast('记录已被删除或无法读取'); await renderPageRecords(); return false; }
+    const currentSnapshot = JSON.stringify(captureWordSearchCards());
+    if (approvedSnapshot === currentSnapshot) break;
+    if (hasWordSearchContent() && !confirm('恢复此记录将覆盖当前页面，是否继续？')) return false;
+    approvedSnapshot = currentSnapshot;
+  }
   const previousNodes = Array.from($wsModules.childNodes);
   try {
-    // Recheck after confirmation in case another tab deleted the record.
-    record = readPageRecord(id);
-    if (!record) { toast('记录已被删除或无法读取'); renderPageRecords(); return false; }
     applyWordSearchCards(record.cards);
     if (!saveWordSearchSession()) throw new Error('卡片保存失败');
     // Keep the durable record: the tab snapshot alone may not survive a restart.
@@ -1926,19 +1944,20 @@ document.addEventListener('keydown', e => {
 document.getElementById('btnOpenVocabFav').addEventListener('click', () => openModal($modalVocabFav));
 document.getElementById('btnClearPage').addEventListener('click', clearPage);
 document.getElementById('btnSavePage').addEventListener('click', savePageRecord);
-document.getElementById('btnRestorePage').addEventListener('click', () => {
-  renderPageRecords();
+document.getElementById('btnRestorePage').addEventListener('click', async () => {
   openModal($modalRestorePage);
+  $pageRecordList.innerHTML = '<div class="empty-state">正在读取保存记录...</div>';
+  await renderPageRecords();
   const firstChoice = $pageRecordList.querySelector('.page-record-item');
   if (firstChoice) firstChoice.focus();
   else $modalRestorePage.querySelector('.modal-close').focus();
 });
-$pageRecordList.addEventListener('click', e => {
+$pageRecordList.addEventListener('click', async e => {
   const deletion = e.target.closest('[data-page-record-delete]');
   if (deletion) {
     const buttons = Array.from($pageRecordList.querySelectorAll('[data-page-record-delete]'));
     const index = buttons.indexOf(deletion);
-    if (deletePageRecord(deletion.dataset.pageRecordDelete)) {
+    if (await deletePageRecord(deletion.dataset.pageRecordDelete)) {
       const remaining = $pageRecordList.querySelectorAll('[data-page-record-delete]');
       const next = remaining[Math.min(index, remaining.length - 1)];
       if (next) next.focus();
@@ -1949,8 +1968,16 @@ $pageRecordList.addEventListener('click', e => {
   const choice = e.target.closest('[data-page-record-id]');
   if (choice) restorePageRecord(choice.dataset.pageRecordId);
 });
-window.addEventListener('storage', e => {
-  if ((e.key === null || e.key.startsWith(PAGE_RECORD_PREFIX)) && $modalRestorePage.classList.contains('active')) renderPageRecords();
+window.addEventListener('storage', async e => {
+  if (e.key !== null && !e.key.startsWith(PAGE_RECORD_PREFIX)) return;
+  try { await getSavedPageStore().refreshLegacy(); } catch {}
+  if ($modalRestorePage.classList.contains('active')) renderPageRecords();
+});
+savedPageChannel?.addEventListener('message', () => {
+  if ($modalRestorePage.classList.contains('active')) renderPageRecords();
+});
+window.addEventListener('focus', () => {
+  if ($modalRestorePage.classList.contains('active')) renderPageRecords();
 });
 
 $btnStudyExport.addEventListener('click', () => {
@@ -2643,7 +2670,7 @@ document.addEventListener('click', function (e) {
 });
 
 // ==================== Data Import / Export ====================
-function exportData() {
+async function exportData() {
   let data;
   try {
     data = {
@@ -2651,7 +2678,7 @@ function exportData() {
       exportedAt: fmtTime(new Date()),
       apiKey: getApiKey(),
       favorites: getVFavs(),
-      pageRecords: getPageRecords(() => { throw new Error('保存记录无法读取'); })
+      pageRecords: await getPageRecords(() => { throw new Error('保存记录无法读取'); })
     };
   } catch {
     toast('数据导出失败，无法读取保存页面，请检查浏览器存储设置');
@@ -2675,6 +2702,7 @@ function exportData() {
 document.getElementById('btnExportData').addEventListener('click', exportData);
 
 let _pendingImport = null;
+let dataImportRunning = false;
 
 function importData(file) {
   const reader = new FileReader();
@@ -2718,7 +2746,7 @@ function mergeFavorites(existing, incoming) {
   return merged;
 }
 
-function importPageRecords(records, addedKeys = []) {
+async function importPageRecords(records, addedKeys = []) {
   if (records === undefined) return true; // Older backups contain only favorites and the key.
   try {
     if (!Array.isArray(records)) throw new Error('页面记录格式无效');
@@ -2731,64 +2759,72 @@ function importPageRecords(records, addedKeys = []) {
       if (cards.some(card => !card)) throw new Error('页面卡片格式无效');
       return JSON.stringify({ version: 1, savedAt: record.savedAt, cards });
     });
-    const existing = new Set(getPageRecords().map(record =>
+    const existing = new Set((await getPageRecords()).map(record =>
       JSON.stringify({ version: 1, savedAt: record.savedAt, cards: record.cards })));
+    const entries = [];
     for (const snapshot of snapshots) {
       if (existing.has(snapshot)) continue;
-      let key;
+      let id;
       do {
-        const id = typeof crypto.randomUUID === 'function'
+        id = typeof crypto.randomUUID === 'function'
           ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-        key = PAGE_RECORD_PREFIX + id;
-      } while (localStorage.getItem(key) !== null);
-      addedKeys.push(key);
-      localStorage.setItem(key, snapshot);
-      if (localStorage.getItem(key) !== snapshot) throw new Error('保存校验失败');
+      } while (await getSavedPageStore().has(id) || entries.some(entry => entry.id === id));
+      entries.push({ id, raw: snapshot });
       existing.add(snapshot);
+    }
+    if (entries.length) {
+      await getSavedPageStore().addMany(entries);
+      addedKeys.push(...entries.map(entry => entry.id));
     }
     return true;
   } catch {
-    addedKeys.forEach(key => { try { localStorage.removeItem(key); } catch {} });
+    if (addedKeys.length) { try { await getSavedPageStore().removeMany(addedKeys); } catch {} }
     toast('页面记录导入失败，请检查备份文件和浏览器存储空间；已有记录已保留');
     return false;
   }
 }
 
-function applyImport(mode, data) {
-  if (!['overwrite', 'merge'].includes(mode)) return;
+async function applyImport(mode, data) {
+  if (dataImportRunning || !['overwrite', 'merge'].includes(mode)) return;
   if (mode === 'overwrite' && !confirm('确定要覆盖导入吗？当前浏览器中的收藏将被替换为文件内容，保存页面记录将合并保留。')) return;
+  dataImportRunning = true;
   const addedPageKeys = [];
   const written = [];
   try {
     const incoming = (Array.isArray(data.favorites) ? data.favorites : []).filter(f => f && typeof f.word === 'string');
+    if (!await importPageRecords(data.pageRecords, addedPageKeys)) return;
+    // Read current browser data after the asynchronous page writes, then update without yielding.
     const favorites = mode === 'overwrite' ? incoming : mergeFavorites(getVFavs(), incoming);
     const importedKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
     const entries = [[VFAV_KEY, JSON.stringify(favorites)]];
     if (mode === 'overwrite' || importedKey) entries.push([KEY_STORAGE, importedKey]);
     const changes = entries.map(([key, value]) => ({ key, value, previous: localStorage.getItem(key) }));
-    if (!importPageRecords(data.pageRecords, addedPageKeys)) return;
     for (const change of changes) {
-      written.push(change);
       localStorage.setItem(change.key, change.value);
+      written.push(change);
       if (localStorage.getItem(change.key) !== change.value) throw new Error('保存校验失败');
     }
     _favoritesSearchCache = favorites;
   } catch {
     let rollbackFailed = false;
-    // Free any new page storage first so the original favorites/key can be restored.
-    addedPageKeys.forEach(key => { try { localStorage.removeItem(key); } catch { rollbackFailed = true; } });
-    written.reverse().forEach(({ key, previous }) => {
+    // Restore our local writes before yielding again; never overwrite another tab's newer value.
+    written.reverse().forEach(({ key, value, previous }) => {
       try {
-        if (localStorage.getItem(key) === previous) return;
+        const current = localStorage.getItem(key);
+        if (current === previous) return;
+        if (current !== value) { rollbackFailed = true; return; }
         if (previous === null) localStorage.removeItem(key);
         else localStorage.setItem(key, previous);
         if (localStorage.getItem(key) !== previous) rollbackFailed = true;
       } catch { rollbackFailed = true; }
     });
+    if (addedPageKeys.length) {
+      try { await getSavedPageStore().removeMany(addedPageKeys); } catch { rollbackFailed = true; }
+    }
     toast(rollbackFailed ? '数据导入失败，部分数据可能已写入，请保留备份文件后重试'
       : '数据导入失败，已有数据已保留，请检查浏览器存储空间');
     return;
-  }
+  } finally { dataImportRunning = false; }
   closeModal();
   renderVFavs();
   updateAllVocabButtons();
