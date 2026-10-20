@@ -872,7 +872,8 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
       <button class="modal-close" data-close="modalRestorePage" aria-label="关闭恢复页面">&times;</button>
     </div>
     <div class="modal-body">
-      <p class="page-record-hint">选择一条记录恢复，恢复成功后该记录会自动删除。</p>
+      <p class="page-record-hint">选择一条记录恢复。恢复后记录仍会保留，可重复恢复；不再需要时请手动删除。</p>
+      <p class="page-record-hint">记录保存在当前浏览器。无痕模式或清除网站数据会导致丢失，重要页面请通过底部“导出数据”备份。</p>
       <div id="pageRecordList"></div>
     </div>
   </div>
@@ -1729,7 +1730,7 @@ function clearPage() {
   return true;
 }
 
-// ==================== One-time saved pages ====================
+// ==================== Saved pages ====================
 function hasWordSearchContent() {
   return Array.from($wsModules.querySelectorAll('.word-search-wrapper')).some(wrapper =>
     (wrapper._wordData && wrapper._wordData.word) || wrapper.querySelector('.word-search-input').value.trim());
@@ -1747,25 +1748,38 @@ function readPageRecord(id) {
   } catch { return null; }
 }
 
-function getPageRecords() {
+function getPageRecords(onUnreadable) {
   const records = [];
   for (let index = 0; index < localStorage.length; index++) {
     const key = localStorage.key(index);
     if (!key || !key.startsWith(PAGE_RECORD_PREFIX)) continue;
     const record = readPageRecord(key.slice(PAGE_RECORD_PREFIX.length));
     if (record) records.push(record);
+    else if (onUnreadable) onUnreadable();
   }
   return records.sort((a, b) => b.savedAt - a.savedAt || b.id.localeCompare(a.id));
 }
 
 function savePageRecord() {
+  if (Array.from($wsModules.querySelectorAll('.word-search-wrapper')).some(wrapper => wrapper._searching)) {
+    toast('仍有单词正在查询，请等待查询完成后再保存页面');
+    return false;
+  }
   if (!hasWordSearchContent()) { toast('当前页面没有可保存的单词'); return false; }
   try {
     const id = typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
     const record = { version: 1, savedAt: Date.now(), cards: captureWordSearchCards() };
     // Separate keys prevent another tab's save from overwriting this record.
-    localStorage.setItem(PAGE_RECORD_PREFIX + id, JSON.stringify(record));
+    const snapshot = JSON.stringify(record);
+    localStorage.setItem(PAGE_RECORD_PREFIX + id, snapshot);
+    if (localStorage.getItem(PAGE_RECORD_PREFIX + id) !== snapshot) throw new Error('保存校验失败');
+    // Best effort protection from automatic eviction; browsers may deny this request.
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.storage?.persist === 'function') {
+        Promise.resolve(navigator.storage.persist()).catch(() => {});
+      }
+    } catch {}
     toast('页面已保存，可在“恢复页面”中找到');
     return true;
   } catch {
@@ -1776,7 +1790,8 @@ function savePageRecord() {
 
 function renderPageRecords() {
   try {
-    const records = getPageRecords();
+    let unreadable = 0;
+    const records = getPageRecords(() => { unreadable++; });
     $pageRecordList.innerHTML = records.length ? records.map(record => {
       const words = record.cards.map(card => card.result ? card.result.word : card.input.trim()).filter(Boolean);
       const preview = words.slice(0, 4).join(' · ') + (words.length > 4 ? ' …' : '');
@@ -1787,7 +1802,8 @@ function renderPageRecords() {
         </button>
         <button type="button" class="page-record-delete" data-page-record-delete="${escAttr(record.id)}" aria-label="删除此记录" title="删除记录"><span aria-hidden="true">×</span></button>
       </div>`;
-    }).join('') : '<div class="empty-state">还没有保存的页面，点击“保存页面”即可添加</div>';
+    }).join('') : (unreadable ? '' : '<div class="empty-state">还没有保存的页面，点击“保存页面”即可添加</div>');
+    if (unreadable) $pageRecordList.innerHTML += `<div class="empty-state">${unreadable} 条保存记录读取失败，原始数据仍保留。</div>`;
   } catch {
     $pageRecordList.innerHTML = '<div class="empty-state">无法读取保存记录，请检查浏览器存储设置</div>';
   }
@@ -1807,16 +1823,16 @@ function deletePageRecord(id) {
 function restorePageRecord(id) {
   let record;
   try { record = readPageRecord(id); } catch {}
-  if (!record) { toast('记录已被恢复或无法读取'); renderPageRecords(); return false; }
+  if (!record) { toast('记录已被删除或无法读取'); renderPageRecords(); return false; }
   if (hasWordSearchContent() && !confirm('恢复此记录将覆盖当前页面，是否继续？')) return false;
   const previousNodes = Array.from($wsModules.childNodes);
   try {
-    // Recheck after confirmation in case another tab consumed the record.
+    // Recheck after confirmation in case another tab deleted the record.
     record = readPageRecord(id);
-    if (!record) { toast('记录已被恢复或无法读取'); renderPageRecords(); return false; }
+    if (!record) { toast('记录已被删除或无法读取'); renderPageRecords(); return false; }
     applyWordSearchCards(record.cards);
     if (!saveWordSearchSession()) throw new Error('卡片保存失败');
-    localStorage.removeItem(PAGE_RECORD_PREFIX + id);
+    // Keep the durable record: the tab snapshot alone may not survive a restart.
   } catch {
     $wsModules.replaceChildren(...previousNodes);
     updateMinusButtons();
@@ -2628,12 +2644,19 @@ document.addEventListener('click', function (e) {
 
 // ==================== Data Import / Export ====================
 function exportData() {
-  const data = {
-    version: 1,
-    exportedAt: fmtTime(new Date()),
-    apiKey: getApiKey(),
-    favorites: getVFavs()
-  };
+  let data;
+  try {
+    data = {
+      version: 2,
+      exportedAt: fmtTime(new Date()),
+      apiKey: getApiKey(),
+      favorites: getVFavs(),
+      pageRecords: getPageRecords(() => { throw new Error('保存记录无法读取'); })
+    };
+  } catch {
+    toast('数据导出失败，无法读取保存页面，请检查浏览器存储设置');
+    return false;
+  }
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2669,9 +2692,10 @@ function importData(file) {
     }
     _pendingImport = data;
     const favCount = data.favorites.length;
+    const pageCount = Array.isArray(data.pageRecords) ? data.pageRecords.length : 0;
     const hasKey = typeof data.apiKey === 'string' && data.apiKey.trim() !== '';
     document.getElementById('importSummary').textContent =
-      `文件包含 ${favCount} 条收藏${hasKey ? ' 和 API Key' : ''}。请选择导入方式：`;
+      `文件包含 ${favCount} 条收藏、${pageCount} 条页面记录${hasKey ? ' 和 API Key' : ''}。页面记录会合并保留，请选择收藏的导入方式：`;
     openModal(document.getElementById('modalImportChoice'));
   };
   reader.onerror = function () {
@@ -2694,17 +2718,75 @@ function mergeFavorites(existing, incoming) {
   return merged;
 }
 
+function importPageRecords(records, addedKeys = []) {
+  if (records === undefined) return true; // Older backups contain only favorites and the key.
+  try {
+    if (!Array.isArray(records)) throw new Error('页面记录格式无效');
+    // Validate the entire batch before writing; never replace an existing saved page.
+    const snapshots = records.map(record => {
+      if (!record || !Number.isFinite(record.savedAt) || !Array.isArray(record.cards) || !record.cards.length) {
+        throw new Error('页面记录格式无效');
+      }
+      const cards = record.cards.map(normalizeWordSearchCard);
+      if (cards.some(card => !card)) throw new Error('页面卡片格式无效');
+      return JSON.stringify({ version: 1, savedAt: record.savedAt, cards });
+    });
+    const existing = new Set(getPageRecords().map(record =>
+      JSON.stringify({ version: 1, savedAt: record.savedAt, cards: record.cards })));
+    for (const snapshot of snapshots) {
+      if (existing.has(snapshot)) continue;
+      let key;
+      do {
+        const id = typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
+        key = PAGE_RECORD_PREFIX + id;
+      } while (localStorage.getItem(key) !== null);
+      addedKeys.push(key);
+      localStorage.setItem(key, snapshot);
+      if (localStorage.getItem(key) !== snapshot) throw new Error('保存校验失败');
+      existing.add(snapshot);
+    }
+    return true;
+  } catch {
+    addedKeys.forEach(key => { try { localStorage.removeItem(key); } catch {} });
+    toast('页面记录导入失败，请检查备份文件和浏览器存储空间；已有记录已保留');
+    return false;
+  }
+}
+
 function applyImport(mode, data) {
-  if (mode === 'overwrite') {
-    if (!confirm('确定要覆盖导入吗？当前浏览器中的收藏将被替换为文件内容。')) return;
-    setVFavs((Array.isArray(data.favorites) ? data.favorites : []).filter(f => f && typeof f.word === 'string'));
-    setApiKey(typeof data.apiKey === 'string' ? data.apiKey : '');
-  } else if (mode === 'merge') {
-    const merged = mergeFavorites(getVFavs(), Array.isArray(data.favorites) ? data.favorites : []);
-    setVFavs(merged);
+  if (!['overwrite', 'merge'].includes(mode)) return;
+  if (mode === 'overwrite' && !confirm('确定要覆盖导入吗？当前浏览器中的收藏将被替换为文件内容，保存页面记录将合并保留。')) return;
+  const addedPageKeys = [];
+  const written = [];
+  try {
+    const incoming = (Array.isArray(data.favorites) ? data.favorites : []).filter(f => f && typeof f.word === 'string');
+    const favorites = mode === 'overwrite' ? incoming : mergeFavorites(getVFavs(), incoming);
     const importedKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
-    if (importedKey) setApiKey(importedKey);
-  } else {
+    const entries = [[VFAV_KEY, JSON.stringify(favorites)]];
+    if (mode === 'overwrite' || importedKey) entries.push([KEY_STORAGE, importedKey]);
+    const changes = entries.map(([key, value]) => ({ key, value, previous: localStorage.getItem(key) }));
+    if (!importPageRecords(data.pageRecords, addedPageKeys)) return;
+    for (const change of changes) {
+      written.push(change);
+      localStorage.setItem(change.key, change.value);
+      if (localStorage.getItem(change.key) !== change.value) throw new Error('保存校验失败');
+    }
+    _favoritesSearchCache = favorites;
+  } catch {
+    let rollbackFailed = false;
+    // Free any new page storage first so the original favorites/key can be restored.
+    addedPageKeys.forEach(key => { try { localStorage.removeItem(key); } catch { rollbackFailed = true; } });
+    written.reverse().forEach(({ key, previous }) => {
+      try {
+        if (localStorage.getItem(key) === previous) return;
+        if (previous === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, previous);
+        if (localStorage.getItem(key) !== previous) rollbackFailed = true;
+      } catch { rollbackFailed = true; }
+    });
+    toast(rollbackFailed ? '数据导入失败，部分数据可能已写入，请保留备份文件后重试'
+      : '数据导入失败，已有数据已保留，请检查浏览器存储空间');
     return;
   }
   closeModal();

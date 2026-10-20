@@ -236,13 +236,14 @@ test('failed card replacement keeps the existing page intact', () => {
   assert.equal(h.modules[0], original);
 });
 
-test('manual recovery uses the actual renderer, updates the tab snapshot and consumes the record', () => {
+test('manual recovery renders results and updates the tab snapshot while retaining the saved record', () => {
   const h = sessionHarness();
   const prefix = 'cet6_dictionary_page_record_';
   h.modules.push(card('current', 'lemma', { word: 'current' }));
   h.storage.set(prefix + 'saved', JSON.stringify({ version: 1, savedAt: 123, cards: [{
     input: 'aspiring', mode: 'original', result: { word: 'aspire', definitions: ['渴望'] }
   }] }));
+  const savedRecord = h.storage.get(prefix + 'saved');
   const { restorePageRecord } = loadHelpers([
     'normalizeWordSearchCard', 'captureWordSearchCards', 'saveWordSearchSession', 'applyWordSearchCards',
     'readPageRecord', 'hasWordSearchContent', 'restorePageRecord', 'renderWordResult', 'renderForms'
@@ -260,7 +261,7 @@ test('manual recovery uses the actual renderer, updates the tab snapshot and con
   assert.match(h.modules[0].querySelector('.word-search-result').innerHTML, /渴望/);
   assert.equal(h.storage.has(storageKey), false);
   assert.equal(JSON.parse(h.tabStorage.get(storageKey)).cards[0].result.word, 'aspire');
-  assert.equal(h.storage.has(prefix + 'saved'), false);
+  assert.equal(h.storage.get(prefix + 'saved'), savedRecord);
   const reloaded = sessionHarness(undefined, false, h.storage, h.tabStorage);
   reloaded.restoreWordSearchSession();
   assert.equal(reloaded.modules[0]._wordData.word, 'aspire');
@@ -268,6 +269,7 @@ test('manual recovery uses the actual renderer, updates the tab snapshot and con
   newTab.restoreWordSearchSession();
   assert.equal(newTab.modules[0].input.value, '');
   assert.equal(newTab.modules[0]._wordData, null);
+  assert.equal(newTab.storage.get(prefix + 'saved'), savedRecord);
 });
 
 test('clearing an empty page shows the exact notice without confirmation or card changes', () => {

@@ -29,7 +29,9 @@ function harness(shared = new Map()) {
   const modules = [];
   const notices = [];
   const confirmations = [];
-  const controls = { answer: true, failRender: false, failSave: false, failWrite: false, failDelete: false };
+  const controls = { answer: true, failRender: false, failSave: false, failWrite: false, failDelete: false,
+    discardWrite: false, corruptWrite: false };
+  const persistenceRequests = [];
   const context = {
     $wsModules: {
       get childNodes() { return modules; },
@@ -41,7 +43,7 @@ function harness(shared = new Map()) {
       getItem: key => shared.get(key) || null,
       setItem: (key, value) => {
         if (controls.failWrite) throw new Error('storage full');
-        shared.set(key, value);
+        if (!controls.discardWrite) shared.set(key, controls.corruptWrite ? '{bad' : value);
       },
       removeItem: key => {
         if (controls.failDelete) throw new Error('storage blocked');
@@ -49,6 +51,7 @@ function harness(shared = new Map()) {
       }
     },
     crypto: { randomUUID: () => `record-${++nextId}` },
+    navigator: { storage: { persist: () => { persistenceRequests.push(true); return Promise.resolve(true); } } },
     getSearchMode: () => 'original',
     applyWordSearchCards: cards => {
       if (controls.failRender) throw new Error('render failed');
@@ -67,8 +70,57 @@ function harness(shared = new Map()) {
     'normalizeWordSearchCard', 'captureWordSearchCards', 'hasWordSearchContent',
     'readPageRecord', 'getPageRecords', 'savePageRecord', 'restorePageRecord', 'deletePageRecord'
   ], context);
-  return { ...helpers, modules, shared, notices, confirmations, controls, context };
+  return { ...helpers, modules, shared, notices, confirmations, controls, context, persistenceRequests };
 }
+
+test('saving while any lookup is pending reports that the page is incomplete', () => {
+  const h = harness();
+  h.modules.push(makeCard('complete', { word: 'complete' }), { ...makeCard('pending'), _searching: true });
+  assert.equal(h.savePageRecord(), false);
+  assert.equal(h.getPageRecords().length, 0);
+  assert.match(h.notices.at(-1), /查询.*完成|查询.*保存/);
+  assert.equal(h.persistenceRequests.length, 0);
+  h.modules[1]._wordData = { word: 'pending', definitions: ['稍后返回的释义'] };
+  h.modules[1]._searching = false;
+  assert.equal(h.savePageRecord(), true);
+  const reopened = harness(h.shared);
+  assert.equal(reopened.getPageRecords()[0].cards[1].result.definitions[0], '稍后返回的释义');
+});
+
+test('a save is not reported as successful when the stored value is missing or corrupt', () => {
+  for (const failure of ['discardWrite', 'corruptWrite']) {
+    const h = harness();
+    h.modules.push(makeCard('saved', { word: 'saved' }));
+    h.controls[failure] = true;
+    assert.equal(h.savePageRecord(), false, failure);
+    assert.match(h.notices.at(-1), /保存失败/);
+    assert.equal(h.persistenceRequests.length, 0);
+  }
+});
+
+test('successful manual saving requests persistent browser storage', async () => {
+  const h = harness();
+  h.modules.push(makeCard('saved'));
+  assert.equal(h.savePageRecord(), true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.persistenceRequests.length, 1);
+});
+
+test('unsupported, denied or failing persistence protection does not lose a verified save', async () => {
+  for (const navigator of [{}, { storage: { persist: () => Promise.resolve(false) } },
+    { storage: { persist: () => Promise.reject(new Error('denied')) } },
+    { storage: { persist: () => { throw new Error('unsupported'); } } }]) {
+    const h = harness();
+    h.modules.push(makeCard('saved'));
+    const { savePageRecord } = loadHelpers(['savePageRecord'], {
+      ...h.context, hasWordSearchContent: h.hasWordSearchContent, captureWordSearchCards: h.captureWordSearchCards,
+      navigator
+    });
+    assert.equal(savePageRecord(), true);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.getPageRecords().length, 1);
+  }
+});
 
 test('saving creates independent unnamed records with complete cards and no credentials', () => {
   const h = harness();
@@ -88,7 +140,7 @@ test('saving creates independent unnamed records with complete cards and no cred
   assert.ok(records.every(record => typeof record.savedAt === 'number'));
 });
 
-test('saved candidates survive closing every tab and reopening with fresh runtime state', () => {
+test('saved pages remain recoverable after restoring and closing every tab again', () => {
   const shared = new Map();
   const before = harness(shared);
   before.modules.push(makeCard('aspire', { word: 'aspire', definitions: ['渴望'] }));
@@ -99,8 +151,15 @@ test('saved candidates survive closing every tab and reopening with fresh runtim
   after.modules.push(makeCard(''));
   assert.equal(after.restorePageRecord(record.id), true);
   assert.equal(after.modules[0]._wordData.word, 'aspire');
-  assert.equal(after.getPageRecords().length, 0);
+  assert.equal(after.getPageRecords().length, 1);
   assert.deepEqual(after.confirmations, []);
+  const reopened = harness(shared);
+  reopened.modules.push(makeCard(''));
+  assert.equal(reopened.restorePageRecord(record.id), true);
+  assert.equal(reopened.modules[0]._wordData.word, 'aspire');
+  assert.equal(reopened.getPageRecords().length, 1);
+  assert.equal(reopened.deletePageRecord(record.id), true);
+  assert.equal(harness(shared).getPageRecords().length, 0);
 });
 
 test('manual deletion removes only the chosen record across tabs and keeps the current page', () => {
@@ -177,26 +236,27 @@ test('restoring over a word card asks the exact confirmation and cancellation pr
   assert.equal(h.restorePageRecord(id), true);
   assert.equal(h.modules.length, 1);
   assert.equal(h.modules[0]._wordData.word, 'saved');
-  assert.equal(h.getPageRecords().length, 0);
+  assert.equal(h.getPageRecords().length, 1);
 });
 
-test('restoring protects a typed draft and consumes only the selected record', () => {
+test('restoring protects a typed draft and preserves every saved record unchanged', () => {
   const h = harness();
   h.modules.push(makeCard('one'));
   h.savePageRecord();
   const firstId = h.getPageRecords()[0].id;
   h.modules[0].input.value = 'two';
   h.savePageRecord();
+  const saved = Array.from(h.shared);
   h.modules[0].input.value = 'unfinished draft';
   assert.equal(h.restorePageRecord(firstId), true);
   assert.equal(h.confirmations.length, 1);
   assert.equal(h.modules[0].input.value, 'one');
-  assert.equal(h.getPageRecords().length, 1);
-  assert.equal(h.getPageRecords()[0].cards[0].input, 'two');
+  assert.equal(h.getPageRecords().length, 2);
+  assert.deepEqual(Array.from(h.shared), saved);
 });
 
-test('failed rendering, persistence or record deletion preserves the record and current cards', () => {
-  for (const failure of ['failRender', 'failSave', 'failDelete']) {
+test('failed rendering or session persistence preserves the record and current cards', () => {
+  for (const failure of ['failRender', 'failSave']) {
     const h = harness();
     h.modules.push(makeCard('saved'));
     h.savePageRecord();
@@ -210,7 +270,20 @@ test('failed rendering, persistence or record deletion preserves the record and 
   }
 });
 
-test('missing or malformed records cannot clear current cards or be silently consumed', () => {
+test('restoring a saved page does not require changing long-term storage', () => {
+  const h = harness();
+  h.modules.push(makeCard('saved', { word: 'saved' }));
+  h.savePageRecord();
+  const id = h.getPageRecords()[0].id;
+  h.modules.splice(0, h.modules.length, makeCard(''));
+  h.controls.failWrite = true;
+  h.controls.failDelete = true;
+  assert.equal(h.restorePageRecord(id), true);
+  assert.equal(h.modules[0]._wordData.word, 'saved');
+  assert.equal(h.getPageRecords().length, 1);
+});
+
+test('missing or malformed records cannot clear current cards or be silently deleted', () => {
   const h = harness();
   const previous = makeCard('current', { word: 'current' });
   h.modules.push(previous);
@@ -237,7 +310,7 @@ test('empty pages and write failures do not create misleading recovery records',
   assert.equal(h.getPageRecords().length, 0);
 });
 
-test('a record consumed by another tab during confirmation cannot replace the current page', () => {
+test('a record deleted by another tab during confirmation cannot replace the current page', () => {
   const h = harness();
   h.modules.push(makeCard('saved'));
   h.savePageRecord();
@@ -250,6 +323,31 @@ test('a record consumed by another tab during confirmation cannot replace the cu
   });
   assert.equal(restorePageRecord(id), false);
   assert.equal(h.modules[0], previous);
+});
+
+test('restoring in another tab during confirmation leaves the saved page available', () => {
+  const shared = new Map();
+  const first = harness(shared);
+  first.modules.push(makeCard('saved', { word: 'saved' }));
+  first.savePageRecord();
+  const id = first.getPageRecords()[0].id;
+  const second = harness(shared);
+  second.modules.push(makeCard(''));
+  const { restorePageRecord } = loadHelpers(['restorePageRecord'], {
+    ...first.context, readPageRecord: first.readPageRecord, hasWordSearchContent: first.hasWordSearchContent,
+    confirm: () => { assert.equal(second.restorePageRecord(id), true); return true; }
+  });
+  assert.equal(restorePageRecord(id), true);
+  assert.equal(first.modules[0]._wordData.word, 'saved');
+  assert.equal(second.modules[0]._wordData.word, 'saved');
+  assert.equal(first.getPageRecords().length, 1);
+});
+
+test('the recovery dialog explains that records stay saved until manually deleted', () => {
+  const hint = source.match(/<p class="page-record-hint">([^<]*)<\/p>/);
+  assert.ok(hint);
+  assert.match(hint[1], /恢复后.*保留/);
+  assert.match(hint[1], /手动删除/);
 });
 
 test('candidate previews are escaped and retain the original word data', () => {
@@ -291,4 +389,22 @@ test('deleting the final candidate updates the list to the empty state', () => {
   assert.equal(deletePageRecord(id), true);
   assert.match(list.innerHTML, /还没有保存的页面/);
   assert.doesNotMatch(list.innerHTML, /data-page-record-id/);
+});
+
+test('unreadable records remain visible as a read error instead of a misleading empty history', () => {
+  const h = harness(new Map([[prefix + 'damaged', '{bad']]));
+  const list = { innerHTML: '' };
+  const { renderPageRecords } = loadHelpers(['renderPageRecords'], {
+    getPageRecords: h.getPageRecords, $pageRecordList: list,
+    esc: value => String(value), escAttr: value => String(value), fmtTime: () => 'time'
+  });
+  renderPageRecords();
+  assert.match(list.innerHTML, /1 条.*读取失败/);
+  assert.doesNotMatch(list.innerHTML, /还没有保存的页面/);
+  assert.equal(h.shared.get(prefix + 'damaged'), '{bad');
+  h.modules.push(makeCard('valid'));
+  h.savePageRecord();
+  renderPageRecords();
+  assert.match(list.innerHTML, /data-page-record-id/);
+  assert.match(list.innerHTML, /1 条.*读取失败/);
 });
