@@ -355,7 +355,7 @@ body {
   .word-search-wrapper .input-area > div:first-child { flex-basis: 100% !important; }
   .word-result .word-header { align-items: center; gap: 4px; flex-wrap: wrap; }
   .word-result .word-header .word { font-size: 18px; flex-shrink: 0; }
-  .word-result .phonetic { font-size: 12px; white-space: nowrap; }
+  .word-result .phonetic { font-size: 12px; overflow-wrap: anywhere; }
   .word-result .pos { padding: 1px 6px; font-size: 11px; white-space: nowrap; }
   .word-result .btn-favorite { margin-left: auto; flex-shrink: 0; white-space: nowrap; }
   .vf-drag-handle { position: absolute; left: 0; top: 0; bottom: 0; width: 16px; height: auto; margin: 0; }
@@ -1282,6 +1282,10 @@ function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
 }
 
 // ==================== Word Search ====================
+function hasDualPhonetic(value) {
+  return typeof value === 'string' && /^\s*英\s*\/[^/\r\n]+\/\s+美\s*\/[^/\r\n]+\/\s*$/u.test(value);
+}
+
 async function searchWord(word, wrapper, mode) {
   const resultEl = wrapper.querySelector('.word-search-result');
   wrapper._wordData = null;
@@ -1290,20 +1294,21 @@ async function searchWord(word, wrapper, mode) {
 
   const isOriginal = (mode === 'original');
 
-  // Check favorites cache first
+  // Legacy favorites are queried again to fill in both accents.
   const vfavs = getVFavs();
   const cached = vfavs.find(f => f.word.toLowerCase() === word.toLowerCase());
-  if (cached) {
-    renderWordResult(wrapper, resultEl, word, {
-      word: cached.word,
-      phonetic: cached.phonetic,
-      pos: cached.pos,
-      definitions: cached.definitions,
-      forms: cached.forms,
-      sentences: cached.examples,
-      fromCache: true,
-      vfavId: cached.id
-    });
+  const cachedResult = cached ? {
+    word: cached.word,
+    phonetic: cached.phonetic,
+    pos: cached.pos,
+    definitions: cached.definitions,
+    forms: cached.forms,
+    sentences: cached.examples,
+    fromCache: true,
+    vfavId: cached.id
+  } : null;
+  if (cached && hasDualPhonetic(cached.phonetic)) {
+    renderWordResult(wrapper, resultEl, word, cachedResult);
     return;
   }
 
@@ -1315,7 +1320,7 @@ async function searchWord(word, wrapper, mode) {
 
   const finalNote = isOriginal
     ? 'word 就是用户输入的原词。'
-    : 'word 是还原后的原形，不是用户输入的变形。比如用户搜"escalating"，word 是"escalate"，那 phonetic 必须是 escalate 的音标 /ˈeskəleɪt/，而不是 escalating 的音标。';
+    : 'word 是还原后的原形，不是用户输入的变形。比如用户搜"escalating"，word 是"escalate"，那 phonetic 的英式和美式音标都必须对应 escalate，而不是 escalating。';
 
   try {
     const res = await fetch(DEEPSEEK_URL, {
@@ -1339,6 +1344,7 @@ async function searchWord(word, wrapper, mode) {
    格式示例（名词）：复数 analyses；派生形容词 analytical 分析的；派生副词 analytically 分析地；派生动词 analyze 分析
    格式示例（形容词）：比较级 bigger，最高级 biggest；派生名词 bigness 巨大
    若确实没有六级考纲内的其他变形（如个别虚词），inflections 和 derivatives 都填 []，不得省略字段。
+2. phonetic 必须同时给出 word 的英式和美式 IPA 音标，统一格式为“英 /英式IPA/　美 /美式IPA/”。即使两者相同也必须分别展示“英”和“美”，不得只返回一套音标。无法确认的读音不得猜测或将另一口音复制充数。
 
 【例句要求】每个例句须包含六级难度词汇或复杂句型，但整体难度不得超出六级范围；学术正式、自然，适合直接用在作文中。
 
@@ -1347,7 +1353,7 @@ async function searchWord(word, wrapper, mode) {
   "word": "最自然、规范大小写的词或短语（如grapple with；专有名词、缩写按惯例保留）",
   "sourceForm": "若输入发生词形还原，则填写用户原始输入；否则为空字符串",
   "inflection": "若有sourceForm必须填类型（过去式/过去分词/现在分词/复数/比较级/最高级/三单），否则为空字符串",
-  "phonetic": "音标",
+  "phonetic": "英 /英式IPA/　美 /美式IPA/",
   "pos": "词性（多个用 & 分隔，如 adj. & v.，不要用逗号）",
   "definitions": ["n. 释义", "v. 释义"],
   "forms": {
@@ -1371,7 +1377,22 @@ async function searchWord(word, wrapper, mode) {
     if (!info) throw new Error('查询返回解析失败');
 
     renderWordResult(wrapper, resultEl, word, info);
+    if (hasDualPhonetic(info.phonetic)) {
+      // Re-read after the request so edits or deletions in other tabs are preserved.
+      const currentFavs = getVFavs();
+      const favorite = currentFavs.find(f => f.word.toLowerCase() === info.word.toLowerCase());
+      if (favorite && !hasDualPhonetic(favorite.phonetic)) {
+        favorite.phonetic = info.phonetic;
+        setVFavs(currentFavs);
+        renderVFavs();
+      }
+    }
   } catch (e) {
+    if (cachedResult) {
+      renderWordResult(wrapper, resultEl, word, cachedResult);
+      toast('双音标暂未补全，已显示收藏内容');
+      return;
+    }
     console.error(e);
     wrapper._wordData = null;
     resultEl.innerHTML = '<div class="empty-state" style="color:var(--danger)">查询失败，请尝试再次查询或检查单词拼写后重试</div>';
