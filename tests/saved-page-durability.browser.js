@@ -11,8 +11,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(process.platform, 'win32', 'This regression targets Edge process termination on Windows');
   const root = path.resolve(__dirname, '..');
   const server = http.createServer((req, res) => {
-    const script = ['study-export.js', 'saved-page-store.js'].find(name => req.url.endsWith(name));
-    res.setHeader('Content-Type', script ? 'text/javascript' : 'text/html; charset=utf-8');
+    const script = ['study-export.js', 'saved-page-store.js', 'study-tools.js', 'study-tools-ui.js', 'study-tools.css'].find(name => req.url.endsWith(name));
+    res.setHeader('Content-Type', script?.endsWith('.css') ? 'text/css' : script ? 'text/javascript' : 'text/html; charset=utf-8');
     res.end(fs.readFileSync(path.join(root, script || 'index.html')));
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

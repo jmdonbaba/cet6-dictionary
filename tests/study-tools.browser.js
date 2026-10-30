@@ -1,0 +1,233 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const mnemonic = word => ({ word, breakdown: 'af + fect', association: '让情绪动起来，联想“影响”。', tip: '记住影响这个动作。', example: { en: `Stress can affect memory.`, cn: '压力会影响记忆。' } });
+const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 'v.', definitions: ['影响'], forms: { inflections: [], derivatives: [] }, sentences: [{ en: 'Stress can affect memory.', cn: '压力会影响记忆。' }] });
+
+(async () => {
+  const server = http.createServer((req, res) => {
+    const name = req.url.split('?')[0].slice(1) || 'index.html';
+    if (!['index.html', 'study-tools.js', 'study-tools-ui.js', 'study-tools.css', 'study-export.js', 'saved-page-store.js'].includes(name)) { res.writeHead(404).end(); return; }
+    res.setHeader('Content-Type', name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8');
+    res.end(fs.readFileSync(path.join(__dirname, '..', name)));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const browser = await chromium.launch({ executablePath: process.env.EDGE_EXECUTABLE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1100 }, reducedMotion: 'reduce' });
+  const page = await context.newPage();
+  const errors = [];
+  let dictionaryFail = false;
+  let dictionaryRequests = 0;
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('https://api.deepseek.com/**', async route => {
+    const body = route.request().postDataJSON();
+    const system = body.messages[0].content;
+    const user = body.messages[1].content;
+    let data;
+    if (system.includes('记忆方法')) data = mnemonic(JSON.parse(user).words[0]);
+    else if (system.includes('词语对比')) {
+      const names = JSON.parse(user).words;
+      data = { summary: 'affect 侧重影响的动作，effect 侧重结果。', tip: '动作看 affect，结果看 effect。', items: names.map(word => ({ word, meaning: word === 'affect' ? '影响' : '结果', usage: word === 'affect' ? '通常作动词' : '通常作名词', collocations: ['have an effect on'], example: { en: 'The effect is lasting.', cn: '影响是持久的。' } })) };
+    } else {
+      dictionaryRequests++;
+      if (dictionaryFail) { await route.fulfill({ status: 503, body: '{}' }); return; }
+      data = dict(user.match(/查询"([^"]+)"/)[1]);
+    }
+    await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(data) } }] } });
+  });
+  const favorites = () => page.evaluate(() => getVFavs());
+  async function remember(word) {
+    await page.locator('#mnemonicInput').fill(word);
+    await page.locator('#mnemonicForm button').click();
+    await page.locator('.study-card [data-study-action="save-mnemonic"]').last().waitFor();
+  }
+  try {
+    await page.goto(`http://127.0.0.1:${server.address().port}/`);
+    await page.evaluate(() => { localStorage.setItem('cet6_api_key', 'sk-test'); initKey(); });
+    await remember('affect');
+    assert.equal((await favorites()).length, 0, 'generating must not save');
+    const memoryId = await page.locator('.study-card').first().getAttribute('id');
+    await page.locator(`#${memoryId} [data-study-action="save-mnemonic"]`).click();
+    await page.waitForFunction(() => getVFavs().length === 1);
+    assert.equal(dictionaryRequests, 1);
+    assert.equal((await favorites())[0].mnemonic.word, 'affect');
+    assert.equal(await page.locator(`#${memoryId} .word-header .word`).textContent(), 'affect');
+    assert.equal(await page.locator('.word-search-wrapper').first().getAttribute('id'), memoryId, 'word card stays in place ahead of blank draft');
+    console.log('PASS: generation is unsaved; first save queries and favorites a full word at the current position');
+
+    await page.evaluate(() => {
+      const favs = getVFavs(); delete favs[0].mnemonic; favs[0].pinned = true; setVFavs(favs); renderVFavs();
+    });
+    await remember('affect');
+    assert.equal((await favorites())[0].mnemonic, undefined);
+    await page.locator('.study-card [data-study-action="save-mnemonic"]').click();
+    await page.waitForFunction(() => Boolean(getVFavs()[0].mnemonic));
+    assert.equal(dictionaryRequests, 1, 'existing favorite mnemonic update needs no dictionary request');
+    assert.equal((await favorites()).length, 1);
+    assert.equal((await favorites())[0].pinned, true);
+    console.log('PASS: existing favorite is only updated by a manual click and retains metadata');
+
+    dictionaryFail = true;
+    await remember('resilient');
+    await page.locator('.study-card [data-study-action="save-mnemonic"]').first().click();
+    await page.locator('.study-error').waitFor();
+    assert.equal((await favorites()).length, 1);
+    assert.ok(await page.locator('.study-card').filter({ hasText: 'resilient' }).count());
+    dictionaryFail = false;
+    await page.locator('.study-card').filter({ hasText: 'resilient' }).locator('[data-study-action="save-mnemonic"]').click();
+    await page.waitForFunction(() => getVFavs().length === 2);
+    console.log('PASS: dictionary failure preserves the mnemonic with retry and no partial favorite');
+
+    await page.locator('#compareLeft').fill('affect');
+    await page.locator('#compareRight').fill('effect');
+    await page.locator('#comparisonForm button').click();
+    await page.locator('[data-study-action="save-comparison"]').waitFor();
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 0);
+    await page.locator('[data-study-action="save-comparison"]').click();
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 1);
+    await page.locator('#compareLeft').fill('effect');
+    await page.locator('#compareRight').fill('affect');
+    await page.locator('#comparisonForm button').click();
+    await page.waitForFunction(() => !document.querySelector('#comparisonForm button').disabled);
+    assert.equal(await page.locator('[data-study-action="save-comparison"]').first().isDisabled(), true);
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 1);
+    console.log('PASS: comparison is manually saved with reversed pair deduplication');
+
+    await page.reload();
+    assert.equal(await page.locator('.study-card .comparison-grid').count(), 2);
+    assert.equal(await page.locator('.word-result .mnemonic-block').count(), 2);
+    const saved = await page.evaluate(async () => { await savePageRecord(); return (await getPageRecords())[0]; });
+    assert.equal(saved.cards.filter(card => card.study).length, 3);
+    await page.evaluate(() => applyWordSearchCards([{ input: '', mode: 'lemma', result: null }]));
+    await page.evaluate(cards => { applyWordSearchCards(cards); saveWordSearchSession(); }, saved.cards);
+    assert.equal(await page.locator('.study-card .comparison-grid').count(), 2);
+    assert.equal(await page.locator('[data-study-action="save-comparison"]').first().textContent(), '已收藏这组对比');
+    assert.equal(await page.locator('[data-study-action="save-comparison"]').first().isDisabled(), true);
+    await page.evaluate(() => openModal($modalVocabFav));
+    await page.locator('[data-favorite-tab="comparisons"]').click();
+    assert.equal(await page.locator('#comparisonFavList details').count(), 1);
+    await page.locator('#comparisonSearch').fill('missing');
+    assert.equal(await page.locator('#comparisonFavList details').count(), 0);
+    await page.locator('#comparisonSearch').fill('effect');
+    assert.equal(await page.locator('#comparisonFavList details').count(), 1);
+    await page.evaluate(() => closeModal());
+    console.log('PASS: refresh, saved pages and comparison favorite search retain results');
+
+    const [download] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportData())]);
+    const backup = JSON.parse(fs.readFileSync(await download.path(), 'utf8'));
+    assert.equal(backup.comparisons.length, 1);
+    assert.equal(backup.favorites.filter(item => item.mnemonic).length, 2);
+    await page.evaluate(() => { localStorage.removeItem('cet6_comparison_favorites'); localStorage.removeItem(VFAV_KEY); });
+    await page.evaluate(data => applyImport('merge', data), backup);
+    assert.equal((await favorites()).length, 2);
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 1);
+    await page.evaluate(data => applyImport('merge', data), backup);
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 1);
+    const beforeMalformed = await page.evaluate(() => localStorage.getItem('cet6_comparison_favorites'));
+    page.on('dialog', dialog => dialog.accept());
+    await page.evaluate(() => applyImport('overwrite', { favorites: [], comparisons: [{ left: 'bad' }] }));
+    assert.equal(await page.evaluate(() => localStorage.getItem('cet6_comparison_favorites')), beforeMalformed);
+    assert.equal((await favorites()).length, 2);
+    await page.evaluate(() => applyImport('overwrite', { favorites: [{ word: 'legacy' }] }));
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 1, 'old backup must retain comparison favorites');
+    await page.evaluate(data => applyImport('overwrite', data), backup);
+    await page.evaluate(async data => {
+      const original = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'cet6_comparison_favorites') throw new Error('test quota failure');
+        return original.call(this, key, value);
+      };
+      try { await applyImport('overwrite', { ...data, favorites: [{ word: 'replacement' }] }); }
+      finally { Storage.prototype.setItem = original; }
+    }, backup);
+    assert.equal((await favorites()).length, 2, 'failed comparison write rolls back the word favorites write');
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 1);
+    await page.evaluate(() => localStorage.setItem('cet6_comparison_favorites', JSON.stringify([{ kind: 'comparison', left: 'damaged' }])));
+    const corruptLocal = await page.evaluate(() => localStorage.getItem('cet6_comparison_favorites'));
+    await page.evaluate(data => applyImport('merge', data), backup);
+    assert.equal(await page.evaluate(() => localStorage.getItem('cet6_comparison_favorites')), corruptLocal, 'merge refuses to silently discard corrupt local entries');
+    await page.evaluate(data => applyImport('overwrite', data), backup);
+    console.log('PASS: backups round-trip both favorites; malformed data and failed imports preserve saved data');
+
+    await page.evaluate(() => openModal($modalVocabFav));
+    await page.locator('[data-favorite-tab="words"]').click();
+    const [wordExport] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportStudyDocument('html'))]);
+    const wordHtml = fs.readFileSync(await wordExport.path(), 'utf8');
+    assert.match(wordHtml, /怎么记/);
+    assert.doesNotMatch(wordHtml, /sk-test/);
+    await page.locator('[data-favorite-tab="comparisons"]').click();
+    const [compareExport] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportStudyDocument('markdown'))]);
+    assert.match(fs.readFileSync(await compareExport.path(), 'utf8'), /词语对比复习讲义/);
+    await page.locator('#comparisonFavList summary').click();
+    await page.locator('[data-comparison-action="pin"]').click();
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons()[0].pinned), true);
+    const cardCount = await page.locator('.word-search-wrapper').count();
+    await page.locator('[data-comparison-action="open"]').click();
+    assert.equal(await page.locator('.word-search-wrapper').count(), cardCount, 'open reuses an already displayed comparison');
+    await page.locator('[data-comparison-action="delete"]').click();
+    assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 0);
+    await page.evaluate(() => closeModal());
+    await page.evaluate(data => applyImport('merge', data), backup);
+    console.log('PASS: both study export formats, comparison pin/delete/open controls');
+
+    await remember('retain');
+    await page.evaluate(() => {
+      window.testOriginalSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'cet6_vocab_favorites') throw new Error('test quota failure');
+        return window.testOriginalSetItem.call(this, key, value);
+      };
+    });
+    await page.locator('.study-card').filter({ hasText: 'retain' }).locator('[data-study-action="save-mnemonic"]').click();
+    await page.locator('.study-card').filter({ hasText: 'retain' }).locator('.study-error').waitFor();
+    assert.equal((await favorites()).length, 2);
+    await page.evaluate(() => { Storage.prototype.setItem = window.testOriginalSetItem; delete window.testOriginalSetItem; });
+    await page.locator('.study-card').filter({ hasText: 'retain' }).locator('[data-study-action="save-mnemonic"]').click();
+    await page.waitForFunction(() => getVFavs().length === 3);
+    await page.evaluate(() => { $apiKeyInput.value = 'sk-new-test'; saveKey(); });
+    assert.ok(await page.locator('.study-card [data-study-action="save-comparison"]').count(), 'changing a key retains study results');
+    console.log('PASS: favorite storage failure keeps retryable content; changing API Key retains study cards');
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[data-tool-tab="comparison"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-tool-tab="comparison"]').getAttribute('aria-selected') === 'true');
+    assert.ok(await page.locator('#compareLeft').isVisible());
+    await page.locator('#studyToolPages').evaluate(el => el.scrollTo({ left: 0, behavior: 'instant' }));
+    await page.waitForFunction(() => document.querySelector('[data-tool-tab="mnemonic"]').getAttribute('aria-selected') === 'true');
+    await page.locator('[data-tool-tab="mnemonic"]').focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('[data-tool-tab="comparison"]').getAttribute('aria-selected'), 'true');
+    await page.locator('[data-tool-tab="mnemonic"]').click();
+    await page.locator('#studyToolPages').scrollIntoViewIfNeeded();
+    const rect = await page.locator('#studyToolPages').boundingBox();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: rect.x + rect.width - 12, y: rect.y + 12 }] });
+    for (let step = 1; step <= 8; step++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: rect.x + rect.width - 12 - (rect.width - 30) * step / 8, y: rect.y + 12 }] });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForFunction(() => document.querySelector('[data-tool-tab="comparison"]').getAttribute('aria-selected') === 'true');
+    await cdp.detach();
+    console.log('PASS: mobile tool pages switch by tab, horizontal scrolling and keyboard');
+
+    for (const width of [1440, 1280, 1024, 768, 390, 320]) {
+      await page.setViewportSize({ width, height: 950 });
+      const bounds = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, width: innerWidth, inputs: Array.from(document.querySelectorAll('.study-tool-form input')).map(el => el.getBoundingClientRect().width) }));
+      assert.ok(bounds.scroll <= width, `no overflow at ${width}: ${JSON.stringify(bounds)}`);
+      assert.ok(bounds.inputs.every(width => width > 48));
+    }
+    assert.deepEqual(errors, []);
+    console.log('PASS: responsive layouts from 320 to 1440px; no runtime errors');
+    await page.setViewportSize({ width: 1440, height: 1100 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: path.join(process.env.TEMP, 'cet6-study-desktop.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: path.join(process.env.TEMP, 'cet6-study-mobile.png') });
+  } finally {
+    await browser.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });

@@ -54,7 +54,12 @@
       pos: clean(favorite && favorite.pos),
       definitions: normalizeDefinitions(favorite || {}),
       forms: normalizeForms(favorite && favorite.forms),
-      examples: normalizeExamples(favorite || {})
+      examples: normalizeExamples(favorite || {}),
+      ...(favorite && favorite.mnemonic ? { mnemonic: {
+        word: clean(favorite.word), breakdown: clean(favorite.mnemonic.breakdown),
+        association: clean(favorite.mnemonic.association), tip: clean(favorite.mnemonic.tip),
+        example: { en: clean(favorite.mnemonic.example && favorite.mnemonic.example.en), cn: clean(favorite.mnemonic.example && favorite.mnemonic.example.cn) }
+      } } : {})
     }));
   }
 
@@ -100,6 +105,7 @@
       <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
       ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
       ${definitionBlock}${formsBlock}${exampleBlock}
+      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip, word.mnemonic.example && word.mnemonic.example.en, word.mnemonic.example && word.mnemonic.example.cn].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
       ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
     </section>`;
   }
@@ -161,6 +167,7 @@
           if (cn) lines.push(`   ${escapeMarkdown(cn)}`);
         });
       }
+      if (word.mnemonic) lines.push('', '**怎么记**', ...[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip, word.mnemonic.example && word.mnemonic.example.en, word.mnemonic.example && word.mnemonic.example.cn].filter(clean).map(escapeMarkdown));
       lines.push('', '复习笔记：', '', '---');
       return lines.join('\n');
     });
