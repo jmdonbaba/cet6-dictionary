@@ -47,20 +47,33 @@
     return groups.join('；') || '无';
   }
 
+  function normalizeMnemonicParts(value) {
+    return (Array.isArray(value) ? value : []).flatMap(item => {
+      const part = clean(item && item.part);
+      const source = clean(item && item.source);
+      return part && source ? [{ part, source }] : [];
+    });
+  }
+
   function normalizeFavorites(favorites) {
-    return (Array.isArray(favorites) ? favorites : []).map(favorite => ({
-      word: clean(favorite && favorite.word),
-      phonetic: clean(favorite && favorite.phonetic),
-      pos: clean(favorite && favorite.pos),
-      definitions: normalizeDefinitions(favorite || {}),
-      forms: normalizeForms(favorite && favorite.forms),
-      examples: normalizeExamples(favorite || {}),
-      ...(favorite && favorite.mnemonic ? { mnemonic: {
-        word: clean(favorite.word), breakdown: clean(favorite.mnemonic.breakdown),
-        association: clean(favorite.mnemonic.association), tip: clean(favorite.mnemonic.tip),
-        example: { en: clean(favorite.mnemonic.example && favorite.mnemonic.example.en), cn: clean(favorite.mnemonic.example && favorite.mnemonic.example.cn) }
-      } } : {})
-    }));
+    return (Array.isArray(favorites) ? favorites : []).map(favorite => {
+      const breakdown = clean(favorite && favorite.mnemonic && favorite.mnemonic.breakdown);
+      const parts = normalizeMnemonicParts(favorite && favorite.mnemonic && favorite.mnemonic.parts);
+      return {
+        word: clean(favorite && favorite.word),
+        phonetic: clean(favorite && favorite.phonetic),
+        pos: clean(favorite && favorite.pos),
+        definitions: normalizeDefinitions(favorite || {}),
+        forms: normalizeForms(favorite && favorite.forms),
+        examples: normalizeExamples(favorite || {}),
+        ...(favorite && favorite.mnemonic ? { mnemonic: {
+          word: clean(favorite.word), breakdown,
+          ...(breakdown && parts.length ? { parts } : {}),
+          association: clean(favorite.mnemonic.association), tip: clean(favorite.mnemonic.tip),
+          example: { en: clean(favorite.mnemonic.example && favorite.mnemonic.example.en), cn: clean(favorite.mnemonic.example && favorite.mnemonic.example.cn) }
+        } } : {})
+      };
+    });
   }
 
   function createFilename(extension, date) {
@@ -93,6 +106,12 @@
     }).join(' → ');
   }
 
+  function renderMemoryParts(parts) {
+    return normalizeMnemonicParts(parts)
+      .map(item => `<strong>${escapeHtml(item.part)}</strong> ← ${escapeHtml(item.source)}`)
+      .join('；');
+  }
+
   function studyDate(options) {
     const date = options && options.generatedAt instanceof Date ? options.generatedAt : new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -114,7 +133,7 @@
       <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
       ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
       ${definitionBlock}${formsBlock}${exampleBlock}
-      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${clean(word.mnemonic.breakdown) ? `<p>拆分记忆：${renderMemoryBreakdown(word.mnemonic.breakdown)}</p>` : ''}${[word.mnemonic.association, word.mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
+      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${clean(word.mnemonic.breakdown) ? `<p>拆分记忆：${renderMemoryBreakdown(word.mnemonic.breakdown)}</p>` : ''}${clean(word.mnemonic.breakdown) && renderMemoryParts(word.mnemonic.parts) ? `<p class="parts"><strong>词块来源：</strong>${renderMemoryParts(word.mnemonic.parts)}</p>` : ''}${[word.mnemonic.association, word.mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
       ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
     </section>`;
   }
@@ -141,6 +160,7 @@
     .checkbox { white-space: nowrap; font-size: 14px; }
     .pronunciation { color: #333; }
     .pronunciation span + span { margin-left: 12px; }
+    .parts { color: #333; font-size: 14px; }
     .field { margin-top: 10px; }
     .field > strong, .notes > strong { display: block; font-size: 14px; }
     .field li { padding-left: 2px; }
@@ -176,7 +196,14 @@
           if (cn) lines.push(`   ${escapeMarkdown(cn)}`);
         });
       }
-      if (word.mnemonic) lines.push('', '**怎么记**', ...[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip].filter(clean).map(escapeMarkdown));
+      if (word.mnemonic) {
+        const breakdown = word.mnemonic.breakdown;
+        const parts = clean(breakdown) ? normalizeMnemonicParts(word.mnemonic.parts) : [];
+        lines.push('', '**怎么记**');
+        if (clean(breakdown)) lines.push(escapeMarkdown(breakdown));
+        if (parts.length) lines.push(`**词块来源**：${parts.map(item => `${escapeMarkdown(item.part)} ← ${escapeMarkdown(item.source)}`).join('；')}`);
+        [word.mnemonic.association, word.mnemonic.tip].filter(clean).forEach(value => lines.push(escapeMarkdown(value)));
+      }
       lines.push('', '复习笔记：', '', '---');
       return lines.join('\n');
     });
@@ -197,7 +224,7 @@
 
   return {
     MAX_EXAMPLES, normalizeFavorites, createFilename,
-    escapeHtml, escapeMarkdown, renderMemoryBreakdown, renderStudyCardHtml, renderHtml, renderMarkdown,
+    escapeHtml, escapeMarkdown, renderMemoryBreakdown, renderMemoryParts, renderStudyCardHtml, renderHtml, renderMarkdown,
     downloadBlob
   };
 });

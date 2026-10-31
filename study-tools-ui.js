@@ -10,8 +10,10 @@ const StudyToolsUI = (() => {
   const exampleHtml = example => `<div class="study-example">${esc(example.en)}<span>${esc(example.cn)}</span></div>`;
 
   function mnemonicContent(mnemonic) {
+    const parts = mnemonic.breakdown ? StudyExport.renderMemoryParts(mnemonic.parts) : '';
     return `<div class="study-content">
       ${mnemonic.breakdown ? `<p class="study-breakdown"><span class="study-breakdown-label">拆分记忆：</span>${StudyExport.renderMemoryBreakdown(mnemonic.breakdown)}</p>` : ''}
+      ${parts ? `<p class="study-parts"><span class="study-parts-label">词块来源：</span>${parts}</p>` : ''}
       <div class="study-section-label">这样联想</div><p>${esc(mnemonic.association)}</p>
       <div class="study-takeaway"><strong>记住这一点</strong>${esc(mnemonic.tip)}</div>
     </div>`;
@@ -83,7 +85,8 @@ const StudyToolsUI = (() => {
       if (study.kind === 'mnemonic') {
         const favorite = favorites.find(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
         const mnemonic = StudyTools.normalizeMnemonic(favorite?.mnemonic, study.word);
-        saved = Boolean(mnemonic && ['breakdown', 'association', 'tip'].every(key => mnemonic[key] === study.mnemonic[key]));
+        saved = Boolean(mnemonic && ['breakdown', 'association', 'tip'].every(key => mnemonic[key] === study.mnemonic[key])
+          && JSON.stringify(mnemonic.parts || []) === JSON.stringify(study.mnemonic.parts || []));
       } else {
         saved = comparisons.some(item => StudyTools.pairKey(item.left, item.right) === StudyTools.pairKey(study.left, study.right));
       }
@@ -200,7 +203,7 @@ const StudyToolsUI = (() => {
 
   async function requestStudy(kind, words, signal) {
     const schema = kind === 'mnemonic'
-      ? '返回 {"word":"原词","breakdown":"词块（中文含义） + 词块（中文含义） → 组合后的直观含义 → 单词的核心中文释义","association":"简洁生动的中文联想，连接拼写和核心词义","tip":"一句话记忆提示"}。breakdown 要像一条简短的拆分记忆公式，示例 advisable：advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。词块尽量使用容易识别的完整词或常见词缀，使用自然的中文把各部分含义串起来，不写 advis(e) 之类的拼写标记，不在公式里附加“去 e 加后缀”等拼写过程；确有必要的拼写变化可在 association 里用一句话补充。只使用有依据的构词或清楚标明的记忆联想，无法合理拆分时 breakdown 为空字符串，不硬拆，不编造词源、构词或发音。纯文本，不使用 Markdown、HTML 或重复“拆分记忆”标题。'
+      ? '返回 {"word":"原词","breakdown":"词块（中文含义） + 词块（中文含义） → 组合后的直观含义 → 单词的核心中文释义","parts":[{"part":"词块本身","source":"这个词块的来源说明"}],"association":"简洁生动的中文联想，连接拼写和核心词义","tip":"一句话记忆提示"}。breakdown 要像一条简短的拆分记忆公式，示例 advisable：advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。词块尽量使用容易识别的完整词或常见词缀，使用自然的中文把各部分含义串起来，不写 advis(e) 之类的拼写标记，不在公式里附加“去 e 加后缀”等拼写过程；确有必要的拼写变化可在 association 里用一句话补充。parts 与 breakdown 的词块一一对应并按出现顺序列出，每个 source 必须说明这个词块凭什么有这个含义：有构词依据时写成词根、前缀或后缀及其含义，例如 {"part":"plaus","source":"词根：拍手、鼓掌，与 applause 同源"}、{"part":"re-","source":"前缀：再、重新"}、{"part":"-ible","source":"后缀：能…的"}；只是记忆联想时明确写成“联想到某词”并给出该单词，例如 {"part":"plaus","source":"联想到 applause（掌声），借“拍手称好”来记"}。不要把联想说成词源，不编造词源、构词或发音，不确定来源时只写清楚是记忆联想；source 不要重复词块本身。无法合理拆分时 breakdown 为空字符串、parts 为空数组，不硬拆。纯文本，不使用 Markdown、HTML 或重复“拆分记忆”标题。'
       : '返回 {"summary":"中文核心区别，解释词性、含义、语气或使用场景差别","items":[{"word":"第一个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}},{"word":"第二个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}}],"tip":"一句话辨析提示"}。不要生硬地为近义词编造绝对区别，必要时说明重叠、特殊用法；不是近义词也如实比较。';
     const response = await fetch(DEEPSEEK_URL, {
       method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getApiKey()}` },

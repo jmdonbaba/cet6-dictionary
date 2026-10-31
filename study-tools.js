@@ -14,12 +14,27 @@
     return JSON.stringify(words.sort());
   }
 
+  function normalizeMnemonicPart(value) {
+    const part = text(value && value.part);
+    const source = text(value && value.source);
+    return part && source ? { part, source } : null;
+  }
+
+  function normalizeMnemonicParts(value) {
+    return (Array.isArray(value) ? value : []).map(normalizeMnemonicPart).filter(Boolean);
+  }
+
   function normalizeMnemonic(value, word) {
     if (!value || typeof value !== 'object' || !wordKey(word)) return null;
     if (value.word && wordKey(value.word) !== wordKey(word)) return null;
+    const breakdown = text(value.breakdown);
+    const parts = normalizeMnemonicParts(value.parts);
     const result = {
-      word: text(word), breakdown: text(value.breakdown), association: text(value.association),
-      tip: text(value.tip), ...(value.example ? { example: example(value.example) } : {})
+      word: text(word), breakdown, association: text(value.association),
+      tip: text(value.tip),
+      // A chunk source only makes sense together with the chunks it explains.
+      ...(breakdown && parts.length ? { parts } : {}),
+      ...(value.example ? { example: example(value.example) } : {})
     };
     if (!result.association || !result.tip) return null;
     return result;
@@ -72,5 +87,5 @@
     });
   }
 
-  return { wordKey, pairKey, normalizeMnemonic, normalizeStudy, mergeMnemonic, normalizeComparisons };
+  return { wordKey, pairKey, normalizeMnemonic, normalizeMnemonicParts, normalizeStudy, mergeMnemonic, normalizeComparisons };
 });

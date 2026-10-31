@@ -21,6 +21,30 @@ test('split memory emphasizes word parts and the final meaning while escaping st
   assert.equal(Export.renderMemoryBreakdown('传统联想文字'), '传统联想文字');
 });
 
+test('lists where each memory chunk comes from and escapes it', () => {
+  const html = Export.renderMemoryParts([
+    { part: 'plaus', source: '词根：拍手、鼓掌，与 applause 同源' },
+    { part: '-ible', source: '后缀：能…的' }
+  ]);
+  assert.match(html, /<strong>plaus<\/strong> ← 词根：拍手、鼓掌，与 applause 同源/);
+  assert.match(html, /<strong>-ible<\/strong> ← 后缀：能…的/);
+  assert.equal(Export.renderMemoryParts([{ part: '<plaus>', source: '<img onerror=alert(1)>' }]),
+    '<strong>&lt;plaus&gt;</strong> ← &lt;img onerror=alert(1)&gt;');
+  assert.equal(Export.renderMemoryParts([{ part: 'plaus' }, { part: '', source: '词根' }, { source: '联想' }]), '');
+});
+
+test('keeps chunk sources only together with a breakdown and complete entries', () => {
+  const parts = [
+    { part: 'aff', source: '词根：做' },
+    { part: '', source: '没有词块' },
+    { part: 'ect', source: '联想到 effect（结果）' }
+  ];
+  assert.deepEqual(Tools.normalizeMnemonic({ ...mnemonic, parts }, 'affect').parts, [parts[0], parts[2]]);
+  assert.equal(Object.hasOwn(Tools.normalizeMnemonic({ ...mnemonic, breakdown: '', parts }, 'affect'), 'parts'), false);
+  assert.equal(Object.hasOwn(Tools.normalizeMnemonic(mnemonic, 'affect'), 'parts'), false);
+  assert.deepEqual(Tools.normalizeMnemonicParts([{ part: 'a', source: '词根' }, { part: 'b' }, null]), [{ part: 'a', source: '词根' }]);
+});
+
 test('manual mnemonic merging preserves favorite order, details and pin state without mutating input', () => {
   const favorites = [{ id: 'old', word: 'affect', definitions: ['影响'], examples: ['existing'], pinned: true }, { word: 'other' }];
   const before = JSON.stringify(favorites);
@@ -70,14 +94,17 @@ test('comparison favorites deduplicate reversed pairs and keep saved metadata', 
 });
 
 test('mnemonics survive study exports and stay escaped in both formats', () => {
-  const words = Export.normalizeFavorites([{ word: 'affect', mnemonic: { ...mnemonic, association: '<img onerror="bad"> & **联想**' } }]);
-  assert.deepEqual(words[0].mnemonic, { ...mnemonic, association: '<img onerror="bad"> & **联想**' });
+  const parts = [{ part: 'aff', source: '词根：做，与 affect 同源' }, { part: 'ect', source: '联想到 effect（结果）' }];
+  const words = Export.normalizeFavorites([{ word: 'affect', mnemonic: { ...mnemonic, association: '<img onerror="bad"> & **联想**', parts } }]);
+  assert.deepEqual(words[0].mnemonic, { ...mnemonic, association: '<img onerror="bad"> & **联想**', parts });
   const html = Export.renderHtml(words);
   const md = Export.renderMarkdown(words);
   assert.match(html, /怎么记/);
   assert.match(html, /&lt;img/);
   assert.doesNotMatch(html, /<img/);
+  assert.match(html, /词块来源：<\/strong><strong>aff<\/strong> ← 词根：做，与 affect 同源；<strong>ect<\/strong> ← 联想到 effect（结果）/);
   assert.match(md, /怎么记/);
+  assert.match(md, /\*\*词块来源\*\*：aff ← 词根：做，与 affect 同源；ect ← 联想到 effect（结果）/);
   assert.match(md, /\\\*\\\*联想/);
 });
 
