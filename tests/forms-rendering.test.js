@@ -20,6 +20,13 @@ test('keeps the mobile heading on one line when it fits and wraps only before ov
   assert.match(source, /@media \(max-width: 500px\) \{[\s\S]*?\.word-result \.btn-favorite\s*\{[^}]*margin-left:\s*auto;[^}]*flex-shrink:\s*0;[^}]*white-space:\s*nowrap;(?![^}]*min-width)/);
 });
 
+test('keeps the mnemonic action at the far right of the word header', () => {
+  assert.match(source, /class="btn-sm word-header-action" data-study-action="generate-mnemonic">生成记法<\/button>/);
+  assert.match(source, /class="btn-sm word-header-action" data-study-action="flip">怎么记 ↻<\/button>/);
+  assert.match(source, /\.word-result \.word-header \.word-header-action\s*\{\s*margin-left:\s*auto;/);
+  assert.match(source, /@media \(max-width: 500px\) \{[\s\S]*?\.word-result \.word-header \.word-header-action\s*\{\s*margin-left:\s*0;/);
+});
+
 test('keeps touch gestures on a favorite drag handle out of browser scrolling', () => {
   assert.match(source, /\.vf-drag-handle\s*\{[^}]*touch-action:\s*none;/);
   assert.match(source, /\$favListContainer\.addEventListener\('pointercancel',\s*function\s*\(e\)\s*\{\s*if\s*\(dragActive\)\s*clearDragState\(\);/);

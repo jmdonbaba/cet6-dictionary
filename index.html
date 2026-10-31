@@ -303,6 +303,7 @@ body {
 .word-result .word-header .word { font-size: 20px; font-weight: 700; color: var(--primary); }
 .word-result .phonetic { font-size: 13px; color: var(--text-secondary); font-family: "Times New Roman", serif; }
 .word-result .pos { font-size: 12px; color: var(--text-secondary); background: #e2e8f0; padding: 1px 8px; border-radius: 10px; }
+.word-result .word-header .word-header-action { margin-left: auto; }
 .word-result .definition { font-size: 14px; color: var(--text); margin-bottom: 4px; }
 .word-result .def-label { font-weight: 700; color: var(--text-secondary); font-size: 13px; margin-right: 4px; }
 .word-forms { font-size: 13px; color: var(--text-secondary); margin: 10px 0; padding: 8px 12px; background: #fff; border-radius: 6px; border: 1px solid var(--border); }
@@ -358,6 +359,7 @@ body {
   .word-result .phonetic { font-size: 12px; overflow-wrap: anywhere; }
   .word-result .pos { padding: 1px 6px; font-size: 11px; white-space: nowrap; }
   .word-result .btn-favorite { margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+  .word-result .word-header .word-header-action { margin-left: 0; flex-shrink: 0; }
   .vf-drag-handle { position: absolute; left: 0; top: 0; bottom: 0; width: 16px; height: auto; margin: 0; }
 }
 
@@ -1296,7 +1298,7 @@ function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
         ${info.phonetic ? `<span class="phonetic">${esc(info.phonetic)}</span>` : ''}
         ${info.pos ? `<span class="pos">${esc(info.pos.replace(/,\s*/g, ' & '))}</span>` : ''}
         <button class="btn-favorite"${hasMnemonic ? ' data-study-action="save-mnemonic"' : ''}>收藏</button>
-        ${hasMnemonic ? '<button type="button" class="btn-sm" data-study-action="flip">怎么记 ↻</button>' : '<button type="button" class="btn-sm" data-study-action="generate-mnemonic">生成记法</button>'}
+        ${hasMnemonic ? '<button type="button" class="btn-sm word-header-action" data-study-action="flip">怎么记 ↻</button>' : '<button type="button" class="btn-sm word-header-action" data-study-action="generate-mnemonic">生成记法</button>'}
       </div>
       ${info.definitions ? info.definitions.map((d, i) => `<div class="definition"><span class="def-label">${i + 1}.</span>${esc(d)}</div>`).join('') : ''}
       ${info.forms ? `<div class="word-forms">${renderForms(info.forms)}</div>` : ''}

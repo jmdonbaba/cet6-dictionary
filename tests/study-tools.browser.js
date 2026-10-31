@@ -297,6 +297,13 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     await directCard.locator('[data-study-action="flip"]').click();
     assert.equal(await directCard.locator('.word-search-input').inputValue(), 'novels');
     assert.equal(await directCard.locator('.word-header .word').textContent(), 'novel');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    const headerBox = await directCard.locator('.word-header').boundingBox();
+    const actionBox = await directCard.locator('.word-header [data-study-action="flip"]').boundingBox();
+    const favoriteBox = await directCard.locator('.word-header .btn-favorite').boundingBox();
+    assert.ok(Math.abs(headerBox.x + headerBox.width - actionBox.x - actionBox.width) <= 1, 'mnemonic action hugs the header right edge');
+    assert.ok(favoriteBox.x + favoriteBox.width + 100 < actionBox.x, 'favorite toggle stays next to the word info');
+    console.log('PASS: the mnemonic action sits at the far right of the word header');
     console.log('PASS: inline generation uses the result word, retains the same card and safely retries failures');
     await page.evaluate(() => applyWordSearchCards([{ input: 'advisable', study: { kind: 'mnemonic', word: 'advisable', mnemonic: {
       word: 'advisable', breakdown: 'advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。', association: '采纳建议是明智的。', tip: 'advise + able，建议可取。'
