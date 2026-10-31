@@ -105,7 +105,7 @@
       <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
       ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
       ${definitionBlock}${formsBlock}${exampleBlock}
-      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip, word.mnemonic.example && word.mnemonic.example.en, word.mnemonic.example && word.mnemonic.example.cn].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
+      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
       ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
     </section>`;
   }
@@ -167,7 +167,7 @@
           if (cn) lines.push(`   ${escapeMarkdown(cn)}`);
         });
       }
-      if (word.mnemonic) lines.push('', '**怎么记**', ...[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip, word.mnemonic.example && word.mnemonic.example.en, word.mnemonic.example && word.mnemonic.example.cn].filter(clean).map(escapeMarkdown));
+      if (word.mnemonic) lines.push('', '**怎么记**', ...[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip].filter(clean).map(escapeMarkdown));
       lines.push('', '复习笔记：', '', '---');
       return lines.join('\n');
     });

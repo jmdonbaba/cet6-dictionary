@@ -34,6 +34,12 @@ test('comparison identity ignores case, outside spacing and word order, without 
   assert.throws(() => Tools.pairKey('affect', 'AFFECT'), /不同/);
 });
 
+test('mnemonics no longer require an example, while old examples remain readable for backups', () => {
+  const value = { word: 'affect', association: '影响这个动作', tip: '动作记 affect' };
+  assert.ok(Tools.normalizeMnemonic(value, 'affect'));
+  assert.deepEqual(Tools.normalizeMnemonic(mnemonic, 'affect'), mnemonic);
+});
+
 test('study responses reject empty or mismatched output and strip unknown fields', () => {
   assert.equal(Tools.normalizeStudy({ kind: 'mnemonic', word: 'affect', mnemonic: { word: 'effect' } }), null);
   assert.equal(Tools.normalizeStudy({ ...comparison, items: [] }), null);
@@ -73,4 +79,6 @@ test('page snapshots preserve mnemonic and comparison cards with no secrets', ()
   const word = normalize({ input: 'affect', result: { word: 'affect', mnemonic } });
   assert.deepEqual(word.result.mnemonic, mnemonic);
   assert.doesNotMatch(JSON.stringify(studyCard), /secret/);
+  const flipped = normalize({ input: 'affect', study: { kind: 'mnemonic', word: 'affect', mnemonic }, studyFace: 'definition', result: { word: 'affect' } });
+  assert.equal(flipped.studyFace, 'definition');
 });

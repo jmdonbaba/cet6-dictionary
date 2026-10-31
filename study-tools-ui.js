@@ -14,8 +14,6 @@ const StudyToolsUI = (() => {
       ${mnemonic.breakdown ? `<div class="study-section-label">拆开看</div><p><span class="study-breakdown">${esc(mnemonic.breakdown)}</span></p>` : ''}
       <div class="study-section-label">这样联想</div><p>${esc(mnemonic.association)}</p>
       <div class="study-takeaway"><strong>记住这一点</strong>${esc(mnemonic.tip)}</div>
-      ${exampleHtml(mnemonic.example)}
-      <div class="study-footnote">联想仅作记忆线索，不等同于词源解释。</div>
     </div>`;
   }
 
@@ -55,20 +53,20 @@ const StudyToolsUI = (() => {
   function renderStudyCard(wrapper, value, error = '') {
     const study = StudyTools.normalizeStudy(value);
     if (!study) return;
+    if (study.kind !== 'mnemonic' || StudyTools.wordKey(wrapper._wordData?.word) !== StudyTools.wordKey(study.word)) wrapper._wordData = null;
     wrapper._studyData = study;
-    wrapper._wordData = null;
+    wrapper._studyFace = 'memory';
     wrapper.classList.add('study-card');
-    wrapper.querySelector('.word-search-input').value = study.kind === 'mnemonic' ? study.word : `${study.left} 和 ${study.right}`;
+    if (!wrapper._wordData) wrapper.querySelector('.word-search-input').value = study.kind === 'mnemonic' ? study.word : `${study.left} 和 ${study.right}`;
     const isMnemonic = study.kind === 'mnemonic';
     wrapper.querySelector('.word-search-result').innerHTML = `
       <div class="study-result-header"><div><div class="study-kind-label">${isMnemonic ? '怎么记 · MEMORY' : '词语对比 · COMPARE'}</div>
         <h2 class="study-result-title">${isMnemonic ? esc(study.word) : `${esc(study.left)}<span>和</span>${esc(study.right)}`}</h2></div>
-        <button type="button" class="btn-sm" data-study-action="regenerate">重新生成</button></div>
+        <div class="study-header-actions">${isMnemonic ? '<button type="button" class="btn-sm" data-study-action="flip">单词释义 ↻</button>' : ''}<button type="button" class="btn-sm" data-study-action="regenerate">重新生成</button></div></div>
       ${isMnemonic ? mnemonicContent(study.mnemonic) : comparisonContent(study)}
       ${error ? `<p class="study-error" role="alert">${esc(error)}</p>` : ''}
       <div class="study-result-actions">
         <button type="button" class="btn-favorite" data-study-action="${isMnemonic ? 'save-mnemonic' : 'save-comparison'}"></button>
-        <span class="study-save-state" aria-live="polite"></span>
       </div>`;
     updateStudyButtons(wrapper);
   }
@@ -76,7 +74,7 @@ const StudyToolsUI = (() => {
   function updateStudyButtons(extra) {
     const favorites = getVFavs();
     const comparisons = safeComparisons();
-    new Set([...document.querySelectorAll('.study-card'), ...(extra ? [extra] : [])]).forEach(wrapper => {
+    new Set([...document.querySelectorAll('.word-search-wrapper'), ...(extra ? [extra] : [])]).forEach(wrapper => {
       const study = wrapper._studyData;
       if (!study || wrapper._searching) return;
       const button = wrapper.querySelector('[data-study-action^="save-"]');
@@ -84,17 +82,103 @@ const StudyToolsUI = (() => {
       let saved;
       if (study.kind === 'mnemonic') {
         const favorite = favorites.find(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
-        saved = Boolean(favorite && JSON.stringify(StudyTools.normalizeMnemonic(favorite.mnemonic, study.word)) === JSON.stringify(study.mnemonic));
-        button.textContent = saved ? '已收藏单词与记法' : favorite ? '补充记法到收藏' : '收藏单词与记法';
+        const mnemonic = StudyTools.normalizeMnemonic(favorite?.mnemonic, study.word);
+        saved = Boolean(mnemonic && ['breakdown', 'association', 'tip'].every(key => mnemonic[key] === study.mnemonic[key]));
       } else {
         saved = comparisons.some(item => StudyTools.pairKey(item.left, item.right) === StudyTools.pairKey(study.left, study.right));
-        button.textContent = saved ? '已收藏这组对比' : '收藏这组对比';
       }
-      button.disabled = saved;
+      button.textContent = saved ? '取消收藏' : '收藏';
+      button.dataset.saved = String(saved);
+      button.disabled = false;
       button.classList.toggle('favorited', saved);
-      const status = wrapper.querySelector('.study-save-state');
-      if (status) status.textContent = saved ? '已保存，可在收藏中复习' : '点击后才会保存到收藏';
     });
+  }
+
+  function hasMnemonic(wrapper, info) {
+    return Boolean(StudyTools.normalizeMnemonic(info.mnemonic, info.word) ||
+      (wrapper._studyData?.kind === 'mnemonic' && StudyTools.wordKey(wrapper._studyData.word) === StudyTools.wordKey(info.word)));
+  }
+
+  function linkWordCard(wrapper, info) {
+    wrapper.classList.remove('study-card');
+    if (!hasMnemonic(wrapper, info)) {
+      delete wrapper._studyData;
+      delete wrapper._studyFace;
+      return;
+    }
+    if (wrapper._studyData?.kind !== 'mnemonic' || StudyTools.wordKey(wrapper._studyData.word) !== StudyTools.wordKey(info.word)) {
+      wrapper._studyData = { kind: 'mnemonic', word: info.word, mnemonic: StudyTools.normalizeMnemonic(info.mnemonic, info.word) };
+    }
+    wrapper._studyFace = 'definition';
+    updateStudyButtons(wrapper);
+  }
+
+  async function turnCard(wrapper, render) {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { render(); return; }
+    wrapper.classList.add('is-flipping');
+    let animation;
+    try {
+      animation = wrapper.animate([{ transform: 'perspective(1600px) rotateY(0deg)' }, { transform: 'perspective(1600px) rotateY(90deg)' }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
+      await animation.finished;
+      render();
+      animation.cancel();
+      animation = wrapper.animate([{ transform: 'perspective(1600px) rotateY(-90deg)' }, { transform: 'perspective(1600px) rotateY(0deg)' }], { duration: 200, easing: 'cubic-bezier(.22,.8,.3,1)', fill: 'forwards' });
+      await animation.finished;
+    } finally {
+      animation?.cancel();
+      wrapper.classList.remove('is-flipping');
+    }
+  }
+
+  async function flipCard(wrapper) {
+    const study = wrapper._studyData;
+    if (wrapper._flipping || wrapper._searching || study?.kind !== 'mnemonic') return;
+    const button = wrapper.querySelector('[data-study-action="flip"]');
+    const focus = document.activeElement === button;
+    wrapper._flipping = true;
+    wrapper._searching = true;
+    button.disabled = true;
+    try {
+      if (wrapper._studyFace === 'definition') {
+        await turnCard(wrapper, () => renderStudyCard(wrapper, study));
+      } else {
+        let info = wrapper._wordData;
+        const ownResult = Boolean(info);
+        if (!info) {
+          const open = Array.from($wsModules.children).find(card => !card._searching && StudyTools.wordKey(card._wordData?.word) === StudyTools.wordKey(study.word));
+          info = open?._wordData;
+        }
+        if (!info) {
+          const favorite = getVFavs().find(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
+          if (favorite?.definitions?.length || favorite?.meaning) info = { ...favorite, definitions: favorite.definitions?.length ? favorite.definitions : [favorite.meaning], sentences: favorite.examples || [], fromCache: true, vfavId: favorite.id };
+        }
+        if (!info) {
+          if (!getApiKey()) throw new Error('请先在顶部设置 API Key');
+          button.textContent = '查询中…';
+          const temporary = createWordSearchModule();
+          await searchWord(study.word, temporary, 'original');
+          info = temporary._wordData;
+          if (!info) throw new Error('释义查询失败，请重试');
+        }
+        if (!wrapper.isConnected) return;
+        if (StudyTools.wordKey(info.word) !== StudyTools.wordKey(study.word)) throw new Error('返回的单词不一致，请重新查询');
+        if (!ownResult) info = { ...info, sourceForm: '', inflection: '' };
+        const query = ownResult ? wrapper.querySelector('.word-search-input').value : study.word;
+        await turnCard(wrapper, () => renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), query, info));
+      }
+    } catch (error) {
+      if (wrapper.isConnected) renderStudyCard(wrapper, study, error.message);
+    } finally {
+      wrapper._flipping = false;
+      wrapper._searching = false;
+      if (wrapper.isConnected) {
+        const next = wrapper.querySelector('[data-study-action="flip"]');
+        if (next) { next.disabled = false; if (focus) next.focus({ preventScroll: true }); }
+        if (wrapper._studyFace === 'definition') syncSlider(wrapper.querySelector('.ws-mode-toggle'));
+        updateStudyButtons(wrapper);
+      }
+      saveWordSearchSession();
+    }
   }
 
   function insertAtReadingPosition(wrapper) {
@@ -116,7 +200,7 @@ const StudyToolsUI = (() => {
 
   async function requestStudy(kind, words, signal) {
     const schema = kind === 'mnemonic'
-      ? '返回 {"word":"原词","breakdown":"有依据的词根词缀或标为联想的拆解，无适用拆解可为空","association":"简洁生动的中文联想，连接拼写和核心词义","tip":"一句话记忆提示","example":{"en":"六级范围自然英文例句","cn":"中文翻译"}}。没有可靠依据不要编造词源、构词或发音。'
+      ? '返回 {"word":"原词","breakdown":"有依据的词根词缀或标为联想的拆解，无适用拆解可为空","association":"简洁生动的中文联想，连接拼写和核心词义","tip":"一句话记忆提示"}。没有可靠依据不要编造词源、构词或发音。'
       : '返回 {"summary":"中文核心区别，解释词性、含义、语气或使用场景差别","items":[{"word":"第一个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}},{"word":"第二个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}}],"tip":"一句话辨析提示"}。不要生硬地为近义词编造绝对区别，必要时说明重叠、特殊用法；不是近义词也如实比较。';
     const response = await fetch(DEEPSEEK_URL, {
       method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getApiKey()}` },
@@ -185,11 +269,12 @@ const StudyToolsUI = (() => {
     const button = wrapper.querySelector('[data-study-action="save-mnemonic"]');
     button.disabled = true;
     button.textContent = '正在收藏…';
-    wrapper.querySelector('[data-study-action="regenerate"]').disabled = true;
-    let dictionary = null;
+    const regenerate = wrapper.querySelector('[data-study-action="regenerate"]');
+    if (regenerate) regenerate.disabled = true;
+    let dictionary = StudyTools.wordKey(wrapper._wordData?.word) === StudyTools.wordKey(study.word) ? wrapper._wordData : null;
     try {
       const exists = getVFavs().some(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
-      if (!exists) {
+      if (!exists && !dictionary) {
         // Expand the same card in place. Keep _studyData until the entire operation succeeds,
         // so a refresh or failed lookup can still recover the original mnemonic.
         wrapper.classList.remove('study-card');
@@ -206,16 +291,16 @@ const StudyToolsUI = (() => {
       const favorites = StudyTools.mergeMnemonic(getVFavs(), study.word, study.mnemonic, dictionary);
       if (setVFavs(favorites) === false) throw new Error('收藏未保存，记法已保留，请检查存储空间后重试');
       wrapper._searching = false;
-      if (dictionary) {
-        delete wrapper._studyData;
+      if (dictionary && (!exists || wrapper._studyFace === 'definition')) {
         wrapper.classList.remove('study-card');
-        renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), study.word, { ...dictionary, mnemonic: study.mnemonic });
+        renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), wrapper.querySelector('.word-search-input').value, { ...dictionary, mnemonic: study.mnemonic });
       } else renderStudyCard(wrapper, study);
       renderVFavs();
       updateAllVocabButtons();
       // Add the saved mnemonic to other already-open cards only after the explicit save.
       document.querySelectorAll('.word-search-wrapper').forEach(card => {
         if (card === wrapper || card._searching || !card._wordData || StudyTools.wordKey(card._wordData.word) !== StudyTools.wordKey(study.word)) return;
+        if (card._studyFace === 'memory') { card._wordData = { ...card._wordData, mnemonic: study.mnemonic }; return; }
         renderWordResult(card, card.querySelector('.word-search-result'), card.querySelector('.word-search-input').value, { ...card._wordData, mnemonic: study.mnemonic });
       });
       toast(exists ? '记法已补充到单词收藏' : '单词与记法已一起收藏');
@@ -244,6 +329,24 @@ const StudyToolsUI = (() => {
     } catch (error) { toast(error.message); }
   }
 
+  function cancelFavorite(wrapper) {
+    const study = wrapper._studyData;
+    try {
+      if (study.kind === 'mnemonic') {
+        const favorites = getVFavs().filter(item => StudyTools.wordKey(item.word) !== StudyTools.wordKey(study.word));
+        if (setVFavs(favorites) === false) return;
+        renderVFavs();
+        updateAllVocabButtons();
+      } else {
+        const key = StudyTools.pairKey(study.left, study.right);
+        writeComparisons(getComparisons().filter(item => StudyTools.pairKey(item.left, item.right) !== key));
+        refreshFavorites();
+      }
+      updateStudyButtons();
+      toast('已取消收藏');
+    } catch (error) { toast(error.message); }
+  }
+
   function refreshFavorites() {
     const comparisons = safeComparisons();
     const words = getVFavs();
@@ -265,7 +368,7 @@ const StudyToolsUI = (() => {
       <summary>${esc(item.left)} 和 ${esc(item.right)}${item.pinned ? ' · 已置顶' : ''}<small>${esc(item.summary)}</small></summary>
       ${comparisonContent(item)}
       <div class="study-result-actions"><button type="button" class="btn-sm" data-comparison-action="open" data-id="${escAttr(item.id)}">在卡片中打开</button><button type="button" class="btn-sm" data-comparison-action="pin" data-id="${escAttr(item.id)}">${item.pinned ? '取消置顶' : '置顶'}</button><button type="button" class="btn-sm danger" data-comparison-action="delete" data-id="${escAttr(item.id)}">删除</button></div>
-    </details>`).join('') || `<div class="empty-state">${all.length ? '没有匹配的词语对比' : '还没有收藏的对比，生成后点击“收藏这组对比”即可保存'}</div>`;
+    </details>`).join('') || `<div class="empty-state">${all.length ? '没有匹配的词语对比' : '还没有收藏的对比'}</div>`;
   }
 
   function selectTab(value, focus = false) {
@@ -343,7 +446,9 @@ const StudyToolsUI = (() => {
       const wrapper = button.closest('.word-search-wrapper');
       if (!wrapper || wrapper._searching) return;
       const action = button.dataset.studyAction;
-      if (action === 'save-mnemonic') saveMnemonic(wrapper);
+      if (action === 'flip') flipCard(wrapper);
+      else if (button.dataset.saved === 'true') cancelFavorite(wrapper);
+      else if (action === 'save-mnemonic') saveMnemonic(wrapper);
       else if (action === 'save-comparison') saveComparison(wrapper);
       else {
         const study = wrapper._studyData;
@@ -396,6 +501,6 @@ const StudyToolsUI = (() => {
     refreshFavorites();
   }
 
-  return { init, mnemonicBlock, renderStudyCard, refreshFavorites, getComparisons,
+  return { init, mnemonicBlock, renderStudyCard, refreshFavorites, getComparisons, hasMnemonic, linkWordCard,
     activeTab: () => tab, exportComparisons };
 })();

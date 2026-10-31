@@ -19,9 +19,9 @@
     if (value.word && wordKey(value.word) !== wordKey(word)) return null;
     const result = {
       word: text(word), breakdown: text(value.breakdown), association: text(value.association),
-      tip: text(value.tip), example: example(value.example)
+      tip: text(value.tip), ...(value.example ? { example: example(value.example) } : {})
     };
-    if (!result.association || !result.tip || !result.example.en || !result.example.cn) return null;
+    if (!result.association || !result.tip) return null;
     return result;
   }
 

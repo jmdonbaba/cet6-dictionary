@@ -801,24 +801,22 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
   <div class="learning-workspace">
     <aside class="study-sidebar" aria-label="学习工具">
       <div class="study-toolbox card">
-        <div class="study-toolbox-heading"><span class="study-eyebrow">LEARN A LITTLE DEEPER</span><h2>学得更牢一点</h2></div>
         <div class="mobile-tool-tabs" id="mobileToolTabs" role="tablist" aria-label="学习功能" data-active="mnemonic">
           <button type="button" id="mnemonicToolTab" role="tab" aria-selected="true" aria-controls="mnemonicForm" data-tool-tab="mnemonic">怎么记</button>
           <button type="button" id="comparisonToolTab" role="tab" aria-selected="false" aria-controls="comparisonForm" tabindex="-1" data-tool-tab="comparison">词语对比</button>
         </div>
         <div class="study-tool-pages" id="studyToolPages">
         <form id="mnemonicForm" class="study-tool-form">
-          <label for="mnemonicInput">怎么记<span>给单词一个记忆线索</span></label>
+          <label for="mnemonicInput">怎么记</label>
           <input id="mnemonicInput" name="word" placeholder="输入想记住的单词" autocomplete="off" required maxlength="100">
           <button class="btn-primary" type="submit">生成记法 <span aria-hidden="true">↗</span></button>
         </form>
         <form id="comparisonForm" class="study-tool-form">
-          <label for="compareLeft">词语对比<span>分清两个词的用法</span></label>
+          <label for="compareLeft">词语对比</label>
           <div class="study-pair-inputs"><input id="compareLeft" name="left" placeholder="单词 A" aria-label="对比的第一个单词" autocomplete="off" required maxlength="100"><span>和</span><input id="compareRight" name="right" placeholder="单词 B" aria-label="对比的第二个单词" autocomplete="off" required maxlength="100"></div>
           <button class="btn-primary" type="submit">看看区别 <span aria-hidden="true">↗</span></button>
         </form>
         </div>
-        <p class="study-toolbox-note">好记法、易混词，都可以收藏起来。</p>
       </div>
     </aside>
     <main class="dictionary-main">
@@ -1285,6 +1283,7 @@ function scrollToVFavItem(favId) {
 
 function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
   const displayWord = info.word;
+  const hasMnemonic = typeof StudyToolsUI !== 'undefined' && StudyToolsUI.hasMnemonic(wrapper, info);
   const baseFormHint = info.sourceForm
     ? `<div class="base-form-hint">你搜的 <strong>"${esc(searchWord_)}"</strong> 是 <strong>${esc(displayWord)}</strong> 的<span>${esc(info.inflection || '变形')}</span>，以下为原形查询结果</div>`
     : '';
@@ -1296,7 +1295,8 @@ function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
         <span class="word">${esc(displayWord)}</span>
         ${info.phonetic ? `<span class="phonetic">${esc(info.phonetic)}</span>` : ''}
         ${info.pos ? `<span class="pos">${esc(info.pos.replace(/,\s*/g, ' & '))}</span>` : ''}
-        <button class="btn-favorite">收藏</button>
+        <button class="btn-favorite"${hasMnemonic ? ' data-study-action="save-mnemonic"' : ''}>收藏</button>
+        ${hasMnemonic ? '<button type="button" class="btn-sm" data-study-action="flip">怎么记 ↻</button>' : ''}
       </div>
       ${info.definitions ? info.definitions.map((d, i) => `<div class="definition"><span class="def-label">${i + 1}.</span>${esc(d)}</div>`).join('') : ''}
       ${info.forms ? `<div class="word-forms">${renderForms(info.forms)}</div>` : ''}
@@ -1305,7 +1305,6 @@ function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
         const cn = typeof s === 'string' ? '' : (s.cn || '');
         return `<div class="sen-item">${i + 1}. ${esc(en)}${cn ? `<span class="example-cn">${esc(cn)}</span>` : ''}</div>`;
       }).join('')}</div>` : ''}
-      ${info.mnemonic && typeof StudyToolsUI !== 'undefined' ? StudyToolsUI.mnemonicBlock(info.mnemonic) : ''}
       ${info.fromCache ? `<div style="font-size:12px;color:#16a34a;margin-top:8px;display:flex;align-items:center;gap:8px;"><span>搜索结果来自收藏夹：</span><button class="btn-open-in-favs" data-vfavid="${esc(info.vfavId || '')}" style="font-size:11px;padding:2px 8px;border:1px solid #16a34a;border-radius:4px;background:transparent;color:#16a34a;cursor:pointer;line-height:1.5;position:relative;top:1px;" onmouseover="this.style.background='#16a34a';this.style.color='#fff'" onmouseout="this.style.background='transparent';this.style.color='#16a34a'">在收藏夹中打开</button></div>` : ''}
     </div>`;
   wrapper._wordData = { ...info, word: displayWord };
@@ -1317,6 +1316,7 @@ function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
     const btn = wrapper.querySelector('.btn-favorite');
     if (btn) { btn.textContent = '取消收藏'; btn.classList.add('favorited'); }
   }
+  if (typeof StudyToolsUI !== 'undefined') StudyToolsUI.linkWordCard(wrapper, info);
   saveWordSearchSession();
 }
 
@@ -1327,6 +1327,11 @@ function hasDualPhonetic(value) {
 
 async function searchWord(word, wrapper, mode) {
   const resultEl = wrapper.querySelector('.word-search-result');
+  if (wrapper._studyData?.kind === 'mnemonic' && wrapper._studyData.word.toLowerCase() !== word.trim().toLowerCase()) {
+    delete wrapper._studyData;
+    delete wrapper._studyFace;
+    wrapper.classList.remove('study-card');
+  }
   wrapper._wordData = null;
   saveWordSearchSession();
   if (!getApiKey()) { resultEl.innerHTML = '<div class="empty-state">请先在顶部输入 API Key</div>'; return; }
@@ -1536,7 +1541,7 @@ function updateAllVocabButtons() {
   const favWords = new Set(vfavs.map(f => f.word.toLowerCase()));
   document.querySelectorAll('.word-search-wrapper').forEach(wrapper => {
     const saveBtn = wrapper.querySelector('.btn-favorite');
-    if (saveBtn && wrapper._wordData) {
+    if (saveBtn && !saveBtn.dataset?.studyAction && wrapper._wordData) {
       const isFav = favWords.has(wrapper._wordData.word.toLowerCase());
       if (isFav) { saveBtn.textContent = '取消收藏'; saveBtn.classList.add('favorited'); }
       else { saveBtn.textContent = '收藏'; saveBtn.classList.remove('favorited'); }
@@ -1731,6 +1736,7 @@ function normalizeWordSearchCard(card) {
     const mnemonic = StudyTools.normalizeMnemonic(info.mnemonic, info.word);
     if (mnemonic) normalized.result.mnemonic = mnemonic;
   }
+  if (normalized.study?.kind === 'mnemonic' && card.studyFace === 'definition') normalized.studyFace = 'definition';
   return normalized;
 }
 
@@ -1739,7 +1745,7 @@ function captureWordSearchCards() {
     input: wrapper.querySelector('.word-search-input').value,
     mode: getSearchMode(wrapper),
     result: wrapper._wordData,
-    ...(wrapper._studyData ? { study: wrapper._studyData } : {})
+    ...(wrapper._studyData ? { study: wrapper._studyData, ...(wrapper._studyFace === 'definition' ? { studyFace: 'definition' } : {}) } : {})
   }));
 }
 
@@ -1773,7 +1779,12 @@ function applyWordSearchCards(cards) {
       wrapper.querySelectorAll('.ws-mode-toggle button').forEach(button => {
         button.classList.toggle('active', button.dataset.mode === card.mode);
       });
-      if (card.study) StudyToolsUI.renderStudyCard(wrapper, card.study);
+      if (card.study) {
+        wrapper._studyData = card.study;
+        wrapper._wordData = card.result;
+        if (card.studyFace === 'definition' && card.result) renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), card.input, card.result, favoriteWords);
+        else StudyToolsUI.renderStudyCard(wrapper, card.study);
+      }
       else if (card.result) renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), card.input, card.result, favoriteWords);
       toggles.push(wrapper.querySelector('.ws-mode-toggle'));
     });
@@ -2198,6 +2209,7 @@ $wsModules.addEventListener('click', async e => {
   // Handle save vocab button in search result
   const saveBtn = e.target.closest('.word-search-result .btn-favorite');
   if (saveBtn) {
+    if (saveBtn.dataset.studyAction) return;
     const wrapper = e.target.closest('.word-search-wrapper');
     if (wrapper && wrapper._wordData) {
       if (saveBtn.classList.contains('favorited')) {

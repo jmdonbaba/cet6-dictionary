@@ -1,15 +1,12 @@
-.container { max-width: 1124px; }
-.header { margin-left: 264px; }
-.learning-workspace { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; align-items: start; }
+.container { max-width: 860px; }
+.header { margin-left: 0; }
+.learning-workspace { position: relative; }
 .dictionary-main { min-width: 0; }
-.study-sidebar { position: sticky; top: 24px; }
-.study-toolbox { padding: 22px 18px 18px; margin: 0; }
+.study-sidebar { position: absolute; top: 0; bottom: 0; left: -264px; width: 240px; }
+.study-toolbox { position: sticky; top: 24px; padding: 20px 18px; margin: 0; }
 .mobile-tool-tabs { display: none; }
-.study-eyebrow { font-size: 9px; font-weight: 650; letter-spacing: 1.25px; color: var(--text-secondary); }
-.study-toolbox h2 { font-size: 18px; letter-spacing: -.4px; margin: 3px 0 22px; font-weight: 650; }
 .study-tool-form + .study-tool-form { border-top: 1px solid var(--border); margin-top: 22px; padding-top: 22px; }
 .study-tool-form label { display: block; font-size: 14px; font-weight: 650; margin-bottom: 12px; }
-.study-tool-form label span { display: block; color: var(--text-secondary); font-size: 12px; font-weight: 400; margin-top: 3px; }
 .study-tool-form input, .comparison-search { display: block; min-width: 0; width: 100%; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card-bg); color: var(--text); padding: 11px 10px; font: inherit; font-size: 13px; outline: none; transition: border-color 180ms ease, box-shadow 220ms ease; }
 .study-tool-form input:focus, .comparison-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.08); }
 .study-tool-form input::placeholder { color: #94a3b8; }
@@ -17,8 +14,9 @@
 .study-tool-form .btn-primary span { font-size: 17px; line-height: 1; font-weight: 400; }
 .study-pair-inputs { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: 7px; align-items: center; }
 .study-pair-inputs > span { font-size: 12px; color: var(--text-secondary); }
-.study-toolbox-note { color: var(--text-secondary); font-size: 11px; margin-top: 20px; }
-.page-jump-controls, .unfavorited-jump-btn { left: calc(50% + 558px); }
+.page-jump-controls, .unfavorited-jump-btn { left: calc(50% + 426px); }
+.is-flipping { transform-origin: center center; backface-visibility: hidden; will-change: transform; }
+.btn-favorite.favorited { cursor: pointer; }
 .study-card .input-area { display: none; }
 .study-card .word-search-result { margin-top: 0 !important; }
 .study-result-header { display: flex; align-items: flex-start; gap: 16px; justify-content: space-between; margin-bottom: 18px; }
@@ -26,6 +24,7 @@
 .study-result-title span { color: var(--text-secondary); font-size: 14px; font-weight: 400; padding: 0 8px; }
 .study-kind-label { color: var(--primary); font-weight: 600; font-size: 11px; letter-spacing: .8px; margin-bottom: 6px; }
 .study-result-header .btn-sm { flex-shrink: 0; }
+.study-header-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .study-content { font-size: 14px; overflow-wrap: anywhere; }
 .study-content p { margin-bottom: 10px; }
 .study-section-label { font-size: 11px; font-weight: 650; color: var(--text-secondary); margin: 18px 0 6px; }
@@ -34,10 +33,8 @@
 .study-takeaway strong { display: block; font-size: 11px; margin-bottom: 4px; }
 .study-example { border-left: 2px solid var(--border); padding-left: 12px; margin-top: 12px; font-size: 13px; }
 .study-example span { display: block; color: var(--text-secondary); font-size: 12px; margin-top: 3px; }
-.study-footnote { color: var(--text-secondary); font-size: 11px; margin-top: 16px; }
 .study-result-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 18px; }
 .study-result-actions .btn-sm { color: var(--primary); }
-.study-save-state { font-size: 12px; color: var(--text-secondary); }
 .study-error { font-size: 13px; color: #b91c1c; padding: 10px 0; }
 .study-loading { color: var(--text-secondary); font-size: 14px; padding: 16px 0; }
 .comparison-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-top: 18px; }
@@ -68,21 +65,19 @@
   .page-jump-controls { display: none !important; }
   .unfavorited-jump-btn { left: auto; right: 24px; }
 }
-@media (max-width: 1000px) {
+@media (min-width: 1240px) {
+  .container { width: calc(100% - 528px); }
+}
+@media (max-width: 1239px) {
   .container { max-width: 860px; }
   .header { margin-left: 0; }
-  .learning-workspace { grid-template-columns: minmax(0,1fr); gap: 16px; }
-  .study-sidebar { position: static; }
-  .study-toolbox { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 24px; padding: 20px; }
-  .study-toolbox-heading { grid-column: 1 / -1; }
+  .study-sidebar { position: static; width: auto; margin-bottom: 16px; }
+  .study-toolbox { position: static; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 24px; padding: 20px; }
   .study-tool-pages { display: contents; }
-  .study-toolbox h2 { margin-bottom: 18px; }
   .study-tool-form + .study-tool-form { border-top: 0; border-left: 1px solid var(--border); margin: 0; padding: 0 0 0 24px; }
-  .study-toolbox-note { grid-column: 1 / -1; margin-top: 16px; }
 }
 @media (max-width: 600px) {
   .study-toolbox { display: block; padding: 18px; }
-  .study-toolbox-heading { display: none; }
   .mobile-tool-tabs { position: relative; display: flex; isolation: isolate; border-radius: 999px; background: #f1f5f9; padding: 3px; margin-bottom: 16px; }
   .mobile-tool-tabs::before { content: ''; position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: #fff; border-radius: 999px; box-shadow: var(--shadow); z-index: -1; transition: translate 320ms var(--motion-spring); }
   .mobile-tool-tabs[data-active="comparison"]::before { translate: 100% 0; }
@@ -92,9 +87,7 @@
   .study-tool-pages::-webkit-scrollbar { display: none; }
   .study-tool-form { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; padding: 3px; }
   .study-tool-form + .study-tool-form { border: 0; padding: 3px; margin: 0; }
-  .study-tool-form label { font-size: 0; margin-bottom: 10px; }
-  .study-tool-form label span { font-size: 12px; margin: 0; }
-  .study-toolbox-note { margin-top: 12px; }
+  .study-tool-form label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
   .study-tool-form input { font-size: 16px; }
   .study-tool-form .btn-primary { min-height: 42px; }
   .comparison-grid { grid-template-columns: minmax(0,1fr); gap: 12px; }
