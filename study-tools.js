@@ -28,15 +28,21 @@
     if (!value || typeof value !== 'object' || !wordKey(word)) return null;
     if (value.word && wordKey(value.word) !== wordKey(word)) return null;
     const breakdown = text(value.breakdown);
+    const association = text(value.association);
+    const tip = text(value.tip);
     const parts = normalizeMnemonicParts(value.parts);
+    // The card only carries the formula and where its chunks come from. Legacy
+    // favorites may still store association/tip so older cards stay readable.
     const result = {
-      word: text(word), breakdown, association: text(value.association),
-      tip: text(value.tip),
+      word: text(word),
+      ...(breakdown ? { breakdown } : {}),
       // A chunk source only makes sense together with the chunks it explains.
       ...(breakdown && parts.length ? { parts } : {}),
+      ...(association ? { association } : {}),
+      ...(tip ? { tip } : {}),
       ...(value.example ? { example: example(value.example) } : {})
     };
-    if (!result.association || !result.tip) return null;
+    if (!breakdown && !association && !tip) return null;
     return result;
   }
 

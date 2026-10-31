@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const mnemonic = word => ({ word, breakdown: 'af + fect', parts: [{ part: 'af', source: '词根：朝向' }, { part: 'fect', source: '联想到 effect（结果），纯记忆联想' }], association: '让情绪动起来，联想“影响”。', tip: '记住影响这个动作。' });
+const mnemonic = word => ({ word, breakdown: 'af + fect', parts: [{ part: 'af', source: '词根：朝向' }, { part: 'fect', source: '联想到 effect（结果），纯记忆联想' }] });
 const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 'v.', definitions: ['影响'], forms: { inflections: [], derivatives: [] }, sentences: [{ en: 'Stress can affect memory.', cn: '压力会影响记忆。' }] });
 
 (async () => {
@@ -34,6 +34,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
       assert.match(system, /parts 与 breakdown 的词块一一对应/);
       assert.match(system, /词根、前缀或后缀/);
       assert.match(system, /联想到某词/);
+      assert.match(system, /不写额外的联想段落或记忆提示/);
       mnemonicRequests.push(JSON.parse(user).words[0]);
       if (mnemonicFail) { await route.fulfill({ status: 503, body: '{}' }); return; }
       data = mnemonic(JSON.parse(user).words[0]);
@@ -63,6 +64,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     const memoryCard = page.locator(`#${memoryId}`);
     assert.equal(await memoryCard.locator('[data-study-action="save-mnemonic"]').textContent(), '收藏');
     assert.match(await memoryCard.locator('.study-parts').textContent(), /词块来源：af ← 词根：朝向；fect ← 联想到 effect（结果），纯记忆联想/);
+    assert.equal(await memoryCard.locator('.study-section-label, .study-takeaway').count(), 0, 'memory cards no longer repeat the formula as prose');
     assert.equal(await memoryCard.locator('.study-example, .study-footnote, .study-save-state').count(), 0);
     await memoryCard.locator('[data-study-action="flip"]').click();
     await memoryCard.locator('.word-header .word').waitFor();
@@ -96,6 +98,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     assert.equal(dictionaryRequests, 1);
     assert.equal((await favorites())[0].mnemonic.word, 'affect');
     assert.deepEqual((await favorites())[0].mnemonic.parts, mnemonic('affect').parts);
+    assert.equal((await favorites())[0].mnemonic.association, undefined, 'saved mnemonics no longer store repeated prose');
     assert.equal(await activeMemory.locator('.word-header .word').textContent(), 'affect');
     assert.equal(await page.locator('.word-search-wrapper').first().getAttribute('id'), finalMemoryId, 'word card stays in place ahead of blank draft');
     await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
@@ -316,11 +319,18 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     assert.equal(await page.locator('#wordSearchModules .study-breakdown strong').count(), 3);
     assert.match(await page.locator('#wordSearchModules .study-breakdown').textContent(), /拆分记忆：/);
     assert.equal(await page.locator('#wordSearchModules .study-parts').count(), 0, 'legacy mnemonics without chunk sources still render');
+    assert.equal(await page.locator('#wordSearchModules .study-section-label, #wordSearchModules .study-takeaway').count(), 0, 'stored prose is hidden once the formula exists');
     assert.equal(await page.locator('#wordSearchModules .study-breakdown').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.locator('#wordSearchModules .word-search-wrapper').screenshot({ path: path.join(process.env.TEMP, 'cet6-split-memory-desktop.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator('#wordSearchModules .word-search-wrapper').screenshot({ path: path.join(process.env.TEMP, 'cet6-split-memory-mobile.png') });
+    await page.evaluate(() => applyWordSearchCards([{ input: 'legacy', study: { kind: 'mnemonic', word: 'legacy', mnemonic: {
+      word: 'legacy', association: '只有旧联想', tip: '只有旧提示'
+    } } }]));
+    assert.match(await page.locator('#wordSearchModules .study-content').textContent(), /只有旧联想/);
+    assert.match(await page.locator('#wordSearchModules .study-content').textContent(), /只有旧提示/);
+    assert.equal(await page.locator('#wordSearchModules .study-breakdown').count(), 0, 'prose-only legacy cards still render without a formula');
     await page.evaluate(({ info, memory }) => applyWordSearchCards([
       { input: 'affects', mode: 'lemma', result: { ...info, sourceForm: 'affects', inflection: '三单', mnemonic: memory } },
       { input: 'affect', mode: 'original', study: { kind: 'mnemonic', word: 'affect', mnemonic: memory } }

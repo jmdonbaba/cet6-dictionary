@@ -117,6 +117,14 @@
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
+  function renderMemoryField(mnemonic) {
+    const breakdown = clean(mnemonic.breakdown);
+    const parts = breakdown ? renderMemoryParts(mnemonic.parts) : '';
+    // Older favorites only have prose; keep them readable, but new cards use the formula alone.
+    const legacy = breakdown ? '' : [mnemonic.association, mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('');
+    return `<div class="field"><strong>怎么记</strong>${breakdown ? `<p>拆分记忆：${renderMemoryBreakdown(breakdown)}</p>` : ''}${parts ? `<p class="parts"><strong>词块来源：</strong>${parts}</p>` : ''}${legacy}</div>`;
+  }
+
   function renderStudyCardHtml(word, index, options) {
     const continuation = Boolean(options && options.continuation);
     const includeNotes = !options || options.includeNotes !== false;
@@ -133,7 +141,7 @@
       <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
       ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
       ${definitionBlock}${formsBlock}${exampleBlock}
-      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${clean(word.mnemonic.breakdown) ? `<p>拆分记忆：${renderMemoryBreakdown(word.mnemonic.breakdown)}</p>` : ''}${clean(word.mnemonic.breakdown) && renderMemoryParts(word.mnemonic.parts) ? `<p class="parts"><strong>词块来源：</strong>${renderMemoryParts(word.mnemonic.parts)}</p>` : ''}${[word.mnemonic.association, word.mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
+      ${!continuation && word.mnemonic ? renderMemoryField(word.mnemonic) : ''}
       ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
     </section>`;
   }
@@ -197,12 +205,16 @@
         });
       }
       if (word.mnemonic) {
-        const breakdown = word.mnemonic.breakdown;
-        const parts = clean(breakdown) ? normalizeMnemonicParts(word.mnemonic.parts) : [];
+        const breakdown = clean(word.mnemonic.breakdown);
+        const parts = breakdown ? normalizeMnemonicParts(word.mnemonic.parts) : [];
         lines.push('', '**怎么记**');
-        if (clean(breakdown)) lines.push(escapeMarkdown(breakdown));
-        if (parts.length) lines.push(`**词块来源**：${parts.map(item => `${escapeMarkdown(item.part)} ← ${escapeMarkdown(item.source)}`).join('；')}`);
-        [word.mnemonic.association, word.mnemonic.tip].filter(clean).forEach(value => lines.push(escapeMarkdown(value)));
+        if (breakdown) {
+          lines.push(escapeMarkdown(breakdown));
+          if (parts.length) lines.push(`**词块来源**：${parts.map(item => `${escapeMarkdown(item.part)} ← ${escapeMarkdown(item.source)}`).join('；')}`);
+        } else {
+          // Older favorites only have prose; keep them readable, but new cards use the formula alone.
+          [word.mnemonic.association, word.mnemonic.tip].filter(clean).forEach(value => lines.push(escapeMarkdown(value)));
+        }
       }
       lines.push('', '复习笔记：', '', '---');
       return lines.join('\n');

@@ -45,6 +45,21 @@ test('keeps chunk sources only together with a breakdown and complete entries', 
   assert.deepEqual(Tools.normalizeMnemonicParts([{ part: 'a', source: '词根' }, { part: 'b' }, null]), [{ part: 'a', source: '词根' }]);
 });
 
+test('new memory cards keep only the formula and its chunk sources', () => {
+  const card = {
+    word: 'plausible',
+    breakdown: 'plaus（拍手称好） + ible（能…的） → 能赢得掌声的说法 → 似乎合理的、可信的',
+    parts: [
+      { part: 'plaus', source: '词根：拍手、鼓掌，与 applause 同源' },
+      { part: '-ible', source: '后缀：能…的' }
+    ]
+  };
+  assert.deepEqual(Tools.normalizeMnemonic(card, 'plausible'), card);
+  assert.deepEqual(Tools.normalizeMnemonic({ word: 'affect', breakdown: 'aff + ect' }, 'affect'),
+    { word: 'affect', breakdown: 'aff + ect' });
+  assert.equal(Tools.normalizeMnemonic({ word: 'affect' }, 'affect'), null);
+});
+
 test('manual mnemonic merging preserves favorite order, details and pin state without mutating input', () => {
   const favorites = [{ id: 'old', word: 'affect', definitions: ['影响'], examples: ['existing'], pinned: true }, { word: 'other' }];
   const before = JSON.stringify(favorites);
@@ -93,19 +108,32 @@ test('comparison favorites deduplicate reversed pairs and keep saved metadata', 
   assert.equal(normalized[0].pinned, true);
 });
 
-test('mnemonics survive study exports and stay escaped in both formats', () => {
+test('memory exports keep the formula and sources and drop repeated prose', () => {
   const parts = [{ part: 'aff', source: '词根：做，与 affect 同源' }, { part: 'ect', source: '联想到 effect（结果）' }];
   const words = Export.normalizeFavorites([{ word: 'affect', mnemonic: { ...mnemonic, association: '<img onerror="bad"> & **联想**', parts } }]);
   assert.deepEqual(words[0].mnemonic, { ...mnemonic, association: '<img onerror="bad"> & **联想**', parts });
   const html = Export.renderHtml(words);
   const md = Export.renderMarkdown(words);
   assert.match(html, /怎么记/);
-  assert.match(html, /&lt;img/);
-  assert.doesNotMatch(html, /<img/);
   assert.match(html, /词块来源：<\/strong><strong>aff<\/strong> ← 词根：做，与 affect 同源；<strong>ect<\/strong> ← 联想到 effect（结果）/);
-  assert.match(md, /怎么记/);
+  assert.doesNotMatch(html, /<img/);
+  assert.doesNotMatch(html, /&lt;img/);
   assert.match(md, /\*\*词块来源\*\*：aff ← 词根：做，与 affect 同源；ect ← 联想到 effect（结果）/);
+  assert.doesNotMatch(md, /\\\*\\\*联想/);
+});
+
+test('legacy mnemonics without a formula still export escaped prose', () => {
+  const legacy = { word: 'affect', association: '<img onerror="bad"> & **联想**', tip: '一句旧提示' };
+  const words = Export.normalizeFavorites([{ word: 'affect', mnemonic: legacy }]);
+  assert.deepEqual(words[0].mnemonic, { word: 'affect', breakdown: '', association: legacy.association, tip: legacy.tip, example: { en: '', cn: '' } });
+  const html = Export.renderHtml(words);
+  const md = Export.renderMarkdown(words);
+  assert.match(html, /怎么记/);
+  assert.match(html, /&lt;img onerror=&quot;bad&quot;&gt; &amp; \*\*联想\*\*/);
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /一句旧提示/);
   assert.match(md, /\\\*\\\*联想/);
+  assert.match(md, /一句旧提示/);
 });
 
 test('page snapshots preserve mnemonic and comparison cards with no secrets', () => {
