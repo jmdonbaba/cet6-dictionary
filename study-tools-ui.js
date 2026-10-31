@@ -122,17 +122,31 @@ const StudyToolsUI = (() => {
   async function turnCard(wrapper, render) {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) { render(); return; }
     wrapper.classList.add('is-flipping');
+    // A flat turn keeps the card's vertical edges still; a perspective turn would
+    // balloon a card this wide while it rotates.
+    const startHeight = wrapper.offsetHeight;
     let animation;
     try {
-      animation = wrapper.animate([{ transform: 'perspective(1600px) rotateY(0deg)' }, { transform: 'perspective(1600px) rotateY(90deg)' }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
+      animation = wrapper.animate(
+        [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(90deg)' }],
+        { duration: 160, easing: 'ease-in', fill: 'forwards' }
+      );
       await animation.finished;
       render();
+      // The two faces rarely share a height. Glide the card between them while the
+      // new face opens instead of letting the bottom edge jump at the turning point.
+      const endHeight = wrapper.offsetHeight;
+      const resize = Math.abs(endHeight - startHeight) > 1;
+      if (resize) wrapper.classList.add('is-resizing');
       animation.cancel();
-      animation = wrapper.animate([{ transform: 'perspective(1600px) rotateY(-90deg)' }, { transform: 'perspective(1600px) rotateY(0deg)' }], { duration: 200, easing: 'cubic-bezier(.22,.8,.3,1)', fill: 'forwards' });
+      animation = wrapper.animate(resize
+        ? [{ transform: 'rotateY(-90deg)', height: `${startHeight}px` }, { transform: 'rotateY(0deg)', height: `${endHeight}px` }]
+        : [{ transform: 'rotateY(-90deg)' }, { transform: 'rotateY(0deg)' }],
+      { duration: 200, easing: 'cubic-bezier(.22,.8,.3,1)', fill: 'forwards' });
       await animation.finished;
     } finally {
       animation?.cancel();
-      wrapper.classList.remove('is-flipping');
+      wrapper.classList.remove('is-flipping', 'is-resizing');
     }
   }
 

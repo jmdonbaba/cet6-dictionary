@@ -3,6 +3,16 @@ const fs = require('node:fs');
 const test = require('node:test');
 
 const source = fs.readFileSync('index.html', 'utf8');
+const studyUi = fs.readFileSync('study-tools-ui.js', 'utf8');
+const studyCss = fs.readFileSync('study-tools.css', 'utf8');
+
+test('turns cards flat and glides between face heights instead of stretching', () => {
+  assert.doesNotMatch(studyUi, /perspective\(/);
+  assert.match(studyUi, /height: `\$\{startHeight\}px`/);
+  assert.match(studyUi, /height: `\$\{endHeight\}px`/);
+  assert.match(studyUi, /wrapper\.classList\.add\('is-resizing'\)/);
+  assert.match(studyCss, /\.is-resizing\s*\{\s*overflow:\s*hidden;/);
+});
 
 test('uses the shared shadow language for cards and the export button', () => {
   assert.match(source, /--shadow-hover:\s*0 6px 20px rgba\(15, 23, 42, 0\.08\),\s*0 2px 6px rgba\(15, 23, 42, 0\.05\);/);

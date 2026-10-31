@@ -88,8 +88,28 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     await page.waitForFunction(() => document.querySelector('.word-search-wrapper')._flipping);
     await page.waitForFunction(() => !document.querySelector('.word-search-wrapper')._flipping);
     assert.equal(await activeMemory.locator('.word-header .word').textContent(), 'affect');
-    await activeMemory.locator('[data-study-action="flip"]').click();
+    const flipFrames = await page.evaluate(async () => {
+      const card = document.querySelector('.word-search-wrapper');
+      const frames = [];
+      const start = performance.now();
+      const sample = () => {
+        const rect = card.getBoundingClientRect();
+        frames.push({ top: rect.top, height: rect.height });
+        if (performance.now() - start < 900) requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
+      document.querySelector('.word-header [data-study-action="flip"]').click();
+      await new Promise(resolve => setTimeout(resolve, 900));
+      return frames;
+    });
     await page.waitForFunction(() => !document.querySelector('.word-search-wrapper')._flipping);
+    const flipHeights = flipFrames.map(frame => frame.height);
+    const flipTops = flipFrames.map(frame => frame.top);
+    const flipRange = Math.abs(flipHeights.at(-1) - flipHeights[0]);
+    const maxFrameStep = Math.max(...flipHeights.slice(1).map((height, index) => Math.abs(height - flipHeights[index])));
+    assert.ok(flipRange > 20, 'the two faces have different heights');
+    assert.ok(maxFrameStep < Math.max(25, flipRange / 3), `card height glides instead of jumping: ${JSON.stringify(flipFrames)}`);
+    assert.ok(Math.max(...flipTops) - Math.min(...flipTops) < 3, `the card top stays still while turning: ${JSON.stringify(flipTops)}`);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(dictionaryRequests, 1, 'flipping back reuses the dictionary data');
     const finalMemoryId = await activeMemory.getAttribute('id');

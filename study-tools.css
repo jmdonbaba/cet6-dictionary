@@ -16,6 +16,7 @@
 .study-pair-inputs > span { font-size: 12px; color: var(--text-secondary); }
 .page-jump-controls, .unfavorited-jump-btn { left: calc(50% + 426px); }
 .is-flipping { transform-origin: center center; backface-visibility: hidden; will-change: transform; }
+.is-resizing { overflow: hidden; }
 .btn-favorite.favorited { cursor: pointer; }
 .study-card .input-area { display: none; }
 .study-card .word-search-result { margin-top: 0 !important; }
