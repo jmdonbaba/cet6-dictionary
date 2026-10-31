@@ -84,6 +84,15 @@
         `${lineStart}${indent}${marker === '-' ? '\\-' : `${marker.slice(0, -1)}\\.`}`);
   }
 
+  function renderMemoryBreakdown(value) {
+    const steps = clean(value).split('→').map(step => step.trim());
+    return steps.map((step, index) => {
+      const safe = escapeHtml(step);
+      if (steps.length > 1 && index === steps.length - 1 && safe) return `<strong>${safe}</strong>`;
+      return safe.replace(/([A-Za-z][A-Za-z'-]*)(?=\s*[（(])/g, '<strong>$1</strong>');
+    }).join(' → ');
+  }
+
   function studyDate(options) {
     const date = options && options.generatedAt instanceof Date ? options.generatedAt : new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -105,7 +114,7 @@
       <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
       ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
       ${definitionBlock}${formsBlock}${exampleBlock}
-      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${[word.mnemonic.breakdown, word.mnemonic.association, word.mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
+      ${!continuation && word.mnemonic ? `<div class="field"><strong>怎么记</strong>${clean(word.mnemonic.breakdown) ? `<p>拆分记忆：${renderMemoryBreakdown(word.mnemonic.breakdown)}</p>` : ''}${[word.mnemonic.association, word.mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('')}</div>` : ''}
       ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
     </section>`;
   }
@@ -133,7 +142,7 @@
     .pronunciation { color: #333; }
     .pronunciation span + span { margin-left: 12px; }
     .field { margin-top: 10px; }
-    .field strong, .notes strong { display: block; font-size: 14px; }
+    .field > strong, .notes > strong { display: block; font-size: 14px; }
     .field li { padding-left: 2px; }
     .translation { display: block; color: #333; }
     .notes { margin-top: 14px; }
@@ -188,7 +197,7 @@
 
   return {
     MAX_EXAMPLES, normalizeFavorites, createFilename,
-    escapeHtml, escapeMarkdown, renderStudyCardHtml, renderHtml, renderMarkdown,
+    escapeHtml, escapeMarkdown, renderMemoryBreakdown, renderStudyCardHtml, renderHtml, renderMarkdown,
     downloadBlob
   };
 });

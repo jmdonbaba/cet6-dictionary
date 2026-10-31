@@ -11,7 +11,7 @@ const StudyToolsUI = (() => {
 
   function mnemonicContent(mnemonic) {
     return `<div class="study-content">
-      ${mnemonic.breakdown ? `<div class="study-section-label">拆开看</div><p><span class="study-breakdown">${esc(mnemonic.breakdown)}</span></p>` : ''}
+      ${mnemonic.breakdown ? `<p class="study-breakdown"><span class="study-breakdown-label">拆分记忆：</span>${StudyExport.renderMemoryBreakdown(mnemonic.breakdown)}</p>` : ''}
       <div class="study-section-label">这样联想</div><p>${esc(mnemonic.association)}</p>
       <div class="study-takeaway"><strong>记住这一点</strong>${esc(mnemonic.tip)}</div>
     </div>`;
@@ -200,7 +200,7 @@ const StudyToolsUI = (() => {
 
   async function requestStudy(kind, words, signal) {
     const schema = kind === 'mnemonic'
-      ? '返回 {"word":"原词","breakdown":"有依据的词根词缀或标为联想的拆解，无适用拆解可为空","association":"简洁生动的中文联想，连接拼写和核心词义","tip":"一句话记忆提示"}。没有可靠依据不要编造词源、构词或发音。'
+      ? '返回 {"word":"原词","breakdown":"词块（中文含义） + 词块（中文含义） → 组合后的直观含义 → 单词的核心中文释义","association":"简洁生动的中文联想，连接拼写和核心词义","tip":"一句话记忆提示"}。breakdown 要像一条简短的拆分记忆公式，示例 advisable：advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。词块尽量使用容易识别的完整词或常见词缀，使用自然的中文把各部分含义串起来，不写 advis(e) 之类的拼写标记，不在公式里附加“去 e 加后缀”等拼写过程；确有必要的拼写变化可在 association 里用一句话补充。只使用有依据的构词或清楚标明的记忆联想，无法合理拆分时 breakdown 为空字符串，不硬拆，不编造词源、构词或发音。纯文本，不使用 Markdown、HTML 或重复“拆分记忆”标题。'
       : '返回 {"summary":"中文核心区别，解释词性、含义、语气或使用场景差别","items":[{"word":"第一个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}},{"word":"第二个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}}],"tip":"一句话辨析提示"}。不要生硬地为近义词编造绝对区别，必要时说明重叠、特殊用法；不是近义词也如实比较。';
     const response = await fetch(DEEPSEEK_URL, {
       method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getApiKey()}` },

@@ -10,6 +10,17 @@ const comparison = { kind: 'comparison', left: 'affect', right: 'effect', summar
   { word: 'effect', meaning: '结果', usage: '常作名词', collocations: ['have an effect on'], example: { en: 'The effect is lasting.', cn: '影响是持久的。' } }
 ] };
 
+test('split memory emphasizes word parts and the final meaning while escaping stored text', () => {
+  const html = Export.renderMemoryBreakdown('advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。');
+  assert.match(html, /<strong>advise<\/strong>（建议）/);
+  assert.match(html, /<strong>able<\/strong>（能…的）/);
+  assert.match(html, /→ <strong>明智的、可取的。<\/strong>/);
+  const unsafe = Export.renderMemoryBreakdown('<img src=x onerror=alert(1)> → <script>bad</script>');
+  assert.doesNotMatch(unsafe, /<img|<script/);
+  assert.match(unsafe, /&lt;script&gt;/);
+  assert.equal(Export.renderMemoryBreakdown('传统联想文字'), '传统联想文字');
+});
+
 test('manual mnemonic merging preserves favorite order, details and pin state without mutating input', () => {
   const favorites = [{ id: 'old', word: 'affect', definitions: ['影响'], examples: ['existing'], pinned: true }, { word: 'other' }];
   const before = JSON.stringify(favorites);

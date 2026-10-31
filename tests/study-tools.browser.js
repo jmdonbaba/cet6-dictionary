@@ -26,7 +26,11 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     const system = body.messages[0].content;
     const user = body.messages[1].content;
     let data;
-    if (system.includes('记忆方法')) data = mnemonic(JSON.parse(user).words[0]);
+    if (system.includes('记忆方法')) {
+      assert.match(system, /词块（中文含义）/);
+      assert.match(system, /advise（建议） \+ able（能…的）/);
+      data = mnemonic(JSON.parse(user).words[0]);
+    }
     else if (system.includes('词语对比')) {
       const names = JSON.parse(user).words;
       data = { summary: 'affect 侧重影响的动作，effect 侧重结果。', tip: '动作看 affect，结果看 effect。', items: names.map(word => ({ word, meaning: word === 'affect' ? '影响' : '结果', usage: word === 'affect' ? '通常作动词' : '通常作名词', collocations: ['have an effect on'], example: { en: 'The effect is lasting.', cn: '影响是持久的。' } })) };
@@ -270,6 +274,16 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     }
     assert.equal(await page.locator('.study-toolbox-heading, .study-toolbox-note, .study-tool-form label span').count(), 0);
     const originalCards = await page.evaluate(() => captureWordSearchCards());
+    await page.evaluate(() => applyWordSearchCards([{ input: 'advisable', study: { kind: 'mnemonic', word: 'advisable', mnemonic: {
+      word: 'advisable', breakdown: 'advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。', association: '采纳建议是明智的。', tip: 'advise + able，建议可取。'
+    } } }]));
+    assert.equal(await page.locator('#wordSearchModules .study-breakdown strong').count(), 3);
+    assert.match(await page.locator('#wordSearchModules .study-breakdown').textContent(), /拆分记忆：/);
+    assert.equal(await page.locator('#wordSearchModules .study-breakdown').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator('#wordSearchModules .word-search-wrapper').screenshot({ path: path.join(process.env.TEMP, 'cet6-split-memory-desktop.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('#wordSearchModules .word-search-wrapper').screenshot({ path: path.join(process.env.TEMP, 'cet6-split-memory-mobile.png') });
     await page.evaluate(({ info, memory }) => applyWordSearchCards([
       { input: 'affects', mode: 'lemma', result: { ...info, sourceForm: 'affects', inflection: '三单', mnemonic: memory } },
       { input: 'affect', mode: 'original', study: { kind: 'mnemonic', word: 'affect', mnemonic: memory } }
