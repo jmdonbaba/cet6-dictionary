@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f8fafc">
 <title>CET-6 查词助手</title>
 <style>
 :root {
@@ -778,8 +779,42 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
 }
 </style>
 <link rel="stylesheet" href="study-tools.css">
+<link rel="stylesheet" href="appearance.css">
+<script>
+// 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
+try {
+  var savedInterface = localStorage.getItem('cet6_interface_style') === 'glass' ? 'glass' : 'classic';
+  var wallpaperThemes = ['minimal', 'aurora', 'peach', 'night', 'water'];
+  var savedTheme = localStorage.getItem('cet6_theme_' + savedInterface);
+  if (wallpaperThemes.indexOf(savedTheme) === -1) {
+    savedTheme = savedInterface === 'glass' ? 'aurora' : 'minimal';
+  }
+  document.documentElement.dataset.interface = savedInterface;
+  document.documentElement.dataset.wallpaper = savedTheme;
+  var savedThemeColor = document.querySelector('meta[name="theme-color"]');
+  var wallpaperColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
+  if (savedThemeColor) savedThemeColor.setAttribute('content', wallpaperColors[savedTheme] || '#f8fafc');
+} catch (error) {
+  document.documentElement.dataset.interface = 'classic';
+  document.documentElement.dataset.wallpaper = 'minimal';
+}
+</script>
 </head>
 <body>
+<div class="appearance-backdrop" id="appearanceBackdrop" aria-hidden="true">
+  <span class="appearance-aurora aurora-blue"></span>
+  <span class="appearance-aurora aurora-violet"></span>
+  <span class="appearance-aurora aurora-teal"></span>
+  <span class="appearance-aurora aurora-rose"></span>
+  <span class="appearance-water"></span>
+  <span class="appearance-noise"></span>
+</div>
+<button class="settings-entry" id="btnOpenSettings" type="button" aria-label="打开设置" aria-haspopup="dialog" title="设置">
+  <svg class="settings-entry-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <circle cx="12" cy="12" r="3.1"></circle>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+  </svg>
+</button>
 <div class="container">
   <div class="header">
     <h1>CET-6 查词助手</h1>
@@ -929,12 +964,107 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
       </div>
     </div>
   </div>
+  <div class="modal-card settings-modal" id="modalSettings" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-header">
+      <span class="modal-header-title" id="settingsTitle">设置</span>
+      <div class="modal-header-actions">
+        <button class="modal-close" data-close="modalSettings" aria-label="关闭设置">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <section class="settings-section" aria-labelledby="appearanceSectionTitle">
+        <h3 class="settings-section-title" id="appearanceSectionTitle">界面设置</h3>
+        <p class="settings-section-hint">选择界面的视觉风格，选择会保存在当前浏览器，下次打开自动生效。</p>
+        <div class="appearance-options" role="radiogroup" aria-label="界面风格">
+          <label class="appearance-option">
+            <input class="appearance-radio" type="radio" name="appearanceStyle" value="classic">
+            <span class="appearance-option-preview is-classic" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">传统界面</span>
+              <span class="appearance-option-desc">经典白色卡片，阅读专注、显示最稳。</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+          <label class="appearance-option">
+            <input class="appearance-radio" type="radio" name="appearanceStyle" value="glass">
+            <span class="appearance-option-preview is-glass" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">玻璃质感<span class="appearance-dev">（开发中）</span></span>
+              <span class="appearance-option-desc">半透明磨砂卡片，配高饱和圆润背景，效果仍在打磨。</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+        </div>
+        <p class="settings-note">玻璃质感为实验性界面，仍在持续调整；若设备性能有限或开启了“减少透明度”，会自动降级为更清晰的卡片。主题会按界面分别记住。</p>
+      </section>
+      <section class="settings-section" aria-labelledby="themeSectionTitle">
+        <h3 class="settings-section-title" id="themeSectionTitle">主题</h3>
+        <p class="settings-section-hint">背景主题两种界面都能用；传统界面默认“极简”（最初的样子），玻璃质感默认“极光”。</p>
+        <div class="theme-options" role="radiogroup" aria-label="背景主题">
+          <label class="theme-option">
+            <input class="appearance-radio" type="radio" name="wallpaperTheme" value="minimal">
+            <span class="theme-swatch is-minimal" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">极简</span>
+              <span class="appearance-option-desc">纯色，最初的样子。</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+          <label class="theme-option">
+            <input class="appearance-radio" type="radio" name="wallpaperTheme" value="aurora">
+            <span class="theme-swatch is-aurora" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">极光</span>
+              <span class="appearance-option-desc">冷调蓝紫，最衬玻璃</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+          <label class="theme-option">
+            <input class="appearance-radio" type="radio" name="wallpaperTheme" value="peach">
+            <span class="theme-swatch is-peach" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">蜜桃</span>
+              <span class="appearance-option-desc">暖调日落，温柔不刺眼</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+          <label class="theme-option">
+            <input class="appearance-radio" type="radio" name="wallpaperTheme" value="night">
+            <span class="theme-swatch is-night" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">深空</span>
+              <span class="appearance-option-desc">暗色底，对比最强</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+          <label class="theme-option">
+            <input class="appearance-radio" type="radio" name="wallpaperTheme" value="water">
+            <span class="theme-swatch is-water" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">水波</span>
+              <span class="appearance-option-desc">清澈浅水的焦散光纹</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+        </div>
+      </section>
+    </div>
+  </div>
 </div>
 
 <script src="study-export.js"></script>
 <script src="saved-page-store.js"></script>
 <script src="study-tools.js"></script>
 <script src="study-tools-ui.js"></script>
+<script src="appearance.js"></script>
+<script src="glass-refraction.js"></script>
+<script>
+// 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
+// 这里把透镜带宽/强度调到「水波」主题下更明显的一档。
+if (window.LiquidGlass && LiquidGlass.supported) {
+  try { LiquidGlass.configure({ scale: 52, band: 34 }); } catch (error) { /* 参数不支持时用默认值 */ }
+}
+</script>
 <script>
 // ==================== 配置 ====================
 const DEEPSEEK_URL = 'https://api.deepseek.com/v1/chat/completions';
