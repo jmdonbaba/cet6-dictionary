@@ -1296,7 +1296,7 @@ function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
         ${info.phonetic ? `<span class="phonetic">${esc(info.phonetic)}</span>` : ''}
         ${info.pos ? `<span class="pos">${esc(info.pos.replace(/,\s*/g, ' & '))}</span>` : ''}
         <button class="btn-favorite"${hasMnemonic ? ' data-study-action="save-mnemonic"' : ''}>收藏</button>
-        ${hasMnemonic ? '<button type="button" class="btn-sm" data-study-action="flip">怎么记 ↻</button>' : ''}
+        ${hasMnemonic ? '<button type="button" class="btn-sm" data-study-action="flip">怎么记 ↻</button>' : '<button type="button" class="btn-sm" data-study-action="generate-mnemonic">生成记法</button>'}
       </div>
       ${info.definitions ? info.definitions.map((d, i) => `<div class="definition"><span class="def-label">${i + 1}.</span>${esc(d)}</div>`).join('') : ''}
       ${info.forms ? `<div class="word-forms">${renderForms(info.forms)}</div>` : ''}

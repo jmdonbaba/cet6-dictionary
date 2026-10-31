@@ -20,6 +20,8 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
   const errors = [];
   let dictionaryFail = false;
   let dictionaryRequests = 0;
+  let mnemonicFail = false;
+  const mnemonicRequests = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('https://api.deepseek.com/**', async route => {
     const body = route.request().postDataJSON();
@@ -29,6 +31,8 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     if (system.includes('记忆方法')) {
       assert.match(system, /词块（中文含义）/);
       assert.match(system, /advise（建议） \+ able（能…的）/);
+      mnemonicRequests.push(JSON.parse(user).words[0]);
+      if (mnemonicFail) { await route.fulfill({ status: 503, body: '{}' }); return; }
       data = mnemonic(JSON.parse(user).words[0]);
     }
     else if (system.includes('词语对比')) {
@@ -274,6 +278,26 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     }
     assert.equal(await page.locator('.study-toolbox-heading, .study-toolbox-note, .study-tool-form label span').count(), 0);
     const originalCards = await page.evaluate(() => captureWordSearchCards());
+    await page.evaluate(info => applyWordSearchCards([{ input: 'novels', mode: 'lemma', result: { ...info, sourceForm: 'novels', inflection: '复数' } }]), dict('novel'));
+    const directCard = page.locator('#wordSearchModules .word-search-wrapper');
+    assert.equal(await directCard.locator('[data-study-action="generate-mnemonic"]').count(), 1);
+    const favoritesBeforeDirect = JSON.stringify(await favorites());
+    mnemonicFail = true;
+    await directCard.locator('[data-study-action="generate-mnemonic"]').click();
+    await directCard.locator('.study-error').waitFor();
+    assert.equal(await directCard.locator('.word-header .word').textContent(), 'novel', 'failed generation keeps the dictionary visible');
+    assert.equal(await directCard.locator('[data-study-action="generate-mnemonic"]').isEnabled(), true);
+    mnemonicFail = false;
+    await directCard.locator('[data-study-action="generate-mnemonic"]').click();
+    await directCard.locator('.study-result-title').waitFor();
+    assert.equal(await directCard.locator('.study-result-title').textContent(), 'novel');
+    assert.equal(mnemonicRequests.at(-1), 'novel', 'generation uses the displayed lemma, not the inflected query');
+    assert.equal(await page.locator('#wordSearchModules .word-search-wrapper').count(), 1, 'generation stays on the same card');
+    assert.equal(JSON.stringify(await favorites()), favoritesBeforeDirect, 'inline generation does not modify favorites');
+    await directCard.locator('[data-study-action="flip"]').click();
+    assert.equal(await directCard.locator('.word-search-input').inputValue(), 'novels');
+    assert.equal(await directCard.locator('.word-header .word').textContent(), 'novel');
+    console.log('PASS: inline generation uses the result word, retains the same card and safely retries failures');
     await page.evaluate(() => applyWordSearchCards([{ input: 'advisable', study: { kind: 'mnemonic', word: 'advisable', mnemonic: {
       word: 'advisable', breakdown: 'advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。', association: '采纳建议是明智的。', tip: 'advise + able，建议可取。'
     } } }]));

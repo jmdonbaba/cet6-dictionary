@@ -234,20 +234,31 @@ const StudyToolsUI = (() => {
     formButton.textContent = '生成中…';
     const wrapper = existing || makeStudyCard({ word: kind === 'mnemonic' ? words[0] : '', left: words[0], right: words[1] });
     const previous = wrapper._studyData;
+    const previousWord = wrapper._wordData;
+    const inline = Boolean(existing && previousWord && wrapper._studyFace !== 'memory');
     const controller = new AbortController();
     wrapper._studyController = controller;
     wrapper._searching = true;
-    wrapper.querySelector('.word-search-result').innerHTML = `<div class="study-kind-label">${kind === 'mnemonic' ? '怎么记' : '词语对比'}</div><h2 class="study-result-title">${words.map(esc).join('<span>和</span>')}</h2><div class="study-loading" role="status">${kind === 'mnemonic' ? '正在寻找好记的线索…' : '正在梳理两个词的区别…'}</div>`;
-    scrollToCard(wrapper);
+    if (inline) {
+      wrapper.querySelector('.study-error')?.remove();
+      const button = wrapper.querySelector('[data-study-action="generate-mnemonic"]');
+      if (button) { button.disabled = true; button.textContent = '生成中…'; }
+    } else {
+      wrapper.querySelector('.word-search-result').innerHTML = `<div class="study-kind-label">${kind === 'mnemonic' ? '怎么记' : '词语对比'}</div><h2 class="study-result-title">${words.map(esc).join('<span>和</span>')}</h2><div class="study-loading" role="status">${kind === 'mnemonic' ? '正在寻找好记的线索…' : '正在梳理两个词的区别…'}</div>`;
+      scrollToCard(wrapper);
+    }
     try {
       const study = await requestStudy(kind, words, controller.signal);
       if (!wrapper.isConnected) return;
-      wrapper._searching = false;
-      renderStudyCard(wrapper, study);
+      if (inline) await turnCard(wrapper, () => renderStudyCard(wrapper, study));
+      else { wrapper._searching = false; renderStudyCard(wrapper, study); }
     } catch (error) {
       if (!wrapper.isConnected || error.name === 'AbortError') return;
       wrapper._searching = false;
-      if (previous) renderStudyCard(wrapper, previous, error.message);
+      if (inline) {
+        renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), wrapper.querySelector('.word-search-input').value, previousWord);
+        wrapper.querySelector('.word-search-result').insertAdjacentHTML('beforeend', `<p class="study-error" role="alert">${esc(error.message)}</p>`);
+      } else if (previous) renderStudyCard(wrapper, previous, error.message);
       else {
         wrapper._studyDraft = { kind, words };
         wrapper.querySelector('.word-search-result').innerHTML = `<h2 class="study-result-title">${words.map(esc).join('<span>和</span>')}</h2><p class="study-error" role="alert">${esc(error.message)}</p><button type="button" class="btn-sm" data-study-action="retry">重新生成</button>`;
@@ -257,6 +268,7 @@ const StudyToolsUI = (() => {
       wrapper._studyController = null;
       formButton.disabled = false;
       formButton.innerHTML = buttonText;
+      updateStudyButtons(wrapper);
       saveWordSearchSession();
     }
   }
@@ -447,6 +459,7 @@ const StudyToolsUI = (() => {
       if (!wrapper || wrapper._searching) return;
       const action = button.dataset.studyAction;
       if (action === 'flip') flipCard(wrapper);
+      else if (action === 'generate-mnemonic' && wrapper._wordData) generate('mnemonic', [wrapper._wordData.word], wrapper);
       else if (button.dataset.saved === 'true') cancelFavorite(wrapper);
       else if (action === 'save-mnemonic') saveMnemonic(wrapper);
       else if (action === 'save-comparison') saveComparison(wrapper);
