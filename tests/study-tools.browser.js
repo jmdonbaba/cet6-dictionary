@@ -117,6 +117,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     await page.waitForFunction(() => getVFavs().length === 1);
     assert.equal(dictionaryRequests, 1);
     assert.equal((await favorites())[0].mnemonic.word, 'affect');
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '单词与记法已一起收藏', 'the combined toast only fires while the word is still unfavorited');
     assert.deepEqual((await favorites())[0].mnemonic.parts, mnemonic('affect').parts);
     assert.equal((await favorites())[0].mnemonic.association, undefined, 'saved mnemonics no longer store repeated prose');
     assert.equal(await activeMemory.locator('.word-header .word').textContent(), 'affect');
@@ -142,6 +143,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     assert.equal((await favorites())[0].mnemonic, undefined);
     await page.locator('.study-card [data-study-action="save-mnemonic"]').click();
     await page.waitForFunction(() => Boolean(getVFavs()[0].mnemonic));
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '记法已补充到单词收藏', 'an already favorited word only gets the mnemonic added');
     assert.equal(await page.locator('.study-card [data-study-action="save-mnemonic"]').textContent(), '取消收藏');
     assert.equal(dictionaryRequests, 1, 'existing favorite mnemonic update needs no dictionary request');
     assert.equal((await favorites()).length, 1);
