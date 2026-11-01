@@ -615,11 +615,11 @@ html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf
   backdrop-filter: blur(14px) saturate(135%);
   -webkit-backdrop-filter: blur(14px) saturate(135%);
 }
-/* 搜索框聚焦不画描边：由 GPU 控件透镜在聚焦时加强整体折射来提示焦点。 */
-html[data-interface="glass"] .input-area input:focus,
-html[data-interface="glass"] .input-area input:focus-visible,
-html[data-interface="glass"] .word-search-input:focus,
-html[data-interface="glass"] .word-search-input:focus-visible {
+/* 所有搜索框聚焦都不画描边：由各自的控件透镜在聚焦时加强折射来提示焦点。 */
+html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
+  .study-tool-form input, .key-area input, .comparison-search):focus,
+html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
+  .study-tool-form input, .key-area input, .comparison-search):focus-visible {
   border-color: transparent !important;
   box-shadow: none !important;
   outline: none !important;
@@ -1029,6 +1029,38 @@ html.glass-refraction[data-interface="glass"] .glass-layer-optics::before {
   backdrop-filter: blur(.3px);
   -webkit-backdrop-filter: blur(.3px);
   filter: var(--glass-filter, none);
+}
+
+/* Modal inner rows refract their own blurred backdrop: blur first (readability),
+   then displace/disperse, so text stays on an undistorted layer above the optics. */
+html.glass-refraction[data-interface="glass"] .modal-card :is(.appearance-option, .theme-option,
+  .vf-compact, .page-record-item, .comparison-fav).glass-layer-optics::before {
+  backdrop-filter: blur(12px) saturate(145%);
+  -webkit-backdrop-filter: blur(12px) saturate(145%);
+  filter: var(--glass-filter, none);
+}
+/* 模糊后的背景之上再叠一层被位移扭曲的高光，读出“透明折射”的边缘光学，
+   文字仍在最上层，保持清晰。 */
+html.glass-refraction[data-interface="glass"] .modal-card :is(.appearance-option, .theme-option,
+  .vf-compact, .page-record-item, .comparison-fav).glass-layer-optics::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 78% 18% at 14% 0%, rgba(255, 255, 255, 0.85), transparent 72%),
+    radial-gradient(ellipse 16% 62% at 0% 36%, rgba(255, 255, 255, 0.32), transparent 72%),
+    radial-gradient(ellipse 34% 14% at 86% 100%, rgba(255, 255, 255, 0.3), transparent 76%),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.22), transparent 48%, rgba(170, 200, 255, 0.18));
+  filter: var(--glass-filter, none);
+  opacity: 0.8;
+}
+/* 内部更透一些，让被模糊/折射的弹窗背景真正透上来 */
+html[data-interface="glass"] .appearance-option,
+html[data-interface="glass"] .theme-option {
+  background-color: rgba(255, 255, 255, 0.10);
 }
 
 /* Shared button material, including dynamically generated actions and menu items.

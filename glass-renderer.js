@@ -24,8 +24,7 @@
     'uniform sampler2D underGlass;',
     'uniform float uTime;',
     'uniform float waterMotion;',
-    'uniform vec4 focusRect;',
-    'uniform float focusBoost;',
+    'uniform float focusLens;',
     'uniform float buttonLens;',
     'uniform float overlayPass;',
     'uniform vec4 parentRects[4];',
@@ -67,14 +66,12 @@
     '  vec2 p=pixel-rect.xy-halfSize; float radius=shapes[i].x;',
     '  float d=sdf(p,halfSize,radius);',
     '  if(d<0.){',
-    '   float boost=(focusBoost>.5 && abs(rect.x-focusRect.x)<.5 && abs(rect.y-focusRect.y)<.5 && abs(rect.z-focusRect.z)<.5 && abs(rect.w-focusRect.w)<.5)?1.35:1.;',
-    '   float lensIntensity=intensity*boost;',
     '   float unit=shapes[i].y;',
-    '   float band=min(lensBand*unit*3.,min(halfSize.x,halfSize.y)*.98);',
+    '   float band=min(lensBand*unit*3.,min(halfSize.x,halfSize.y)*.98)*(focusLens>.5?2.1:1.);',
     '   vec2 field=edgeOffset(p,halfSize,band);',
     '   float gain=mix(1.,clamp(72.*unit/min(rect.z,rect.w),1.,2.6),buttonLens);',
     '   float ratio=mix(.36,min(.4,.32+.05*(gain-1.)),buttonLens);',
-    '   float bend=min(min(80.*unit,band*ratio)*lensIntensity,band*.4*boost);',
+    '   float bend=min(min(80.*unit,band*ratio)*intensity,band*.4);',
     '   vec2 point=pixel-field*bend;',
     '   if(i==touchIndex){',
     '    vec2 v=pixel-touch.xy;float g=exp(-dot(v,v)/max(1.,touch.z*touch.z));float depth=touch.w*intensity;     point+=v*g*.26*depth;',
@@ -82,7 +79,7 @@
     '   if(i==recoilIndex){',
     '    vec2 q=pixel-recoil.xy;float g=exp(-dot(q,q)/max(1.,recoil.z*recoil.z));float depth=recoil.w*intensity;     point+=q*g*.32*depth;',
     '   }',
-    '   vec2 dispersion=field*min(2.2*unit*lensIntensity,band*.025*boost);',
+    '   vec2 dispersion=field*min(2.2*unit*intensity*(focusLens>.5?2.1:1.),band*.025*(focusLens>.5?2.1:1.));',
     '   color=vec3(sampleAt(point+dispersion).r,sampleAt(point).g,sampleAt(point-dispersion).b);',
     '  }',
     ' }',
@@ -128,7 +125,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','focusRect','focusBoost'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','focusLens'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -239,14 +236,13 @@
       }
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
       var count = 0;
-      var hoverElement=null,hoverIndex=-1,recoilElement=null,recoilIndex=-1,focusIndex=-1;
+      var hoverElement=null,hoverIndex=-1,recoilElement=null,recoilIndex=-1;
       document.querySelectorAll(selector).forEach(function (element) {
         if (element.matches('.modal-card, button')) return;
         if (resizeObserver && !observed.has(element)) { resizeObserver.observe(element); observed.add(element); }
         var r = element.getBoundingClientRect();
         if (count >= MAX_LENSES || r.width < 32 || r.height < 32 || r.bottom < originY || r.top > originY+height) return;
         if (getComputedStyle(element).visibility === 'hidden') return;
-        if (element.contains(document.activeElement)) focusIndex = count;
         rects.set([r.left-originX,r.top-originY,r.width,r.height],count*4);
         shapes.set([materialRadius(element,r),0],count*2);
         if (window.GlassInteraction && GlassInteraction.matches(element)) {
@@ -274,10 +270,7 @@
       var sx = canvas.width / width, sy = canvas.height / height;
       for (var i=0;i<count;i++) { rects[i*4]*=sx;rects[i*4+1]*=sy;rects[i*4+2]*=sx;rects[i*4+3]*=sy;shapes[i*2]*=sx;shapes[i*2+1]=sx; }
       gl.uniform4fv(locations['rects[0]'], rects); gl.uniform2fv(locations['shapes[0]'], shapes);
-      var fi = focusIndex >= 0 ? focusIndex * 4 : 0;
-      gl.uniform4f(locations.focusRect, focusIndex >= 0 ? rects[fi] : -1, focusIndex >= 0 ? rects[fi+1] : -1,
-        focusIndex >= 0 ? rects[fi+2] : 0, focusIndex >= 0 ? rects[fi+3] : 0);
-      gl.uniform1f(locations.focusBoost, focusIndex >= 0 ? 1 : 0);
+      gl.uniform1f(locations.focusLens, 0);
       gl.drawArrays(gl.TRIANGLES,0,3);
       drawLayers(sx,sy,rects,shapes);
       drawButtons(sx, sy, rects, shapes);
@@ -325,7 +318,7 @@
     gl.uniform1f(locations.buttonLens,isButton?1:0);
     gl.uniform1f(locations.overlayPass,1);
     gl.uniform1f(locations.intensity,intensity*lensScale*strength);
-    gl.uniform1f(locations.focusBoost,0);
+    gl.uniform1f(locations.focusLens,element===document.activeElement?1:0);
     gl.uniform1i(locations.count,1);
     setTouch(element,0,element,0,sx,sy);setParents(element,sx,sy);
     gl.uniform4fv(locations['rects[0]'],rects);gl.uniform2fv(locations['shapes[0]'],shapes);

@@ -550,6 +550,11 @@
     return true;
   }
 
+  function onFocusSurfaces(event) {
+    if (!state.enabled) return;
+    if (event && event.target && event.target.matches && event.target.matches('input, '+GlassOptics.controls)) scheduleSurfaces();
+  }
+
   function toggle(options) {
     return isEnabled() ? disable(options) : enable(options);
   }
@@ -593,6 +598,8 @@
     if (resizeObserver) resizeObserver.disconnect();
     if (mutationObserver) mutationObserver.disconnect();
     window.removeEventListener('scroll', scheduleSurfaces);
+    document.removeEventListener('focusin', onFocusSurfaces);
+    document.removeEventListener('focusout', onFocusSurfaces);
 
     clearSurfaces();
     mapCache.clear();
@@ -623,6 +630,9 @@
   // ---------------------------------------------------------------------------
   // Only visible surfaces own a filter. Each map matches its actual aspect ratio
   // and corner radius; using the largest card's map on every card stretches edges.
+  // Modal content sits above the blurred overlay; give the inner rows their own
+  // refracted layer so the panel reads as transparent glass instead of flat frost.
+  var MODAL_INNER = '.appearance-option, .theme-option, .vf-compact, .page-record-item, .comparison-fav';
   var surfaces = new Map();
   var mapCache = new Map();
   var surfaceSerial = 0;
@@ -686,13 +696,14 @@
     var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
     // Modals sit above a blurred overlay: their background must be captured there,
     // not in the wallpaper canvas beneath the overlay.
-    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button, .modal-card.active :is('+GlassOptics.layers+', '+GlassOptics.controls+')' : config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls;
+    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button, .modal-card.active :is('+GlassOptics.layers+', '+GlassOptics.controls+'), .modal-card.active :is('+MODAL_INNER+')' : config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls;
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
       if(element.matches('.ws-mode-toggle button'))return;
       var input=element.matches('input'),control=element.matches(GlassOptics.controls);
       var button = element.matches('button:not(.btn-fav-nav)')||control;
-      var layer=element.matches(GlassOptics.layers);
+      var inner=element.matches(MODAL_INNER);
+      var layer=element.matches(GlassOptics.layers)||inner;
       var minimum = button||layer ? 8 : 32;
       var rect = element.getBoundingClientRect();
       if (rect.width < minimum || rect.height < minimum || rect.bottom < -100 || rect.top > window.innerHeight + 100) return;
@@ -724,6 +735,9 @@
       var gradedBand=GlassOptics.extent(Math.min(width,height),config.band);
       entry.maxScale=2*GlassOptics.amplitude(gradedBand,Math.min(width,height),button,1);
       entry.limitScale=gradedBand*.8;
+      if(inner){entry.maxScale*=2.2;entry.limitScale*=2;}
+      // Focused inputs get a stronger lens in the native path as well.
+      if(element===document.activeElement&&(input||control)){entry.maxScale*=1.6;entry.limitScale*=1.4;}
       if(layer){element.classList.add('glass-layer-optics');if(style.position==='static')element.classList.add('glass-layer-positioned');}
       if(input)positionInputBackground(entry,element,style);
       else if(control)element.classList.add('glass-control-optics');
@@ -879,6 +893,8 @@
       mutationObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'style'] });
     }
     window.addEventListener('scroll', scheduleSurfaces, { passive: true });
+    document.addEventListener('focusin', onFocusSurfaces);
+    document.addEventListener('focusout', onFocusSurfaces);
 
     applyAutoPolicy();
   }
