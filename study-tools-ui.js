@@ -81,9 +81,10 @@ const StudyToolsUI = (() => {
     const comparisons = safeComparisons();
     new Set([...document.querySelectorAll('.word-search-wrapper'), ...(extra ? [extra] : [])]).forEach(wrapper => {
       const study = wrapper._studyData;
-      if (!study || wrapper._searching) return;
+      if (!study) return;
       const button = wrapper.querySelector('[data-study-action^="save-"]');
-      if (!button) return;
+      // An in-flight request owns this label; the card is re-rendered when it settles.
+      if (!button || button.dataset.busy === 'true') return;
       let saved;
       if (study.kind === 'mnemonic') {
         const favorite = favorites.find(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
@@ -93,9 +94,10 @@ const StudyToolsUI = (() => {
       } else {
         saved = comparisons.some(item => StudyTools.pairKey(item.left, item.right) === StudyTools.pairKey(study.left, study.right));
       }
+      // Keep the label ready while the card is still turning; only unlock it after the turn.
       button.textContent = saved ? '取消收藏' : '收藏';
       button.dataset.saved = String(saved);
-      button.disabled = false;
+      if (!wrapper._searching) button.disabled = false;
       button.classList.toggle('favorited', saved);
     });
   }
@@ -262,7 +264,7 @@ const StudyToolsUI = (() => {
     if (inline) {
       wrapper.querySelector('.study-error')?.remove();
       const button = wrapper.querySelector('[data-study-action="generate-mnemonic"]');
-      if (button) { button.disabled = true; button.textContent = '生成中…'; }
+      if (button) { button.disabled = true; button.dataset.busy = 'true'; button.textContent = '生成中…'; }
     } else {
       wrapper.querySelector('.word-search-result').innerHTML = `<div class="study-kind-label">${kind === 'mnemonic' ? '怎么记' : '词语对比'}</div><h2 class="study-result-title">${words.map(esc).join('<span>和</span>')}</h2><div class="study-loading" role="status">${kind === 'mnemonic' ? '正在寻找好记的线索…' : '正在梳理两个词的区别…'}</div>`;
       scrollToCard(wrapper);
@@ -300,6 +302,7 @@ const StudyToolsUI = (() => {
     wrapper._searching = true;
     const button = wrapper.querySelector('[data-study-action="save-mnemonic"]');
     button.disabled = true;
+    button.dataset.busy = 'true';
     button.textContent = '正在收藏…';
     const regenerate = wrapper.querySelector('[data-study-action="regenerate"]');
     if (regenerate) regenerate.disabled = true;
@@ -365,7 +368,19 @@ const StudyToolsUI = (() => {
     const study = wrapper._studyData;
     try {
       if (study.kind === 'mnemonic') {
-        const favorites = getVFavs().filter(item => StudyTools.wordKey(item.word) !== StudyTools.wordKey(study.word));
+        const favorites = getVFavs();
+        const index = favorites.findIndex(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
+        if (index === -1) return;
+        // The memory face only owns the mnemonic, so cancelling there keeps the word
+        // saved and lets a second click add the mnemonic back. Removing the whole word
+        // (and its mnemonic) stays on the definition face where the word is shown.
+        if (wrapper._studyFace === 'memory') {
+          if (!favorites[index].mnemonic) return;
+          const { mnemonic, ...word } = favorites[index];
+          favorites[index] = word;
+        } else {
+          favorites.splice(index, 1);
+        }
         if (setVFavs(favorites) === false) return;
         renderVFavs();
         updateAllVocabButtons();
@@ -375,7 +390,7 @@ const StudyToolsUI = (() => {
         refreshFavorites();
       }
       updateStudyButtons();
-      toast('已取消收藏');
+      toast(wrapper._studyFace === 'memory' && study.kind === 'mnemonic' ? '已取消记法收藏' : '已取消收藏');
     } catch (error) { toast(error.message); }
   }
 

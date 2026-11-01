@@ -94,7 +94,8 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
       const start = performance.now();
       const sample = () => {
         const rect = card.getBoundingClientRect();
-        frames.push({ top: rect.top, height: rect.height });
+        const button = card.querySelector('[data-study-action^="save-"]');
+        frames.push({ top: rect.top, height: rect.height, saveLabel: button ? button.textContent : null });
         if (performance.now() - start < 900) requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);
@@ -110,6 +111,8 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     assert.ok(flipRange > 20, 'the two faces have different heights');
     assert.ok(maxFrameStep < Math.max(25, flipRange / 3), `card height glides instead of jumping: ${JSON.stringify(flipFrames)}`);
     assert.ok(Math.max(...flipTops) - Math.min(...flipTops) < 3, `the card top stays still while turning: ${JSON.stringify(flipTops)}`);
+    assert.ok(flipFrames.every(frame => frame.saveLabel === '收藏' || frame.saveLabel === '取消收藏'), `the save button keeps its label while the card turns: ${JSON.stringify(flipFrames.map(frame => frame.saveLabel))}`);
+    assert.equal(await activeMemory.locator('[data-study-action^="save-"]').textContent(), '收藏');
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(dictionaryRequests, 1, 'flipping back reuses the dictionary data');
     const finalMemoryId = await activeMemory.getAttribute('id');
@@ -122,18 +125,30 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     assert.equal((await favorites())[0].mnemonic.association, undefined, 'saved mnemonics no longer store repeated prose');
     assert.equal(await activeMemory.locator('.word-header .word').textContent(), 'affect');
     assert.equal(await page.locator('.word-search-wrapper').first().getAttribute('id'), finalMemoryId, 'word card stays in place ahead of blank draft');
-    await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
-    assert.equal((await favorites()).length, 0);
-    await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
-    await page.waitForFunction(() => getVFavs().length === 1, null, { timeout: 2500 });
-    assert.equal(await activeMemory.locator('.word-header .word').textContent(), 'affect');
+    // The memory face only owns the mnemonic: cancelling there keeps the word saved.
     await activeMemory.locator('[data-study-action="flip"]').click();
+    await activeMemory.locator('.study-result-title').waitFor();
+    await page.waitForFunction(() => !document.querySelector('.word-search-wrapper')._flipping);
+    await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
+    assert.equal((await favorites()).length, 1, 'cancelling on the memory face keeps the word favorite');
+    assert.equal((await favorites())[0].mnemonic, undefined);
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '已取消记法收藏');
+    assert.equal(await activeMemory.locator('[data-study-action="save-mnemonic"]').textContent(), '收藏');
+    await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
+    await page.waitForFunction(() => Boolean(getVFavs()[0].mnemonic));
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '记法已补充到单词收藏', 're-adding a mnemonic supplements the kept word favorite');
+    // The word face owns the whole favorite: cancelling there removes the word too.
+    await activeMemory.locator('[data-study-action="flip"]').click();
+    await activeMemory.locator('.word-header .word').waitFor();
+    await page.waitForFunction(() => !document.querySelector('.word-search-wrapper')._flipping);
     assert.equal(await activeMemory.locator('[data-study-action="save-mnemonic"]').textContent(), '取消收藏');
     await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
-    assert.equal((await favorites()).length, 0);
+    assert.equal((await favorites()).length, 0, 'cancelling on the word face removes the whole favorite');
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '已取消收藏');
     assert.equal(await activeMemory.locator('[data-study-action="save-mnemonic"]').textContent(), '收藏');
     await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
     await page.waitForFunction(() => getVFavs().length === 1);
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '单词与记法已一起收藏');
     console.log('PASS: generation is unsaved; first save queries and favorites a full word at the current position');
 
     await page.evaluate(() => {
