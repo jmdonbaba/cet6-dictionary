@@ -26,6 +26,10 @@
     'uniform int count;',
     'uniform float intensity;',
     'uniform float lensBand;',
+    'uniform int touchIndex;',
+    'uniform int recoilIndex;',
+    'uniform vec4 touch;',
+    'uniform vec4 recoil;',
     'float sdf(vec2 p, vec2 h, float r){vec2 q=abs(p)-h+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}',
     'vec3 sampleAt(vec2 p){ vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999)); if(buttonLens>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb; return texture2D(wallpaper,uv).rgb; }',
     'void main(){',
@@ -46,6 +50,12 @@
     '   float gain=mix(1.,clamp(72.*unit/min(rect.z,rect.w),1.,2.6),buttonLens);',
     '   float bend=min(60.*unit,min(rect.z,rect.w)*.3)*edge*intensity*gain;',
     '   vec2 point=pixel-normal*bend-p*(.045*intensity*(1.-buttonLens));',
+    '   if(i==touchIndex){',
+    '    vec2 v=pixel-touch.xy; point+=v*exp(-dot(v,v)/max(1.,touch.z*touch.z))*.26*touch.w*intensity;',
+    '   }',
+    '   if(i==recoilIndex){',
+    '    vec2 q=pixel-recoil.xy; point+=q*exp(-dot(q,q)/max(1.,recoil.z*recoil.z))*.32*recoil.w*intensity;',
+    '   }',
     '   vec2 dispersion=normal*edge*2.2*unit*intensity;',
     '   color=vec3(sampleAt(point+dispersion).r,sampleAt(point).g,sampleAt(point-dispersion).b);',
     '  }',
@@ -88,7 +98,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -195,6 +205,7 @@
       }
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
       var count = 0;
+      var hoverElement=null,hoverIndex=-1,recoilElement=null,recoilIndex=-1;
       document.querySelectorAll(selector).forEach(function (element) {
         if (element.matches('.modal-card, button')) return;
         if (resizeObserver && !observed.has(element)) { resizeObserver.observe(element); observed.add(element); }
@@ -203,9 +214,15 @@
         if (getComputedStyle(element).visibility === 'hidden') return;
         rects.set([r.left,r.top,r.width,r.height],count*4);
         shapes.set([parseFloat(getComputedStyle(element).borderTopLeftRadius)||22,0],count*2);
+        if (window.GlassInteraction && GlassInteraction.matches(element)) {
+          var effect=GlassInteraction.read(element);
+          if(effect.hover[3]){hoverElement=element;hoverIndex=count;}
+          if(effect.pulse[3]){recoilElement=element;recoilIndex=count;}
+        }
         count++;
       });
       observed.forEach(function (element) { if (!element.isConnected) { resizeObserver.unobserve(element); observed.delete(element); } });
+      setTouch(hoverElement,hoverIndex,recoilElement,recoilIndex,canvas.width/width,canvas.height/height);
       gl.uniform1f(locations.buttonLens, 0);
       gl.uniform1i(locations.count, count);
       gl.uniform1f(locations.intensity, intensity * lensScale);
@@ -248,6 +265,7 @@
       var radius = Math.min(parseFloat(style.borderTopLeftRadius) || 0,r.width/2,r.height/2);
       rects.set([r.left*sx,r.top*sy,r.width*sx,r.height*sy],0);
       shapes.set([radius*sx,sx],0);
+      setTouch(button,0,button,0,sx,sy);
       gl.uniform4fv(locations['rects[0]'],rects); gl.uniform2fv(locations['shapes[0]'],shapes);
       var x = Math.max(0,Math.floor(r.left*sx)), y = Math.max(0,Math.floor(canvas.height-r.bottom*sy));
       var right = Math.min(canvas.width,Math.ceil(r.right*sx));
@@ -256,6 +274,15 @@
       gl.drawArrays(gl.TRIANGLES,0,3); buttonCount++;
     });
     gl.disable(gl.SCISSOR_TEST);
+  }
+
+  function setTouch(hoverElement,hoverIndex,recoilElement,recoilIndex,sx,sy) {
+    var h=hoverElement&&window.GlassInteraction ? GlassInteraction.read(hoverElement).hover : [0,0,1,0];
+    var p=recoilElement&&window.GlassInteraction ? GlassInteraction.read(recoilElement).pulse : [0,0,1,0];
+    gl.uniform1i(locations.touchIndex,h[3] ? hoverIndex : -1);
+    gl.uniform1i(locations.recoilIndex,p[3] ? recoilIndex : -1);
+    gl.uniform4f(locations.touch,h[0]*sx,h[1]*sy,h[2]*sx,h[3]);
+    gl.uniform4f(locations.recoil,p[0]*sx,p[1]*sy,p[2]*sx,p[3]);
   }
 
   function onControlTransition(event) {

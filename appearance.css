@@ -1060,6 +1060,29 @@ html.glass-refraction[data-interface="glass"] button.glass-button-optics::before
   clip-path: inset(0 round var(--glass-button-radius, 10px));
 }
 
+/* The optical/decorative layer squishes; labels and hit boxes stay still. */
+@keyframes glass-jelly-rebound {
+  0% { scale: 0.982 1.012; }
+  24% { scale: 1.012 0.986; }
+  46% { scale: 0.994 1.007; }
+  70% { scale: 1.003 0.997; }
+  100% { scale: 1 1; }
+}
+html[data-interface="glass"] .glass-jelly-positioned { position: relative; }
+html[data-interface="glass"] button.glass-jelly::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgba(255,255,255,.26), transparent 65%);
+}
+html[data-interface="glass"] .glass-jelly::before,
+html[data-interface="glass"] .glass-jelly::after {
+  transform-origin: var(--glass-press-x, 50%) var(--glass-press-y, 50%);
+  animation: glass-jelly-rebound 650ms ease-out;
+}
+
 /* ---------------------------------------------------------------------------
    6. 小屏幕 / 性能 / 无障碍降级
    --------------------------------------------------------------------------- */
@@ -1079,6 +1102,8 @@ html.glass-refraction[data-interface="glass"] button.glass-button-optics::before
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html[data-interface="glass"] .glass-jelly::before,
+  html[data-interface="glass"] .glass-jelly::after { animation: none; scale: none; }
   html[data-wallpaper] .appearance-aurora,
   html[data-wallpaper] .appearance-water {
     animation: none !important;

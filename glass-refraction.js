@@ -218,6 +218,7 @@
     // color dispersion in a single shader instead of three full-card SVG passes.
     var feDisplacement = document.createElementNS(NS, 'feDisplacementMap');
     feDisplacement.setAttribute('in', 'SourceGraphic');
+    feDisplacement.setAttribute('result', 'native_edge_glass');
     feDisplacement.setAttribute('in2', 'map');
     feDisplacement.setAttribute('scale', '0');
     feDisplacement.setAttribute('xChannelSelector', 'R');
@@ -458,6 +459,7 @@
     state.activeScale = scale;
     if (state.feDisplacement) {
       state.svg.querySelectorAll('feDisplacementMap').forEach(function (node) {
+        if (node.hasAttribute('data-interactive')) return;
         var localScale = scale;
         surfaces.forEach(function (entry) { if (entry.filter.contains(node)) localScale = Math.min(scale, entry.maxScale * state.intensity); });
         var nextScale = String(localScale);
@@ -504,6 +506,7 @@
   }
 
   function disable(options) {
+    clearInteraction();
     var settings = normalizeOptions(options);
     if (root()) {
       root().classList.remove(CLASS_NAME);
@@ -512,6 +515,7 @@
     }
     state.enabled = false;
     if (window.GlassRenderer) GlassRenderer.disable();
+    if (window.GlassInteraction) GlassInteraction.reset();
     state.activeScale = 0;
     clearSurfaces();
     if (settings.persist) storageSet(STORAGE_PREF, 'off');
@@ -611,6 +615,8 @@
   }
 
   function destroy() {
+    if (window.GlassInteraction) GlassInteraction.destroy();
+    clearInteraction();
     if (window.GlassRenderer) GlassRenderer.destroy();
     clearTimeout(surfaceTimer);
     if (resizeObserver) resizeObserver.disconnect();
@@ -742,6 +748,58 @@
     applyScale();
   }
 
+  var interactions = new Map();
+  var pressureMap = '';
+  function clearInteraction() {
+    interactions.forEach(function (effect) { effect.nodes.forEach(function (node) { node.remove(); }); });
+    interactions.clear();
+  }
+  function pressureTexture() {
+    if (pressureMap) return pressureMap;
+    var canvas=document.createElement('canvas');canvas.width=canvas.height=64;
+    var ctx=canvas.getContext('2d'), image=ctx.createImageData(64,64);
+    for(var y=0;y<64;y++)for(var x=0;x<64;x++){
+      var dx=(x-31.5)/31.5,dy=(y-31.5)/31.5;
+      var weight=Math.exp(-3*(dx*dx+dy*dy))*Math.max(0,1-Math.pow(Math.max(Math.abs(dx),Math.abs(dy)),4));
+      var i=(y*64+x)*4;image.data[i]=Math.round(128+126*dx*weight);image.data[i+1]=Math.round(128+126*dy*weight);image.data[i+2]=128;image.data[i+3]=255;
+    }
+    ctx.putImageData(image,0,0);pressureMap=canvas.toDataURL('image/png');return pressureMap;
+  }
+  function interactionNode(name, attributes) {
+    var node=document.createElementNS(NS,name);
+    Object.keys(attributes).forEach(function (key) { node.setAttribute(key,attributes[key]); });return node;
+  }
+  function interact(hover, pulse) {
+    if (!state.enabled || !state.intensity || !config.scale) {clearInteraction();return;}
+    var targets=new Set();
+    [hover,pulse].forEach(function (state) { if(state.element&&Math.abs(state.level)>.001)targets.add(state.element); });
+    interactions.forEach(function (effect,element) {
+      var entry=surfaces.get(element);
+      if(!targets.has(element)||!entry||entry.filter!==effect.filter){effect.nodes.forEach(function (node){node.remove();});interactions.delete(element);}
+    });
+    targets.forEach(function (element) {
+      var entry=surfaces.get(element);if(!entry)return;
+      var effect=interactions.get(element);
+      if(!effect){
+        var flood=interactionNode('feFlood',{'flood-color':'rgb(128,128,128)',result:'pressure_neutral'});
+        var image=interactionNode('feImage',{href:pressureTexture(),preserveAspectRatio:'none',result:'pressure_patch'});
+        var merge=interactionNode('feMerge',{result:'pressure_field'});
+        merge.appendChild(interactionNode('feMergeNode',{in:'pressure_neutral'}));merge.appendChild(interactionNode('feMergeNode',{in:'pressure_patch'}));
+        var warp=interactionNode('feDisplacementMap',{in:'native_edge_glass',in2:'pressure_field',xChannelSelector:'R',yChannelSelector:'G',scale:0,'data-interactive':''});
+        var nodes=[flood,image,merge,warp];nodes.forEach(function(node){entry.filter.appendChild(node);});
+        effect={filter:entry.filter,nodes:nodes,image:image,warp:warp};interactions.set(element,effect);
+      }
+      var r=element.getBoundingClientRect();if(!r.width||!r.height)return;
+      var h=hover.element===element?hover.level:0,p=pulse.element===element?pulse.level:0;
+      var point=hover.element!==element||Math.abs(p)>.1?pulse:hover;
+      var radius=element.matches('button')?Math.min(42,Math.max(14,Math.min(r.width,r.height)*.8)):78;
+      effect.image.setAttribute('x',((point.x-r.left-radius)/r.width*100)+'%');
+      effect.image.setAttribute('y',((point.y-r.top-radius)/r.height*100)+'%');
+      effect.image.setAttribute('width',(radius*2/r.width*100)+'%');effect.image.setAttribute('height',(radius*2/r.height*100)+'%');
+      effect.warp.setAttribute('scale',String((h*16+p*20)*state.intensity*config.scale/64));
+    });
+  }
+
   var resizeTimer = 0;
 
   function onResize() {
@@ -831,6 +889,7 @@
     className: CLASS_NAME,
     storageKeys: Object.freeze({ preference: STORAGE_PREF, intensity: STORAGE_INTENSITY }),
     INTEGRATION_CSS: INTEGRATION_CSS,
+    interact: interact,
     enabled: isEnabled,
     enable: enable,
     disable: disable,
