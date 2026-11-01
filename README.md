@@ -57,9 +57,12 @@
 
 保存页面属于当前浏览器的网站数据。无痕模式、切换浏览器配置、清除网站数据或 Edge 的关闭时清理设置仍可能导致记录不可用，持久存储申请不能阻止用户主动清理。重要页面请使用“导出数据”另存备份；旧版备份不含页面记录。
 
+修改脚本或样式后，提交前运行 `node tools/stamp-assets.cjs`，按文件内容更新 `index.html` 中的资源版本。新页面会请求对应版本，避免线上仍加载缓存里的旧玻璃样式或旧折射脚本；无需清除网站数据。`node tools/stamp-assets.cjs --check` 和自动化测试会检查版本是否同步。
+
 ## 验证
 
 - `node --test tests/*.test.js`：运行无依赖的自动化测试（含 `tests/appearance.test.js` 对设置入口、界面/主题持久化、玻璃分层与降级规则的结构断言）。
+- `node tests/asset-cache.browser.js`：用真实 HTTP 缓存模拟旧版访问后上线新版，验证缓存仍有效时也能加载新样式、新折射脚本与透明分层，不清除本地收藏或页面数据。
 - 安装 Playwright 后，运行 `node tests/study-tools.browser.js` 验证双面翻转与恢复、收藏/取消收藏、原位查词、查询/存储失败重试、备份与讲义导出、页面恢复、手机真实触摸滑动及 320–1920px 居中布局。使用隔离浏览器和模拟 API，不读取日常浏览器数据、不消耗真实 API 配额；支持 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE`。
 - 安装 Playwright 后，运行 `node tests/liquid-glass.browser.js` 验证默认主题实际折射像素差、不同尺寸/动态卡片的透镜更新、主题只替换背景、无卡片描边、清晰文字、手机降级和资源释放，截图输出到 `.gstack/liquid-glass/`；支持 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE`。
 - `node --test tests/glass-optics.test.js`：验证渐变曲线两端平滑、不同尺寸/强度下采样单调、圆角二维采样不倒转；GPU 与原生位移共用 `glass-optics.js` 的曲线策略。

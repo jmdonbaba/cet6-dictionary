@@ -7,7 +7,7 @@ const source = fs.readFileSync('index.html', 'utf8');
 
 test('loads the local study-export formatter without PDF dependencies', () => {
   const moduleSource = fs.readFileSync('study-export.js', 'utf8');
-  assert.match(source, /src="study-export\.js"/);
+  assert.match(source, /src="study-export\.js(?:\?v=[a-f0-9]+)?"/);
   assert.doesNotMatch(source, /(?:unpkg|jsdelivr|cdnjs)/i);
   assert.doesNotMatch(source, /html2canvas|jspdf/i);
   assert.doesNotMatch(moduleSource, /createPdfBlob|buildPdfPages|renderPdfFragment/);

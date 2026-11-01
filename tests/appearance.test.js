@@ -2,7 +2,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 
-const source = fs.readFileSync('index.html', 'utf8');
+// Structure assertions ignore content versions; asset-versions.test.js checks them.
+const source = fs.readFileSync('index.html', 'utf8').replace(/\?v=[a-f0-9]+(?=")/g, '');
 const css = fs.readFileSync('appearance.css', 'utf8');
 const script = fs.readFileSync('appearance.js', 'utf8');
 
