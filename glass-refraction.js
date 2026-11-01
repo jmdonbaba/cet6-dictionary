@@ -36,11 +36,11 @@
     // 位移图圆角半径（px，会被校准时的实际 border-radius 覆盖）。
     radius: 22,
     // 位移图纹理边长（越大越平滑，生成开销 ~O(n²)）。
-    mapSize: 512,
+    mapSize: 256,
     // 滤镜区域相对元素 bbox 的外扩比例：0.1 = x/y -10%、宽高 120%。
     // 保留一点外扩可以避免元素自带 box-shadow 被滤镜区域裁掉；外扩部分在位移图里
     // 保持中性（128），影子不会被位移。
-    filterPadding: 0.1,
+    filterPadding: 0,
     // 是否按主玻璃表面实际尺寸校准折射带（让四个边的折射带物理宽度一致）。
     calibrate: true,
     // 参与校准的表面选择器（取面积最大的可见元素）。
@@ -214,58 +214,15 @@
     feImage.setAttribute('result', 'map');
 
     filter.appendChild(feImage);
-    // Upstream's separate RGB displacements produce actual optical dispersion,
-    // rather than a painted rainbow border. Neutral center pixels stay unchanged.
-    ['R', 'G', 'B'].forEach(function (channel, index) {
-      var displacement = document.createElementNS(NS, 'feDisplacementMap');
-      displacement.setAttribute('in', 'SourceGraphic');
-      displacement.setAttribute('in2', 'map');
-      displacement.setAttribute('scale', '0');
-      displacement.setAttribute('xChannelSelector', 'R');
-      displacement.setAttribute('yChannelSelector', 'G');
-      displacement.setAttribute('result', channel + '_displaced');
-      displacement.setAttribute('data-channel-factor', String(1 + index * 0.035));
-      filter.appendChild(displacement);
-      var matrix = document.createElementNS(NS, 'feColorMatrix');
-      matrix.setAttribute('in', channel + '_displaced');
-      matrix.setAttribute('type', 'matrix');
-      matrix.setAttribute('values', [
-        index === 0 ? '1 0 0 0 0' : '0 0 0 0 0',
-        index === 1 ? '0 1 0 0 0' : '0 0 0 0 0',
-        index === 2 ? '0 0 1 0 0' : '0 0 0 0 0', '0 0 0 1 0'
-      ].join(' '));
-      matrix.setAttribute('result', channel + '_channel');
-      filter.appendChild(matrix);
-    });
-    [['G_channel', 'B_channel', 'GB'], ['R_channel', 'GB', 'RGB']].forEach(function (inputs) {
-      var blend = document.createElementNS(NS, 'feBlend');
-      blend.setAttribute('in', inputs[0]);
-      blend.setAttribute('in2', inputs[1]);
-      blend.setAttribute('mode', 'screen');
-      blend.setAttribute('result', inputs[2]);
-      filter.appendChild(blend);
-    });
-    // Keep the original displaced glass in the center. Limit RGB recombination
-    // to a faint edge mask; accumulating translucent channel alpha over the whole
-    // backdrop otherwise introduces a dark veil in Chromium.
-    var edgeMask = document.createElementNS(NS, 'feColorMatrix');
-    edgeMask.setAttribute('in', 'map');
-    edgeMask.setAttribute('type', 'matrix');
-    edgeMask.setAttribute('values', '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0');
-    edgeMask.setAttribute('result', 'edge_mask');
-    filter.appendChild(edgeMask);
-    var edgeColor = document.createElementNS(NS, 'feComposite');
-    edgeColor.setAttribute('in', 'RGB');
-    edgeColor.setAttribute('in2', 'edge_mask');
-    edgeColor.setAttribute('operator', 'in');
-    edgeColor.setAttribute('result', 'edge_color');
-    filter.appendChild(edgeColor);
-    var final = document.createElementNS(NS, 'feComposite');
-    final.setAttribute('in', 'edge_color');
-    final.setAttribute('in2', 'R_displaced');
-    final.setAttribute('operator', 'over');
-    filter.appendChild(final);
-    var feDisplacement = filter.querySelector('feDisplacementMap');
+    // One displacement pass for fallback browsers. The GPU renderer handles
+    // color dispersion in a single shader instead of three full-card SVG passes.
+    var feDisplacement = document.createElementNS(NS, 'feDisplacementMap');
+    feDisplacement.setAttribute('in', 'SourceGraphic');
+    feDisplacement.setAttribute('in2', 'map');
+    feDisplacement.setAttribute('scale', '0');
+    feDisplacement.setAttribute('xChannelSelector', 'R');
+    feDisplacement.setAttribute('yChannelSelector', 'G');
+    filter.appendChild(feDisplacement);
     defs.appendChild(filter);
     svg.appendChild(defs);
 
@@ -503,10 +460,12 @@
       state.svg.querySelectorAll('feDisplacementMap').forEach(function (node) {
         var localScale = scale;
         surfaces.forEach(function (entry) { if (entry.filter.contains(node)) localScale = Math.min(scale, entry.maxScale * state.intensity); });
-        node.setAttribute('scale', String(localScale * Number(node.getAttribute('data-channel-factor') || 1)));
+        var nextScale = String(localScale);
+        if (node.getAttribute('scale') !== nextScale) node.setAttribute('scale', nextScale);
       });
     }
-    root().style.setProperty('--glass-refract-scale', String(scale));
+    if (root().style.getPropertyValue('--glass-refract-scale') !== String(scale)) root().style.setProperty('--glass-refract-scale', String(scale));
+    if (window.GlassRenderer) GlassRenderer.setIntensity(state.intensity);
     return scale;
   }
 
@@ -552,6 +511,7 @@
       root().style.removeProperty('--glass-refract-scale');
     }
     state.enabled = false;
+    if (window.GlassRenderer) GlassRenderer.disable();
     state.activeScale = 0;
     clearSurfaces();
     if (settings.persist) storageSet(STORAGE_PREF, 'off');
@@ -622,6 +582,7 @@
   function getState() {
     var connection = nav.connection || nav.mozConnection || nav.webkitConnection;
     return {
+      renderer: gpuActive() ? 'webgl' : 'svg',
       surfaces: surfaces.size,
       version: VERSION,
       supported: supported,
@@ -650,13 +611,12 @@
   }
 
   function destroy() {
+    if (window.GlassRenderer) GlassRenderer.destroy();
     clearTimeout(surfaceTimer);
     if (resizeObserver) resizeObserver.disconnect();
     if (mutationObserver) mutationObserver.disconnect();
     window.removeEventListener('scroll', scheduleSurfaces);
-    document.removeEventListener('pointermove', onPointerMove);
-    document.removeEventListener('pointerout', onPointerOut);
-    if (pointerFrame) cancelAnimationFrame(pointerFrame);
+
     clearSurfaces();
     mapCache.clear();
     var svg = state.svg || document.getElementById(SVG_ID);
@@ -692,8 +652,9 @@
   var surfaceTimer = 0;
   var resizeObserver = null;
   var mutationObserver = null;
-  var pointerFrame = 0;
-  var pointerEvent = null;
+  function gpuActive() {
+    return !!(window.GlassRenderer && GlassRenderer.getState().active);
+  }
 
   function clearSurfaces() {
     surfaces.forEach(function (entry, element) {
@@ -716,11 +677,16 @@
 
   function syncSurfaces() {
     if (!state.enabled || !state.svg || root().dataset.interface !== 'glass' || window.innerWidth <= 720) {
+      if (window.GlassRenderer) GlassRenderer.disable();
       clearSurfaces();
       return;
     }
+    var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
+    // Modals sit above a blurred overlay: their background must be captured there,
+    // not in the wallpaper canvas beneath the overlay.
+    var nativeSelector = gpu ? '.modal-card.active' : config.surfaceSelector;
     var visible = new Set();
-    document.querySelectorAll(config.surfaceSelector).forEach(function (element) {
+    document.querySelectorAll(nativeSelector).forEach(function (element) {
       var rect = element.getBoundingClientRect();
       if (rect.width < 32 || rect.height < 32 || rect.bottom < -100 || rect.top > window.innerHeight + 100) return;
       var style = window.getComputedStyle(element);
@@ -765,32 +731,11 @@
     applyScale();
   }
 
-  function onPointerMove(event) {
-    if (!state.enabled || prefersReducedMotion() || event.pointerType === 'touch' || root().dataset.interface !== 'glass') return;
-    pointerEvent = event;
-    if (pointerFrame) return;
-    pointerFrame = requestAnimationFrame(function () {
-      pointerFrame = 0;
-      var element = pointerEvent.target.closest && pointerEvent.target.closest(config.surfaceSelector);
-      if (!element) return;
-      var rect = element.getBoundingClientRect();
-      element.style.setProperty('--glass-light-x', ((pointerEvent.clientX - rect.left) / rect.width * 100).toFixed(1) + '%');
-      element.style.setProperty('--glass-light-y', ((pointerEvent.clientY - rect.top) / rect.height * 100).toFixed(1) + '%');
-    });
-  }
-
-  function onPointerOut(event) {
-    var element = event.target.closest && event.target.closest(config.surfaceSelector);
-    if (element && !element.contains(event.relatedTarget)) {
-      element.style.removeProperty('--glass-light-x');
-      element.style.removeProperty('--glass-light-y');
-    }
-  }
-
   var resizeTimer = 0;
 
   function onResize() {
     scheduleSurfaces();
+    if (gpuActive()) { GlassRenderer.render(); return; }
     if (!state.enabled) return;
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(function () {
@@ -802,6 +747,7 @@
 
   function onAppearanceChange() {
     scheduleSurfaces();
+    if (gpuActive()) { GlassRenderer.render(); return; }
     if (!state.enabled) return;
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(function () {
@@ -852,13 +798,15 @@
     if (window.ResizeObserver) resizeObserver = new ResizeObserver(scheduleSurfaces);
     if (window.MutationObserver) {
       mutationObserver = new MutationObserver(function (records) {
-        if (records.some(function (record) { return record.target.namespaceURI !== NS; })) scheduleSurfaces();
+        if (records.some(function (record) { return record.target.namespaceURI !== NS; })) {
+          if (gpuActive()) GlassRenderer.render();
+          scheduleSurfaces();
+        }
       });
       mutationObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     }
     window.addEventListener('scroll', scheduleSurfaces, { passive: true });
-    document.addEventListener('pointermove', onPointerMove, { passive: true });
-    document.addEventListener('pointerout', onPointerOut, { passive: true });
+
     applyAutoPolicy();
   }
 

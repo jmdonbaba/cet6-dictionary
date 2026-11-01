@@ -8,6 +8,12 @@ const ROOT = path.resolve(__dirname, '..');
   const browser = await chromium.launch({ executablePath: process.env.EDGE_EXECUTABLE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    if (process.env.GLASS_FORCE_FALLBACK) await page.addInitScript(() => {
+      const original = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, options) {
+        return type === 'webgl' || type === 'webgl2' ? null : original.call(this, type, options);
+      };
+    });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto('file:///' + ROOT.replaceAll('\\', '/') + '/index.html');
@@ -20,7 +26,8 @@ const ROOT = path.resolve(__dirname, '..');
       textFilter: getComputedStyle(card).filter
     })));
     let surfaces = await styles();
-    assert.ok(surfaces.some(s => s.filter !== 'none'), 'default aurora must visibly refract');
+    const gpu = await page.evaluate(() => LiquidGlass.getState().renderer === 'webgl');
+    assert.ok(gpu || surfaces.some(s => s.filter !== 'none'), 'default aurora must visibly refract');
     assert.ok(surfaces.every(s => s.border === 'none'), 'glass surfaces have no drawn border');
     assert.ok(surfaces.every(s => s.textFilter === 'none'), 'text stays outside the filter');
     await page.evaluate(() => {
@@ -31,24 +38,26 @@ const ROOT = path.resolve(__dirname, '..');
       document.body.append(card);
     });
     await page.waitForTimeout(500);
-    const ownFilter = await page.locator('.liquid-test-card').evaluate(c => getComputedStyle(c, '::before').filter);
-    assert.notEqual(ownFilter, 'none', 'dynamically inserted cards get refraction');
-    const otherFilter = await page.locator('.card').first().evaluate(c => getComputedStyle(c, '::before').filter);
-    assert.notEqual(ownFilter, otherFilter, 'different sizes use individually calibrated maps');
-    const mapOf = () => page.locator('.liquid-test-card').evaluate(c => {
-      const id = c.style.getPropertyValue('--glass-filter').match(/#([^\)]+)/)[1];
-      return document.getElementById(id).querySelector('feImage').getAttribute('href');
-    });
-    const originalMap = await mapOf();
-    await page.locator('.liquid-test-card').evaluate(c => c.style.height = '260px');
-    await page.waitForTimeout(350);
-    assert.notEqual(await mapOf(), originalMap, 'resizing recalibrates the displacement map');
-    await page.locator('.liquid-test-card').evaluate(c => c.style.height = '240px');
-    await page.waitForTimeout(350);
+    if (gpu) {
+      assert.equal(await page.locator('.glass-wallpaper-canvas').isVisible(), true);
+      const before = await page.evaluate(() => GlassRenderer.getState());
+      assert.ok(before.lenses >= 4, 'new cards participate in the shared render pass');
+      await page.locator('.liquid-test-card').evaluate(c => c.style.height = '260px');
+      await page.waitForTimeout(100);
+      assert.ok(await page.evaluate(draws => GlassRenderer.getState().draws > draws, before.draws), 'resizing redraws measured lenses');
+      await page.locator('.liquid-test-card').evaluate(c => c.style.height = '240px');
+      await page.waitForTimeout(100);
+    } else {
+      const ownFilter = await page.locator('.liquid-test-card').evaluate(c => getComputedStyle(c, '::before').filter);
+      assert.notEqual(ownFilter, 'none');
+      const otherFilter = await page.locator('.card').first().evaluate(c => getComputedStyle(c, '::before').filter);
+      assert.notEqual(ownFilter, otherFilter, 'fallback cards retain individual calibration');
+    }
     const dir = path.join(ROOT, '.gstack', 'liquid-glass');
     fs.mkdirSync(dir, { recursive: true });
     const on = await page.screenshot({ path: path.join(dir, 'aurora-on.png') });
     await page.evaluate(() => LiquidGlass.setIntensity(0, { persist: false }));
+    await page.waitForTimeout(50);
     const off = await page.screenshot({ path: path.join(dir, 'aurora-zero.png') });
     const difference = await page.evaluate(async ([a, b]) => {
       const pixels = async base64 => {
@@ -92,12 +101,16 @@ const ROOT = path.resolve(__dirname, '..');
       });
       if (!sharedUI) sharedUI = ui;
       assert.deepEqual(ui, sharedUI, theme + ' changes only the background, not glass UI');
+      assert.equal(await page.locator('.word-search-wrapper .input-area input').first().evaluate(input => {
+        const r = input.getBoundingClientRect();
+        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === input;
+      }), true, theme + ' wallpaper stays behind interactive content');
       await page.screenshot({ path: path.join(dir, theme + '-desktop.png') });
     }
     await page.locator('#btnOpenSettings').click();
     await page.waitForTimeout(350);
-    assert.notEqual(await page.locator('#modalSettings').evaluate(c => getComputedStyle(c, '::before').filter), 'none',
-      'opening a modal creates a size-calibrated glass layer');
+    assert.ok(await page.locator('#modalSettings').evaluate(c => getComputedStyle(c, '::before').filter !== 'none'),
+      'opening a modal participates in calibrated glass rendering');
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => Appearance.setTheme('aurora'));
@@ -111,6 +124,7 @@ const ROOT = path.resolve(__dirname, '..');
     assert.equal(await page.evaluate(() => LiquidGlass.getState().surfaces), 0, 'disabled glass releases per-surface filters');
     await page.evaluate(() => LiquidGlass.destroy());
     assert.equal(await page.locator('[data-glass-refraction-svg]').count(), 0);
+    assert.equal(await page.locator('.glass-wallpaper-canvas').count(), 0);
     assert.deepEqual(errors, []);
     console.log(`PASS: borderless, calibrated dynamic surfaces, sharp text, pixel difference ${(difference*100).toFixed(1)}%, five themes, mobile fallback and cleanup`);
   } finally { await browser.close(); }

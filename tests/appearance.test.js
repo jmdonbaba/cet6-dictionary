@@ -381,13 +381,13 @@ test('degrades for reduced motion, reduced transparency and missing backdrop-fil
 test('keeps appearance scoped: wallpaper rules are theme-scoped, blur rules are glass-scoped', () => {
   assert.doesNotMatch(css, /html\[data-interface="classic"\](?!\[data-wallpaper="night"\])/, 'legacy classic overrides are limited to night readability');
   for (const rule of cssLeafRules.filter(block => /backdrop-filter\s*:/.test(block.body))) {
-    assert.match(rule.selector, /html\[data-interface="glass"\]/,
+    assert.match(rule.selector, /html(?:\.glass-gpu)?\[data-interface="glass"\]/,
       `backdrop-filter must never leak into the classic interface: ${rule.selector}`);
   }
   const layerRules = cssLeafRules.filter(block => /\.appearance-(?:aurora|water|noise)\b/.test(block.selector));
   assert.ok(layerRules.length >= 5);
   for (const rule of layerRules) {
-    assert.match(rule.selector, /html\[data-wallpaper/,
+    assert.match(rule.selector, /\[data-wallpaper/,
       `decorative background rules must be wallpaper-scoped: ${rule.selector}`);
   }
   // Glass themes change only wallpaper. Legacy classic night readability remains scoped.

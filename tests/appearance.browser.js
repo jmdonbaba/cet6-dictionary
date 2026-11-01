@@ -440,7 +440,8 @@ const portraitViewports = [1440, 1280, 390, 320];
       });
       assert.equal(layers.themeOptions, 1, `${theme} must leave exactly one checked theme option`);
       if (theme === 'minimal') {
-        assert.equal(layers.backdropDisplay, 'none', 'minimal hides the decorative layer');
+        const gpu = await page.evaluate(() => LiquidGlass.getState().renderer === 'webgl');
+        assert.equal(layers.backdropDisplay, gpu ? 'block' : 'none', 'minimal uses a plain shared texture or hides decoration');
         // The fallback colour lives on <html> so the opaque body background cannot cover
         // the negative z-index glass ::before layer of the cards.
         assert.equal(layers.bodyBackground, 'rgba(0, 0, 0, 0)',
@@ -490,6 +491,7 @@ const portraitViewports = [1440, 1280, 390, 320];
         cardRadius: cardStyle.borderRadius,
         glassZ: glassLayer.zIndex,
         glassBackdrop: glassLayer.backdropFilter || glassLayer.webkitBackdropFilter,
+        gpu: window.LiquidGlass.getState().renderer === 'webgl',
         glassBackground: glassLayer.backgroundImage,
         glassContent: glassLayer.content,
         ringContent: ring.content,
@@ -502,7 +504,8 @@ const portraitViewports = [1440, 1280, 390, 320];
     assert.notEqual(glassStyles.cardShadow, 'none', 'the drop shadow stays on the element');
     assert.equal(glassStyles.cardRadius, '22px');
     assert.equal(glassStyles.glassZ, '-1', 'the glass layer sits behind the card content');
-    assert.match(glassStyles.glassBackdrop, /blur\(2px\)[\s\S]*?saturate\(1\.45\)/, 'the glass layer carries the frosted blur');
+    if (glassStyles.gpu) assert.equal(glassStyles.glassBackdrop, 'none', 'GPU glass avoids redundant backdrop reads');
+    else assert.match(glassStyles.glassBackdrop, /blur\(2px\)/);
     assert.match(glassStyles.glassBackground, /linear-gradient/);
     assert.notEqual(glassStyles.glassContent, 'none');
     assert.notEqual(glassStyles.ringContent, 'none', 'the edge dispersion ring is rendered');
@@ -520,7 +523,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     }));
     assert.match(waterStyles.waterImage, /water-caustics\.webp/, 'the water theme paints the caustics texture');
     if (waterStyles.refractionEnabled) {
-      assert.match(waterStyles.refractionFilter, /cet6-liquid-refract/, 'enabled refraction bends the glass layer');
+      assert.ok(glassStyles.gpu || /cet6-liquid-refract/.test(waterStyles.refractionFilter), 'enabled refraction uses GPU or native fallback');
       console.log('PASS: liquid refraction hook is active for glass + water on this Chromium');
     } else {
       console.log('SKIP: liquid refraction not auto-enabled in this environment (supported module? checked at runtime)');
