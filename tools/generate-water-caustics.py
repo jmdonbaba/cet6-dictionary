@@ -209,6 +209,7 @@ PRESETS: dict[str, dict] = {
         sharpen=1.3,
         sharpen_percent=110,
         sharpen_threshold=1,
+        corner_focus=1.55,          # 补足左上角原有亮纹，保留其余区域的聚焦分布
     ),
     # C. 阳光午后：亮纹更亮更聚、下部牛奶感更强、整体更暖更雾
     "sunlit": dict(
@@ -513,6 +514,12 @@ def generate(
     focus_field = _blur_periodic(focus_field, 18.0 * pixel_scale)
     focus_norm = _smoothstep((focus_field + 0.7) / 1.4)  # 大致映射到 0..1
     focus = (params.get("focus_base", 0.52) + params.get("focus_range", 0.85) * focus_norm).astype(np.float32)
+    if params.get("corner_focus", 0.0) > 0:
+        # Raise only the existing caustic ridges, not the blue water itself.
+        # Broad smooth falloff joins the original focus field without a patch edge;
+        # no extra random draws means the rest of the wallpaper stays reproducible.
+        corner = (1.0 - _smoothstep((xs - 0.12) / 0.25)) * (1.0 - _smoothstep((ys - 0.10) / 0.34))
+        focus += np.maximum(0.0, params["corner_focus"] - focus) * corner
     caustics *= focus
     depth = _smoothstep((ys - 0.10) / 0.90).astype(np.float32)  # 越靠下越失焦
     soft_caustics = _blur_periodic(caustics, params.get("soft_blur", 3.2) * pixel_scale)

@@ -227,11 +227,11 @@
     if (location.protocol === 'file:') {
       // A data URL keeps direct local HTML opening origin-clean for WebGL.
       var script = document.createElement('script');
-      script.src = 'assets/water-caustics-data.js?v=ed0754fcbddf';
+      script.src = 'assets/water-caustics-data.js?v=b4267103b84a';
       script.onload = function () { image.src = window.Cet6WaterTexture; script.remove(); };
       script.onerror = function () { waterLoading = false; script.remove(); };
       document.head.appendChild(script);
-    } else image.src = 'assets/water-caustics.webp?v=76af31542084';
+    } else image.src = 'assets/water-caustics.webp?v=8922591c3548';
   }
 
   function draw(now) {
