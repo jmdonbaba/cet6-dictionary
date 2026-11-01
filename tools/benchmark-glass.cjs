@@ -58,7 +58,7 @@ async function measure(page, action) {
           const card = document.createElement('div');
           card.className = 'card word-search-wrapper';
           card.style.cssText = 'height:280px;padding:24px';
-          card.innerHTML = '<h2>refraction · 折射</h2><p>Light passes through glass. 玻璃背景与清晰的正文。</p>'.repeat(4);
+          card.innerHTML = '<div class="word-result"><h2>refraction · 折射</h2><p>Light passes through glass. 玻璃背景与清晰的正文。</p><div class="word-forms">forms · 变形</div><div class="sentences"><div class="sen-item">An example with clear text.</div><div class="sen-item">Each panel refracts the previous layer.</div></div></div>';
           container.append(card);
         }
       }, iface);

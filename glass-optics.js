@@ -13,6 +13,7 @@
     return Math.min(Math.min(60,band*ratio)*strength,band*.5);
   }
   var optics={profile:profile,offset:offset,extent:extent,amplitude:amplitude,
+    layers:'.word-result, .word-forms, .mnemonic-block, .comparison-word, .study-example, .word-result .sen-item, .study-takeaway, .base-form-hint',
     glsl:'float edgeProfile(float u){u=clamp(u,0.,1.);return 1.-u*u*u*(u*(u*6.-15.)+10.); } vec2 edgeOffset(vec2 p,vec2 h,float b){return sign(p)*vec2(edgeProfile((h.x-abs(p.x))/b),edgeProfile((h.y-abs(p.y))/b));}'
   };
   if(typeof module==='object'&&module.exports)module.exports=optics;

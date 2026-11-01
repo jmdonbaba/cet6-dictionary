@@ -17,7 +17,7 @@
     if (!target || !target.closest || !target.isConnected) return null;
     var button = target.closest('button');
     if (button && button.disabled) return null;
-    return button || target.closest('.card, .modal-card');
+    return button || target.closest('.card, .modal-card, '+GlassOptics.layers);
   }
   function render() {
     if (window.GlassRenderer && !document.querySelector('.modal-card.active')) GlassRenderer.render();

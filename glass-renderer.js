@@ -7,6 +7,7 @@
   var root = document.documentElement;
   var canvas, gl, program, texture, buttonTexture, source, buffer;
   var active = false, failed = false, frame = 0, intensity = 1, lensScale = 1, lensBand = 63;
+  var originX=0,originY=0,pixelRatio=0,layerCount=0,layerIntensity=1;
   var width = 0, height = 0, theme = '', draws = 0, lenses = 0, buttonCount = 0, buttonIntensity = 1;
   var selector = '.card, .modal-card, .btn-fav-nav';
   var observed = new Set(), resizeObserver;
@@ -20,6 +21,10 @@
     'uniform sampler2D wallpaper;',
     'uniform sampler2D underGlass;',
     'uniform float buttonLens;',
+    'uniform float overlayPass;',
+    'uniform vec4 parentRects[4];',
+    'uniform float parentRadii[4];',
+    'uniform int parentCount;',
     'uniform vec2 viewport;',
     'uniform vec4 rects[16];',
     'uniform vec2 shapes[16];',
@@ -32,9 +37,13 @@
     'uniform vec4 recoil;',
     GlassOptics.glsl,
     'float sdf(vec2 p, vec2 h, float r){vec2 q=abs(p)-h+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}',
-    'vec3 sampleAt(vec2 p){ vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999)); if(buttonLens>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb; return texture2D(wallpaper,uv).rgb; }',
+    'vec3 sampleAt(vec2 p){ vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999)); if(overlayPass>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb; return texture2D(wallpaper,uv).rgb; }',
     'void main(){',
     ' vec2 pixel=vec2(gl_FragCoord.x,viewport.y-gl_FragCoord.y);',
+    ' if(overlayPass>.5){',
+    '  if(sdf(pixel-rects[0].xy-rects[0].zw*.5,rects[0].zw*.5,shapes[0].x)>=0.)discard;',
+    '  for(int j=0;j<4;j++){if(j>=parentCount)break;if(sdf(pixel-parentRects[j].xy-parentRects[j].zw*.5,parentRects[j].zw*.5,parentRadii[j])>=0.)discard;}',
+    ' }',
     ' vec3 color=sampleAt(pixel);',
     ' for(int i=0;i<16;i++){',
     '  if(i>=count)break;',
@@ -49,16 +58,14 @@
     '   float ratio=mix(.44,min(.48,.32+.1*(gain-1.)),buttonLens);',
     '   float bend=min(min(60.*unit,band*ratio)*intensity,band*.5);',
     '   vec2 point=pixel-field*bend;',
-    '   float dentShade=0.;',
     '   if(i==touchIndex){',
-    '    vec2 v=pixel-touch.xy;float g=exp(-dot(v,v)/max(1.,touch.z*touch.z));float depth=touch.w*intensity;     point+=v*g*.26*depth;     dentShade+=(dot(v/max(1.,touch.z),vec2(.7071))*.55-.025)*g*g*depth;',
+    '    vec2 v=pixel-touch.xy;float g=exp(-dot(v,v)/max(1.,touch.z*touch.z));float depth=touch.w*intensity;     point+=v*g*.26*depth;',
     '   }',
     '   if(i==recoilIndex){',
-    '    vec2 q=pixel-recoil.xy;float g=exp(-dot(q,q)/max(1.,recoil.z*recoil.z));float depth=recoil.w*intensity;     point+=q*g*.32*depth;     dentShade+=(dot(q/max(1.,recoil.z),vec2(.7071))*.55-.025)*g*g*depth;',
+    '    vec2 q=pixel-recoil.xy;float g=exp(-dot(q,q)/max(1.,recoil.z*recoil.z));float depth=recoil.w*intensity;     point+=q*g*.32*depth;',
     '   }',
     '   vec2 dispersion=field*min(2.2*unit*intensity,band*.025);',
     '   color=vec3(sampleAt(point+dispersion).r,sampleAt(point).g,sampleAt(point-dispersion).b);',
-    '   color=color*(1.-clamp(-dentShade,0.,.28))+(vec3(1.)-color)*clamp(dentShade,0.,.22);',
     '  }',
     ' }',
     ' gl_FragColor=vec4(color,1.);',
@@ -99,7 +106,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','parentRects[0]','parentRadii[0]','parentCount'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -199,9 +206,13 @@
     if (!active || document.hidden) return;
     if (root.dataset.interface !== 'glass' || innerWidth <= 720) { root.classList.remove('glass-gpu'); return; }
     try {
-      if (width !== innerWidth || height !== innerHeight || theme !== root.dataset.wallpaper) {
-        width = innerWidth; height = innerHeight; theme = root.dataset.wallpaper;
-        if (theme === 'water') loadWater();
+      if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
+      var box=canvas.getBoundingClientRect();
+      if(!box.width||!box.height){root.classList.remove('glass-gpu');return;}
+      originX=box.left;originY=box.top;
+      if (width !== box.width || height !== box.height || pixelRatio !== (devicePixelRatio||1) || theme !== root.dataset.wallpaper) {
+        width=box.width;height=box.height;pixelRatio=devicePixelRatio||1;theme=root.dataset.wallpaper;
+        if(theme==='water')loadWater();
         buildWallpaper();
       }
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
@@ -211,10 +222,10 @@
         if (element.matches('.modal-card, button')) return;
         if (resizeObserver && !observed.has(element)) { resizeObserver.observe(element); observed.add(element); }
         var r = element.getBoundingClientRect();
-        if (count >= MAX_LENSES || r.width < 32 || r.height < 32 || r.bottom < 0 || r.top > height) return;
+        if (count >= MAX_LENSES || r.width < 32 || r.height < 32 || r.bottom < originY || r.top > originY+height) return;
         if (getComputedStyle(element).visibility === 'hidden') return;
-        rects.set([r.left,r.top,r.width,r.height],count*4);
-        shapes.set([parseFloat(getComputedStyle(element).borderTopLeftRadius)||22,0],count*2);
+        rects.set([r.left-originX,r.top-originY,r.width,r.height],count*4);
+        shapes.set([materialRadius(element,r),0],count*2);
         if (window.GlassInteraction && GlassInteraction.matches(element)) {
           var effect=GlassInteraction.read(element);
           if(effect.hover[3]){hoverElement=element;hoverIndex=count;}
@@ -224,6 +235,9 @@
       });
       observed.forEach(function (element) { if (!element.isConnected) { resizeObserver.unobserve(element); observed.delete(element); } });
       setTouch(hoverElement,hoverIndex,recoilElement,recoilIndex,canvas.width/width,canvas.height/height);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.uniform1f(locations.overlayPass,0);
+      gl.uniform1i(locations.parentCount,0);
       gl.uniform1f(locations.buttonLens, 0);
       gl.uniform1i(locations.count, count);
       gl.uniform1f(locations.intensity, intensity * lensScale);
@@ -235,6 +249,7 @@
       for (var i=0;i<count;i++) { rects[i*4]*=sx;rects[i*4+1]*=sy;rects[i*4+2]*=sx;rects[i*4+3]*=sy;shapes[i*2]*=sx;shapes[i*2+1]=sx; }
       gl.uniform4fv(locations['rects[0]'], rects); gl.uniform2fv(locations['shapes[0]'], shapes);
       gl.drawArrays(gl.TRIANGLES,0,3);
+      drawLayers(sx,sy,rects,shapes);
       drawButtons(sx, sy, rects, shapes);
       draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
@@ -243,36 +258,73 @@
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
   }
 
-  // Copy the card-composited wallpaper once on-GPU. Each button draws only its
-  // scissored pixels, so adding controls does not add full-screen shader loops.
-  // Sampling this copy also keeps flat button centers identical to their parent.
-  function drawButtons(sx, sy, rects, shapes) {
-    buttonCount = 0;
-    if (!buttonIntensity) return;
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, buttonTexture);
+  function copyComposite() {
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,buttonTexture);
     gl.copyTexSubImage2D(gl.TEXTURE_2D,0,0,0,0,0,canvas.width,canvas.height);
     gl.activeTexture(gl.TEXTURE0);
-    gl.uniform1f(locations.buttonLens, 1);
-    gl.uniform1f(locations.intensity, intensity * lensScale * buttonIntensity);
-    gl.uniform1i(locations.count, 1);
+  }
+  function materialRadius(element,r) {
+    var radius=getComputedStyle(element).borderTopLeftRadius;
+    var value=parseFloat(radius)||0;
+    if(radius.indexOf('%')>=0)value=Math.min(r.width,r.height)*value/100;
+    else value*=Math.min(r.width/(element.offsetWidth||r.width),r.height/(element.offsetHeight||r.height));
+    return Math.min(value,r.width/2,r.height/2);
+  }
+  function setParents(element,sx,sy) {
+    var rectangles=new Float32Array(16),radii=new Float32Array(4),count=0;
+    var popup=element.closest('.more-menu,.study-export-menu,.ws-search-dropdown,.fav-search-dropdown');
+    var parent=popup || element.parentElement?.closest('.card, '+GlassOptics.layers);
+    while(parent&&count<4){
+      var r=parent.getBoundingClientRect();
+      rectangles.set([(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy],count*4);
+      radii[count]=materialRadius(parent,r)*sx;count++;
+      parent=popup?null:parent.parentElement?.closest('.card, '+GlassOptics.layers);
+    }
+    gl.uniform1i(locations.parentCount,count);
+    gl.uniform4fv(locations['parentRects[0]'],rectangles);gl.uniform1fv(locations['parentRadii[0]'],radii);
+  }
+  function drawSurface(element,isButton,strength,sx,sy,rects,shapes) {
+    var r=element.getBoundingClientRect();
+    if(r.width<8||r.height<8||r.bottom<=originY||r.top>=originY+height||r.right<=originX||r.left>=originX+width)return false;
+    var style=getComputedStyle(element);
+    if(style.visibility==='hidden'||style.display==='none')return false;
+    if(resizeObserver&&!observed.has(element)){resizeObserver.observe(element);observed.add(element);}
+    rects.set([(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy],0);
+    shapes.set([materialRadius(element,r)*sx,sx],0);
+    gl.uniform1f(locations.buttonLens,isButton?1:0);
+    gl.uniform1f(locations.overlayPass,1);
+    gl.uniform1f(locations.intensity,intensity*lensScale*strength);
+    gl.uniform1i(locations.count,1);
+    setTouch(element,0,element,0,sx,sy);setParents(element,sx,sy);
+    gl.uniform4fv(locations['rects[0]'],rects);gl.uniform2fv(locations['shapes[0]'],shapes);
+    var x=Math.max(0,Math.floor((r.left-originX)*sx)),y=Math.max(0,Math.floor(canvas.height-(r.bottom-originY)*sy));
+    var right=Math.min(canvas.width,Math.ceil((r.right-originX)*sx)),top=Math.min(canvas.height,Math.ceil(canvas.height-(r.top-originY)*sy));
+    gl.scissor(x,y,Math.max(0,right-x),Math.max(0,top-y));gl.drawArrays(gl.TRIANGLES,0,3);return true;
+  }
+  // Each depth reads the already-composited glass, not the raw wallpaper. Ancestor
+  // masks keep refracted content inside its real rounded material boundaries.
+  function drawLayers(sx,sy,rects,shapes) {
+    layerCount=0;if(!layerIntensity)return;
+    var groups=[];
+    document.querySelectorAll(GlassOptics.layers).forEach(function(element){
+      if(element.closest('.modal-card'))return;
+      var depth=0,parent=element.parentElement?.closest(GlassOptics.layers);
+      while(parent&&depth<3){depth++;parent=parent.parentElement?.closest(GlassOptics.layers);}
+      (groups[depth]||(groups[depth]=[])).push(element);
+    });
     gl.enable(gl.SCISSOR_TEST);
-    document.querySelectorAll('button').forEach(function (button) {
-      if (button.closest('.modal-card')) return; // Modal-local native optics sit above its overlay.
-      var r = button.getBoundingClientRect();
-      if (r.width < 8 || r.height < 8 || r.bottom <= 0 || r.top >= height || r.right <= 0 || r.left >= width) return;
-      var style = getComputedStyle(button);
-      if (style.visibility === 'hidden' || style.display === 'none') return;
-      if (resizeObserver && !observed.has(button)) { resizeObserver.observe(button); observed.add(button); }
-      var radius = Math.min(parseFloat(style.borderTopLeftRadius) || 0,r.width/2,r.height/2);
-      rects.set([r.left*sx,r.top*sy,r.width*sx,r.height*sy],0);
-      shapes.set([radius*sx,sx],0);
-      setTouch(button,0,button,0,sx,sy);
-      gl.uniform4fv(locations['rects[0]'],rects); gl.uniform2fv(locations['shapes[0]'],shapes);
-      var x = Math.max(0,Math.floor(r.left*sx)), y = Math.max(0,Math.floor(canvas.height-r.bottom*sy));
-      var right = Math.min(canvas.width,Math.ceil(r.right*sx));
-      var top = Math.min(canvas.height,Math.ceil(canvas.height-r.top*sy));
-      gl.scissor(x,y,Math.max(0,right-x),Math.max(0,top-y));
-      gl.drawArrays(gl.TRIANGLES,0,3); buttonCount++;
+    groups.forEach(function(group){
+      if(!group)return;copyComposite();
+      group.forEach(function(element){if(drawSurface(element,false,layerIntensity,sx,sy,rects,shapes))layerCount++;});
+    });
+    gl.disable(gl.SCISSOR_TEST);
+  }
+  function drawButtons(sx,sy,rects,shapes) {
+    buttonCount=0;if(!buttonIntensity)return;
+    copyComposite();gl.enable(gl.SCISSOR_TEST);
+    document.querySelectorAll('button').forEach(function(button){
+      if(button.closest('.modal-card'))return;
+      if(drawSurface(button,true,buttonIntensity,sx,sy,rects,shapes))buttonCount++;
     });
     gl.disable(gl.SCISSOR_TEST);
   }
@@ -282,8 +334,14 @@
     var p=recoilElement&&window.GlassInteraction ? GlassInteraction.read(recoilElement).pulse : [0,0,1,0];
     gl.uniform1i(locations.touchIndex,h[3] ? hoverIndex : -1);
     gl.uniform1i(locations.recoilIndex,p[3] ? recoilIndex : -1);
-    gl.uniform4f(locations.touch,h[0]*sx,h[1]*sy,h[2]*sx,h[3]);
-    gl.uniform4f(locations.recoil,p[0]*sx,p[1]*sy,p[2]*sx,p[3]);
+    gl.uniform4f(locations.touch,(h[0]-originX)*sx,(h[1]-originY)*sy,h[2]*sx,h[3]);
+    gl.uniform4f(locations.recoil,(p[0]-originX)*sx,(p[1]-originY)*sy,p[2]*sx,p[3]);
+  }
+
+  function onMaterialAnimation(event) {
+    if(!active||event.pseudoElement||event.target.closest('.modal-card')||!event.target.closest('.card, '+GlassOptics.layers))return;
+    if(event.type==='animationstart')motionUntil=Math.max(motionUntil,performance.now()+450);
+    requestRender();
   }
 
   function onControlTransition(event) {
@@ -297,6 +355,7 @@
   function enable(options) {
     if (!init()) return false;
     active = true;
+    if(resizeObserver)resizeObserver.observe(canvas);
     if (options && options.selector) selector = options.selector;
     if (options && options.intensity !== undefined) intensity = options.intensity;
     if (options && options.scale !== undefined) lensScale = options.scale / 64;
@@ -314,6 +373,7 @@
     window.removeEventListener('scroll', requestRender);
     window.removeEventListener('resize', requestRender);
     document.removeEventListener('visibilitychange', requestRender);
+    document.removeEventListener('animationstart',onMaterialAnimation);document.removeEventListener('animationend',onMaterialAnimation);
     document.removeEventListener('transitionrun', onControlTransition);
     document.removeEventListener('transitionend', onControlTransition);
     if (gl) { gl.deleteTexture(texture); gl.deleteTexture(buttonTexture); gl.deleteProgram(program); gl.deleteBuffer(buffer); }
@@ -323,12 +383,14 @@
   window.addEventListener('scroll', requestRender, { passive: true });
   window.addEventListener('resize', requestRender, { passive: true });
   document.addEventListener('visibilitychange', requestRender);
+  document.addEventListener('animationstart',onMaterialAnimation);document.addEventListener('animationend',onMaterialAnimation);
   document.addEventListener('transitionrun', onControlTransition);
   document.addEventListener('transitionend', onControlTransition);
   window.GlassRenderer = {
     enable: enable, disable: disable, destroy: destroy, render: requestRender,
+    setLayerIntensity: function(value){layerIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},
     setButtonIntensity: function (value) { buttonIntensity = Math.max(0,Math.min(2,Number(value)||0)); requestRender(); },
     setIntensity: function (value) { intensity = value; requestRender(); },
-    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses: lenses + buttonCount, buttons: buttonCount, width: width, height: height }; }
+    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses:lenses+layerCount+buttonCount,layers:layerCount,originX:originX,originY:originY,buttons: buttonCount, width: width, height: height }; }
   };
 })();

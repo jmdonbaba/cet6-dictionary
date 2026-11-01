@@ -624,7 +624,7 @@
   function clearSurfaces() {
     surfaces.forEach(function (entry, element) {
       element.style.removeProperty('--glass-filter');
-      element.classList.remove('glass-button-optics', 'glass-button-positioned');
+      element.classList.remove('glass-button-optics', 'glass-button-positioned', 'glass-layer-optics', 'glass-layer-positioned');
       element.style.removeProperty('--glass-button-radius');
       element.style.removeProperty('--glass-light-x');
       element.style.removeProperty('--glass-light-y');
@@ -651,11 +651,12 @@
     var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
     // Modals sit above a blurred overlay: their background must be captured there,
     // not in the wallpaper canvas beneath the overlay.
-    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button' : config.surfaceSelector + ', button';
+    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button, .modal-card.active :is('+GlassOptics.layers+')' : config.surfaceSelector+', button, '+GlassOptics.layers;
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
       var button = element.matches('button:not(.btn-fav-nav)');
-      var minimum = button ? 8 : 32;
+      var layer=element.matches(GlassOptics.layers);
+      var minimum = button||layer ? 8 : 32;
       var rect = element.getBoundingClientRect();
       if (rect.width < minimum || rect.height < minimum || rect.bottom < -100 || rect.top > window.innerHeight + 100) return;
       var style = window.getComputedStyle(element);
@@ -686,6 +687,7 @@
       var gradedBand=GlassOptics.extent(Math.min(width,height),config.band);
       entry.maxScale=2*GlassOptics.amplitude(gradedBand,Math.min(width,height),button,1);
       entry.limitScale=gradedBand;
+      if(layer){element.classList.add('glass-layer-optics');if(style.position==='static')element.classList.add('glass-layer-positioned');}
       if (button) {
         element.classList.add('glass-button-optics');
         element.style.setProperty('--glass-button-radius', Math.min(radius, width / 2, height / 2) + 'px');
@@ -699,7 +701,7 @@
     surfaces.forEach(function (entry, element) {
       if (!visible.has(element)) {
         element.style.removeProperty('--glass-filter');
-        element.classList.remove('glass-button-optics', 'glass-button-positioned');
+        element.classList.remove('glass-button-optics', 'glass-button-positioned', 'glass-layer-optics', 'glass-layer-positioned');
         element.style.removeProperty('--glass-button-radius');
         if (resizeObserver) resizeObserver.unobserve(element);
         entry.filter.remove();
@@ -711,7 +713,6 @@
 
   var interactions = new Map();
   var pressureMap = '';
-  var pressureShades = {};
   function clearInteraction() {
     interactions.forEach(function (effect) { effect.nodes.forEach(function (node) { node.remove(); }); });
     interactions.clear();
@@ -726,19 +727,6 @@
       var i=(y*64+x)*4;image.data[i]=Math.round(128+126*dx*weight);image.data[i+1]=Math.round(128+126*dy*weight);image.data[i+2]=128;image.data[i+3]=255;
     }
     ctx.putImageData(image,0,0);pressureMap=canvas.toDataURL('image/png');return pressureMap;
-  }
-  function pressureShade(sign) {
-    if(pressureShades[sign])return pressureShades[sign];
-    var canvas=document.createElement('canvas');canvas.width=canvas.height=96;
-    var ctx=canvas.getContext('2d'),image=ctx.createImageData(96,96);
-    for(var y=0;y<96;y++)for(var x=0;x<96;x++){
-      var dx=(x-47.5)/47.5,dy=(y-47.5)/47.5;
-      var shade=((dx+dy)*.7071*.55-.025)*Math.exp(-2*(dx*dx+dy*dy))*GlassOptics.profile(Math.max(Math.abs(dx),Math.abs(dy)))*sign;
-      var i=(y*96+x)*4,light=shade>0;
-      image.data[i]=light?255:12;image.data[i+1]=light?255:10;image.data[i+2]=light?255:22;
-      image.data[i+3]=Math.round(Math.min(light?.22:.28,Math.abs(shade))*255);
-    }
-    ctx.putImageData(image,0,0);pressureShades[sign]=canvas.toDataURL('image/png');return pressureShades[sign];
   }
   function interactionNode(name, attributes) {
     var node=document.createElementNS(NS,name);
@@ -761,12 +749,8 @@
         var merge=interactionNode('feMerge',{result:'pressure_field'});
         merge.appendChild(interactionNode('feMergeNode',{in:'pressure_neutral'}));merge.appendChild(interactionNode('feMergeNode',{in:'pressure_patch'}));
         var warp=interactionNode('feDisplacementMap',{in:'native_edge_glass',in2:'pressure_field',xChannelSelector:'R',yChannelSelector:'G',scale:0,result:'pressure_warped_glass','data-interactive':''});
-        var lighting=interactionNode('feImage',{href:pressureShade(1),preserveAspectRatio:'none',result:'pressure_shade'});
-        var opacity=interactionNode('feComponentTransfer',{in:'pressure_shade',result:'pressure_lighting'});
-        var alpha=interactionNode('feFuncA',{type:'linear',slope:0});opacity.appendChild(alpha);
-        var composite=interactionNode('feComposite',{in:'pressure_lighting',in2:'pressure_warped_glass',operator:'over'});
-        var nodes=[flood,image,merge,warp,lighting,opacity,composite];nodes.forEach(function(node){entry.filter.appendChild(node);});
-        effect={filter:entry.filter,nodes:nodes,image:image,warp:warp,lighting:lighting,alpha:alpha,sign:1};interactions.set(element,effect);
+        var nodes=[flood,image,merge,warp];nodes.forEach(function(node){entry.filter.appendChild(node);});
+        effect={filter:entry.filter,nodes:nodes,image:image,warp:warp};interactions.set(element,effect);
       }
       var r=element.getBoundingClientRect();if(!r.width||!r.height)return;
       var h=hover.element===element?hover.level:0,p=pulse.element===element?pulse.level:0;
@@ -776,10 +760,7 @@
       effect.image.setAttribute('y',((point.y-r.top-radius)/r.height*100)+'%');
       effect.image.setAttribute('width',(radius*2/r.width*100)+'%');effect.image.setAttribute('height',(radius*2/r.height*100)+'%');
       effect.warp.setAttribute('scale',String((h*16+p*20)*state.intensity*config.scale/64));
-      ['x','y','width','height'].forEach(function (attribute) {effect.lighting.setAttribute(attribute,effect.image.getAttribute(attribute));});
-      var depth=(h+p)*state.intensity*config.scale/64,sign=depth<0?-1:1;
-      if(sign!==effect.sign){effect.lighting.setAttribute('href',pressureShade(sign));effect.sign=sign;}
-      effect.alpha.setAttribute('slope',String(Math.min(1.4,Math.abs(depth))));
+
     });
   }
 

@@ -967,6 +967,29 @@ html[data-interface="glass"] .card {
   html[data-interface="glass"] .card:hover { translate: none; }
 }
 
+/* Inner hierarchy comes from successive clear lenses, never stacked white fills. */
+html.glass-gpu[data-interface="glass"] .card { border-width: 0; }
+html[data-interface="glass"] :is(.word-result, .word-forms, .mnemonic-block, .comparison-word,
+  .study-example, .word-result .sentences .sen-item, .study-takeaway, .base-form-hint, .word-result .pos) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+html[data-interface="glass"] :is(.study-example, .word-result .sen-item) { border-radius: 10px; }
+html.glass-refraction[data-interface="glass"] .glass-layer-optics { isolation: isolate; }
+html.glass-refraction[data-interface="glass"] .glass-layer-positioned { position: relative; }
+html.glass-refraction[data-interface="glass"] .glass-layer-optics::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  backdrop-filter: blur(.3px);
+  -webkit-backdrop-filter: blur(.3px);
+  filter: var(--glass-filter, none);
+}
+
 /* Shared button material, including dynamically generated actions and menu items.
    These properties deliberately own the material over older component/inline
    hover colors. Custom properties keep semantic states in one place. The glass
@@ -1062,10 +1085,10 @@ html.glass-refraction[data-interface="glass"] button.glass-button-optics::before
 
 /* The optical/decorative layer squishes; labels and hit boxes stay still. */
 @keyframes glass-jelly-rebound {
-  0% { scale: 0.982 1.012; }
-  24% { scale: 1.012 0.986; }
-  46% { scale: 0.994 1.007; }
-  70% { scale: 1.003 0.997; }
+  0% { scale: 0.982 0.996; }
+  24% { scale: 1 0.986; }
+  46% { scale: 0.994 1; }
+  70% { scale: 1 0.997; }
   100% { scale: 1 1; }
 }
 html[data-interface="glass"] .glass-jelly-positioned { position: relative; }
@@ -1124,6 +1147,7 @@ html[data-interface="glass"] .glass-jelly::after {
   html.glass-refraction[data-interface="glass"] .card::before,
   html.glass-refraction[data-interface="glass"] .modal-card::before,
   html.glass-refraction[data-interface="glass"] .btn-fav-nav::before,
+  html.glass-refraction[data-interface="glass"] .glass-layer-optics::before,
   html.glass-refraction[data-interface="glass"] button.glass-button-optics::before { filter: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
   html.glass-gpu[data-interface="glass"] .card::before,
   html.glass-gpu[data-interface="glass"] .modal-card::before,

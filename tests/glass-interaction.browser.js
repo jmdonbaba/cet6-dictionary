@@ -20,8 +20,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const source = document.querySelector('.glass-wallpaper-canvas');
         const copy = document.createElement('canvas'); copy.width = source.width; copy.height = source.height;
         const ctx = copy.getContext('2d'); ctx.drawImage(source,0,0);
-        const s = source.width / innerWidth;
-        const data = ctx.getImageData(Math.round(555*s),Math.round(385*s),Math.round(90*s),Math.round(90*s)).data;
+        const box=source.getBoundingClientRect(),sx=source.width/box.width,sy=source.height/box.height;
+        const data = ctx.getImageData(Math.round((555-box.left)*sx),Math.round((385-box.top)*sy),Math.round(90*sx),Math.round(90*sy)).data;
         resolve(Array.from(data));
       });
     }));
@@ -35,14 +35,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const flatBefore=await pixels();
     await page.locator('.interaction-fixture').dispatchEvent('pointermove',{clientX:600,clientY:430,pointerType:'mouse',bubbles:true});
     await page.waitForTimeout(450);const flatAfter=await pixels();
-    function shadeDelta(a,b,lo,hi){
-      const size=Math.round(Math.sqrt(a.length/4));let value=0,n=0;
-      for(let y=Math.floor(size*lo);y<size*hi;y++)for(let x=Math.floor(size*lo);x<size*hi;x++){
-        const i=(y*size+x)*4;value+=(b[i]+b[i+1]+b[i+2]-a[i]-a[i+1]-a[i+2])/3;n++;
-      }return value/n;
-    }
-    assert.ok(shadeDelta(flatBefore,flatAfter,.18,.38)<-1,'concave upper-left wall must darken even on a plain wallpaper');
-    assert.ok(shadeDelta(flatBefore,flatAfter,.62,.82)>.2,'concave lower-right wall must catch reflected light');
+    // Bilinear texture sampling can round a channel by one; a painted shadow is larger.
+    assert.ok(flatBefore.every((v,i)=>Math.abs(v-flatAfter[i])<=1),'plain wallpaper hover must not paint synthetic light or shadow');
     await page.evaluate(()=>Appearance.setTheme('aurora'));await page.waitForTimeout(200);
     await page.locator('.interaction-fixture').dispatchEvent('pointermove',{clientX:600,clientY:430,pointerType:'mouse',bubbles:true});
     await page.waitForTimeout(350);
@@ -52,8 +46,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         GlassRenderer.render();requestAnimationFrame(() => {
           const source=document.querySelector('.glass-wallpaper-canvas'),copy=document.createElement('canvas');
           copy.width=source.width;copy.height=source.height;const ctx=copy.getContext('2d');ctx.drawImage(source,0,0);
-          const s=source.width/innerWidth;
-          resolve(Array.from(ctx.getImageData(Math.round(555*s),Math.round(385*s),Math.round(90*s),Math.round(90*s)).data));
+          const box=source.getBoundingClientRect(),sx=source.width/box.width,sy=source.height/box.height;
+          resolve(Array.from(ctx.getImageData(Math.round((555-box.left)*sx),Math.round((385-box.top)*sy),Math.round(90*sx),Math.round(90*sy)).data));
         });
       });
       const waitForPhase = predicate => new Promise((resolve,reject) => {
