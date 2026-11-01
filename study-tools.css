@@ -52,6 +52,12 @@
 .mnemonic-block { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .mnemonic-block h3 { font-size: 13px; color: var(--primary); margin-bottom: 10px; }
 .favorite-study-tabs.ws-mode-toggle { display: flex; align-self: stretch; margin-bottom: 18px; }
+#modalVocabFav .modal-body { display: grid; grid-template-rows: auto minmax(0,1fr); min-height: 0; overflow: hidden; }
+#favoriteStudyTabs { grid-row: 1; grid-column: 1; }
+#wordFavPanel, #comparisonFavPanel { grid-row: 2; grid-column: 1; min-width: 0; min-height: 0; overflow-y: auto; }
+/* Keep both panes laid out. Switching visibility avoids rebuilding the word list
+   just as the capsule starts moving; each pane retains its own scroll position. */
+#modalVocabFav :is(#wordFavPanel, #comparisonFavPanel)[hidden] { display: block !important; visibility: hidden; pointer-events: none; }
 .favorite-study-tabs button { flex: 1; border: 0; border-radius: 999px; padding: 8px 12px; font: inherit; font-size: 13px; color: var(--text-secondary); background: transparent; cursor: pointer; }
 .favorite-study-tabs button[aria-selected="true"] { color: var(--primary); }
 .comparison-search { margin-bottom: 14px; }

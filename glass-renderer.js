@@ -404,13 +404,15 @@
   function setParents(element,sx,sy) {
     var rectangles=new Float32Array(16),radii=new Float32Array(4),count=0;
     var popup=element.closest('.more-menu,.study-export-menu,.ws-search-dropdown,.fav-search-dropdown');
-    var parents=element.closest('.modal-card')?'.modal-card, .modal-body, '+GlassOptics.modalLayers+', '+GlassOptics.layers:'.card, '+GlassOptics.layers;
+    var parents=element.closest('.modal-card')?'.modal-card, .modal-body, [role="tabpanel"], '+GlassOptics.modalLayers+', '+GlassOptics.layers:'.card, '+GlassOptics.layers;
+    // A menu may escape its row, but it still belongs inside the scrolling pane.
+    if(popup)parents=element.closest('.modal-card')?'.modal-card, .modal-body, [role="tabpanel"]':'';
     var parent=popup || element.parentElement?.closest(parents);
     while(parent&&count<4){
       var r=parent.getBoundingClientRect();
       rectangles.set([(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy],count*4);
       radii[count]=materialRadius(parent,r)*sx;count++;
-      parent=popup?null:parent.parentElement?.closest(parents);
+      parent=parents?parent.parentElement?.closest(parents):null;
     }
     gl.uniform1i(locations.parentCount,count);
     gl.uniform4fv(locations['parentRects[0]'],rectangles);gl.uniform1fv(locations['parentRadii[0]'],radii);
@@ -483,7 +485,7 @@
   function onControlTransition(event) {
     if (!active || !event.target.matches('button, '+GlassOptics.controls+', '+GlassOptics.modalLayers) ||
         ['scale','transform','translate','left','width'].indexOf(event.propertyName) < 0) return;
-    motionUntil = event.type === 'transitionrun' ? performance.now() + 450 : 0;
+    if(event.type === 'transitionrun')motionUntil = Math.max(motionUntil,performance.now()+450);
     requestRender();
   }
 

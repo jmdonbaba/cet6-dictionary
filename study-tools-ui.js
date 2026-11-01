@@ -128,27 +128,41 @@ const StudyToolsUI = (() => {
     // A flat turn keeps the card's vertical edges still; a perspective turn would
     // balloon a card this wide while it rotates.
     const startHeight = wrapper.offsetHeight;
-    let animation;
+    let animation, heightAnimation, footerAnimation;
     try {
       animation = wrapper.animate(
         [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(90deg)' }],
         { duration: 160, easing: 'ease-in', fill: 'forwards' }
       );
+      animation.startTime = performance.now();
       await animation.finished;
       render();
-      // The two faces rarely share a height. Glide the card between them while the
-      // new face opens instead of letting the bottom edge jump at the turning point.
+      // Height needs a gentle start/end and more time for larger differences.
+      // Keep its timing independent of the turn so rotation cannot rush the resize.
       const endHeight = wrapper.offsetHeight;
       const resize = Math.abs(endHeight - startHeight) > 1;
       if (resize) wrapper.classList.add('is-resizing');
       animation.cancel();
-      animation = wrapper.animate(resize
-        ? [{ transform: 'rotateY(-90deg)', height: `${startHeight}px` }, { transform: 'rotateY(0deg)', height: `${endHeight}px` }]
-        : [{ transform: 'rotateY(-90deg)' }, { transform: 'rotateY(0deg)' }],
-      { duration: 200, easing: 'cubic-bezier(.22,.8,.3,1)', fill: 'forwards' });
-      await animation.finished;
+      if (resize) {
+        const timing = { duration: Math.min(380, Math.max(240, Math.sqrt(Math.abs(endHeight-startHeight))*16)),
+          easing: 'cubic-bezier(.4,0,.2,1)', fill: 'both' };
+        heightAnimation = wrapper.animate([{ height: `${startHeight}px` }, { height: `${endHeight}px` }],timing);
+        // The save action follows the moving bottom edge instead of appearing
+        // late when a taller incoming face finishes revealing its content.
+        const footer = wrapper.querySelector('.word-search-result > .study-result-actions');
+        if (footer) footerAnimation = footer.animate([{translate:`0 ${startHeight-endHeight}px`},{translate:'0 0'}],timing);
+      }
+      animation = wrapper.animate([{ transform: 'rotateY(-90deg)' }, { transform: 'rotateY(0deg)' }],
+        { duration: 220, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+      // Rendering/measuring the new face may consume part of the previous frame.
+      // Start all opening motions on a fresh shared clock, not that stale frame.
+      const openingTime = performance.now();
+      [animation,heightAnimation,footerAnimation].forEach(motion => { if (motion) motion.startTime = openingTime; });
+      await Promise.all([animation.finished, heightAnimation?.finished, footerAnimation?.finished]);
     } finally {
       animation?.cancel();
+      heightAnimation?.cancel();
+      footerAnimation?.cancel();
       wrapper.classList.remove('is-flipping', 'is-resizing');
     }
   }

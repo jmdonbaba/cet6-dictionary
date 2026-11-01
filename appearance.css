@@ -1192,7 +1192,7 @@ html[data-interface="glass"] .modal-card .fav-search-dropdown {
 
 /* Native scrolling stays intact; transparent tracks replace white gutters. */
 html[data-interface="glass"],
-html[data-interface="glass"] :is(.modal-body, .fav-search-dropdown, .ws-search-dropdown, .study-export-menu, .more-menu) {
+html[data-interface="glass"] :is(.modal-body, #wordFavPanel, #comparisonFavPanel, .fav-search-dropdown, .ws-search-dropdown, .study-export-menu, .more-menu) {
   scrollbar-width: thin;
   scrollbar-color: rgba(53, 40, 121, 0.35) transparent;
 }

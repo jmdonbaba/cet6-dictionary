@@ -383,7 +383,7 @@ test('measures all mode sliders before writing styles to avoid repeated layout f
   const events = [];
   const toggles = [10, 50, 90].map(left => {
     const style = {};
-    for (const property of ['left', 'width']) {
+    for (const property of ['translate', 'width']) {
       Object.defineProperty(style, property, { set(value) { events.push(`write ${property} ${value}`); } });
     }
     const button = {
@@ -395,7 +395,7 @@ test('measures all mode sliders before writing styles to avoid repeated layout f
   syncSliders(toggles);
   assert.ok(events.slice(0, 6).every(event => event.startsWith('read')));
   assert.ok(events.slice(6).every(event => event.startsWith('write')));
-  assert.ok(events.includes('write left 90px'));
+  assert.ok(events.includes('write translate 90px 0'));
   assert.ok(events.includes('write width 40px'));
 });
 

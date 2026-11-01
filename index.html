@@ -225,12 +225,13 @@ body {
 .ws-mode-slider {
   position: absolute;
   top: 3px;
-  left: 3px;
+  left: 0;
+  translate: 3px 0;
   height: calc(100% - 6px);
   background: #fff;
   border-radius: 999px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
-  transition: left 320ms var(--motion-spring), width 320ms var(--motion-spring);
+  transition: translate 320ms var(--motion-spring), width 320ms var(--motion-spring);
   pointer-events: none;
   z-index: 0;
 }
@@ -781,8 +782,8 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
   color: var(--primary);
 }
 </style>
-<link rel="stylesheet" href="study-tools.css?v=269dded17df1">
-<link rel="stylesheet" href="appearance.css?v=5c5e33f048fa">
+<link rel="stylesheet" href="study-tools.css?v=7febb8b8daa3">
+<link rel="stylesheet" href="appearance.css?v=41d20f124f63">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -1056,10 +1057,10 @@ try {
 <script src="study-export.js?v=18626f1c6545"></script>
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=e69ab7911425"></script>
-<script src="study-tools-ui.js?v=82951d989a6e"></script>
+<script src="study-tools-ui.js?v=fec04acb35b7"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
 <script src="glass-optics.js?v=016d06b9aa9e"></script>
-<script src="glass-renderer.js?v=4602ebfa18e5"></script>
+<script src="glass-renderer.js?v=15af37da7e7c"></script>
 <script src="glass-refraction.js?v=a42beb30fada"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
 <script>
@@ -1821,7 +1822,7 @@ function syncSliders(toggles) {
   });
   positions.forEach(position => {
     if (!position) return;
-    position.slider.style.left = position.left + 'px';
+    position.slider.style.translate = position.left + 'px 0';
     position.slider.style.width = position.width + 'px';
   });
 }
@@ -2429,7 +2430,7 @@ document.addEventListener('pointerdown', e => {
   _activeDragToggle = toggle;
   toggle._drag = {
     startX: e.clientX,
-    startLeft: parseFloat(slider.style.left) || btns[0].offsetLeft,
+    startLeft: parseFloat(getComputedStyle(slider).translate) || btns[0].offsetLeft,
     minL: btns[0].offsetLeft,
     maxL: btns[1].offsetLeft,
     w0: btns[0].offsetWidth,
@@ -2454,19 +2455,20 @@ document.addEventListener('pointermove', e => {
   const p = (nl - d.minL) / (d.maxL - d.minL || 1);
   const sw = d.w0 + (d.w1 - d.w0) * p;
   const slider = toggle.querySelector('.ws-mode-slider');
-  slider.style.left = nl + 'px';
+  slider.style.translate = nl + 'px 0';
   slider.style.width = sw + 'px';
 });
 
 function _finishToggleDrag(toggle) {
   if (!toggle || !toggle._drag) return;
   const d = toggle._drag;
+  if (!d.moved) { delete toggle._drag; toggle._wasDragging = false; return; }
   toggle.classList.remove('dragging');
   const slider = toggle.querySelector('.ws-mode-slider');
   const btns = toggle.querySelectorAll('button');
   btns.forEach(b => b.classList.remove('drag-hover'));
   if (!slider || btns.length !== 2) { delete toggle._drag; return; }
-  const curL = parseFloat(slider.style.left) || d.minL;
+  const curL = parseFloat(slider.style.translate) || d.minL;
   const mid = (d.minL + d.maxL) / 2;
   const idx = curL >= mid ? 1 : 0;
   btns.forEach(b => b.classList.remove('active'));
@@ -2490,6 +2492,7 @@ document.addEventListener('pointerup', e => {
 document.addEventListener('pointercancel', e => {
   if (_activeDragToggle) {
     _finishToggleDrag(_activeDragToggle);
+    _activeDragToggle._wasDragging = false;
     _activeDragToggle = null;
   }
 });
@@ -2776,7 +2779,7 @@ function updateDragFrame() {
     dragGhost.style.transform = getDragGhostTransform(clientX, clientY);
   }
 
-  var scrollContainer = $modalVocabBody;
+  var scrollContainer = document.getElementById('wordFavPanel');
   var rect = scrollContainer.getBoundingClientRect();
   var edgeZone = 50;
   var maxScrollStep = 18;
