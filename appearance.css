@@ -87,12 +87,6 @@ button.settings-entry:active {
   font-weight: 700;
   letter-spacing: 0.2px;
 }
-.settings-section-hint {
-  margin: 5px 0 0;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.7;
-}
 .appearance-options {
   display: grid;
   gap: 10px;
@@ -213,11 +207,13 @@ button.settings-entry:active {
   border: 2px solid var(--border);
   transition: border-color 180ms ease, background-color 180ms ease;
 }
-.appearance-option.is-selected .appearance-option-mark {
+.appearance-option.is-selected .appearance-option-mark,
+.theme-option.is-selected .appearance-option-mark {
   border-color: var(--primary);
   background: var(--primary);
 }
-.appearance-option.is-selected .appearance-option-mark::after {
+.appearance-option.is-selected .appearance-option-mark::after,
+.theme-option.is-selected .appearance-option-mark::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -227,14 +223,6 @@ button.settings-entry:active {
   border-right: 2px solid #ffffff;
   border-bottom: 2px solid #ffffff;
   transform: translate(-50%, -50%) rotate(43deg);
-}
-.settings-note {
-  margin: 14px 0 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--border);
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  line-height: 1.7;
 }
 
 /* ---------------------------------------------------------------------------
@@ -324,6 +312,7 @@ button.settings-entry:active {
 .theme-option .appearance-option-desc { font-size: 11.5px; line-height: 1.45; }
 .theme-option .appearance-option-mark { width: 17px; height: 17px; }
 .theme-option .appearance-option-mark::after { width: 3.5px; height: 7px; }
+.theme-option.is-selected .appearance-option-mark::after { width: 3.5px; height: 7px; }
 @media (max-width: 520px) {
   .theme-options { grid-template-columns: minmax(0, 1fr); }
 }
@@ -834,12 +823,8 @@ html[data-interface="glass"] .empty-state,
 html[data-interface="glass"] .study-loading,
 html[data-interface="glass"] .page-record-hint,
 html[data-interface="glass"] .key-guide,
-html[data-interface="glass"] .settings-section-hint,
 html[data-interface="glass"] .theme-option .appearance-option-desc {
   color: var(--text-secondary);
-}
-html[data-interface="glass"] .settings-note {
-  border-top-color: rgba(255, 255, 255, 0.38);
 }
 html[data-interface="glass"] .appearance-option,
 html[data-interface="glass"] .theme-option {

@@ -45,7 +45,7 @@ const ruleBody = selectorPattern => {
   return block.body;
 };
 
-const themeValues = ['minimal', 'aurora', 'peach', 'night', 'water'];
+const themeValues = ['minimal', 'water', 'aurora', 'peach', 'night'];
 const themeLabels = { minimal: '极简', aurora: '极光', peach: '蜜桃', night: '深空', water: '水波' };
 const themeColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
 
@@ -112,12 +112,23 @@ test('settings panel exposes the interface and theme sections with five theme ra
   assert.match(body, /<div class="appearance-options" role="radiogroup" aria-label="界面风格">/);
   assert.match(body, /传统界面/);
   assert.match(body, /玻璃质感<span class="appearance-dev">（开发中）<\/span>/);
-  assert.match(body, /玻璃质感为实验性界面，仍在持续调整；[\s\S]*?主题会按界面分别记住/);
+  // The explanatory hints/notes were removed to keep the panel compact.
+  assert.doesNotMatch(body, /选择界面的视觉风格/);
+  assert.doesNotMatch(body, /背景主题两种界面都能用/);
+  assert.doesNotMatch(body, /玻璃质感为实验性界面/);
+  assert.doesNotMatch(body, /class="settings-section-hint"/);
+  assert.doesNotMatch(body, /class="settings-note"/);
+  assert.match(body, /全透明液态玻璃，边缘折射与真实色散。/,
+    'the glass description must describe the transparent liquid glass material');
+  assert.match(body, /冷调蓝紫，清冷通透/);
+  // Water sits directly after minimal in the theme grid.
+  assert.ok(body.indexOf('value="water"') > body.indexOf('value="minimal"'));
+  assert.ok(body.indexOf('value="water"') < body.indexOf('value="aurora"'));
 
   // Theme section (5 options) is new.
   assert.match(body, /<h3 class="settings-section-title" id="themeSectionTitle">主题<\/h3>/);
   assert.match(body, /<div class="theme-options" role="radiogroup" aria-label="背景主题">/);
-  assert.match(body, /背景主题两种界面都能用；传统界面默认“极简”（最初的样子），玻璃质感默认“极光”。/);
+  assert.match(body, /<span class="appearance-option-desc">清澈浅水的焦散光纹<\/span>/);
   const styleRadios = [...source.matchAll(/<input[^>]*name="appearanceStyle"[^>]*>/g)];
   assert.equal(styleRadios.length, 2);
   const themeRadios = [...source.matchAll(/<input[^>]*name="wallpaperTheme"[^>]*value="([^"]+)"[^>]*>/g)];
@@ -132,6 +143,13 @@ test('settings panel exposes the interface and theme sections with five theme ra
     'exactly five theme option labels are expected');
   assert.doesNotMatch(source, /<input[^>]*name="wallpaperTheme"[^>]*\schecked\b/,
     'theme selection must be synced from storage by JS, not hard-coded');
+
+  // The selected theme circle must show the same white check mark as the interface options.
+  assert.match(css, /\.theme-option\.is-selected \.appearance-option-mark \{[\s\S]*?background: var\(--primary\);/);
+  assert.match(css, /\.theme-option\.is-selected \.appearance-option-mark::after \{[\s\S]*?border-right: 2px solid #ffffff;/);
+  // Hints were deleted together with their styles.
+  assert.doesNotMatch(css, /\.settings-section-hint\s*\{/);
+  assert.doesNotMatch(css, /\.settings-note\s*\{/);
 });
 
 test('preload script applies interface, wallpaper and theme-color before the first paint', () => {
@@ -139,10 +157,10 @@ test('preload script applies interface, wallpaper and theme-color before the fir
   assert.ok(preload, 'missing the first-paint appearance preload script in <head>');
   const code = preload[0];
   assert.match(code, /localStorage\.getItem\('cet6_interface_style'\) === 'glass' \? 'glass' : 'classic'/);
-  assert.match(code, /var wallpaperThemes = \['minimal', 'aurora', 'peach', 'night', 'water'\];/);
+  assert.match(code, /var wallpaperThemes = \['minimal', 'water', 'aurora', 'peach', 'night'\];/);
   assert.match(code, /localStorage\.getItem\('cet6_theme_' \+ savedInterface\)/,
     'the preload must read the theme key belonging to the stored interface');
-  assert.match(code, /savedTheme = savedInterface === 'glass' \? 'aurora' : 'minimal';/,
+  assert.match(code, /savedTheme = savedInterface === 'glass' \? 'water' : 'minimal';/,
     'invalid/missing themes fall back to the per-interface default');
   assert.match(code, /document\.documentElement\.dataset\.interface = savedInterface;/);
   assert.match(code, /document\.documentElement\.dataset\.wallpaper = savedTheme;/);
@@ -166,9 +184,9 @@ test('appearance.js exposes the full interface + theme API and remembers themes 
   assert.match(script, /var STORAGE_KEY = 'cet6_interface_style';/);
   assert.match(script, /var THEME_PREFIX = 'cet6_theme_';/);
   assert.match(script, /var STYLES = \[CLASSIC, GLASS\];/);
-  assert.match(script, /var THEMES = \['minimal', 'aurora', 'peach', 'night', 'water'\];/);
+  assert.match(script, /var THEMES = \['minimal', 'water', 'aurora', 'peach', 'night'\];/);
   for (const theme of themeValues) assert.ok(script.includes(`${theme}: '${themeLabels[theme]}'`), `THEME_LABELS missing ${theme}`);
-  assert.match(script, /var DEFAULT_THEMES = \{ classic: 'minimal', glass: 'aurora' \};/);
+  assert.match(script, /var DEFAULT_THEMES = \{ classic: 'minimal', glass: 'water' \};/);
   for (const color of Object.values(themeColors)) assert.ok(script.includes(`'${color}'`), `THEME_COLORS missing ${color}`);
 
   assert.match(script, /function themeKey\(style\) \{\s*return THEME_PREFIX \+ normalize\(style\);/);

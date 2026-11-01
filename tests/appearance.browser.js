@@ -1,5 +1,5 @@
 // Browser QA for the appearance system (interface: classic / glass, wallpaper theme:
-// minimal / aurora / peach / night / water, remembered per interface).
+// minimal / water / aurora / peach / night, remembered per interface).
 //
 // Run from the Cet6Dictionary directory:
 //
@@ -19,7 +19,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const ROOT = path.join(__dirname, '..');
 const EDGE = process.env.EDGE_EXECUTABLE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
-const THEMES = ['minimal', 'aurora', 'peach', 'night', 'water'];
+const THEMES = ['minimal', 'water', 'aurora', 'peach', 'night'];
 const THEME_LABELS = { minimal: '极简', aurora: '极光', peach: '蜜桃', night: '深空', water: '水波' };
 const THEME_COLORS = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
 const PREFERRED_SHOT_DIR = path.join(ROOT, '.gstack', 'appearance');
@@ -281,7 +281,7 @@ const portraitViewports = [1440, 1280, 390, 320];
       styles: ['classic', 'glass'],
       themes: THEMES,
       labels: THEME_LABELS,
-      defaults: { classic: 'minimal', glass: 'aurora' },
+      defaults: { classic: 'minimal', glass: 'water' },
       hasGet: 'function',
       hasSet: 'function',
       hasGetTheme: 'function',
@@ -310,27 +310,31 @@ const portraitViewports = [1440, 1280, 390, 320];
     });
     assert.equal(focusRing, 'solid', 'the theme option shows the keyboard focus ring');
 
-    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight'); // minimal -> water
+    await page.waitForFunction(() => document.documentElement.dataset.wallpaper === 'water');
+    await expectState('classic', 'water', '#8fd8d2');
+    assert.equal(await page.evaluate(() => document.querySelector('.theme-option.is-selected input').value), 'water');
+    assert.match(await page.evaluate(() => document.getElementById('toast').textContent), /已切换主题：水波/);
+    assert.deepEqual(await storedState(), { iface: null, classicTheme: 'water', glassTheme: null },
+      'classic themes are stored under cet6_theme_classic only');
+    await page.keyboard.press('ArrowRight'); // water -> aurora
     await page.waitForFunction(() => document.documentElement.dataset.wallpaper === 'aurora');
     await expectState('classic', 'aurora', '#eef0fb');
-    assert.equal(await page.evaluate(() => document.querySelector('.theme-option.is-selected input').value), 'aurora');
-    assert.match(await page.evaluate(() => document.getElementById('toast').textContent), /已切换主题：极光/);
-    assert.deepEqual(await storedState(), { iface: null, classicTheme: 'aurora', glassTheme: null },
-      'classic themes are stored under cet6_theme_classic only');
-    await page.keyboard.press('ArrowRight');
+    assert.equal((await storedState()).classicTheme, 'aurora');
+    await page.keyboard.press('ArrowRight'); // aurora -> peach
     await page.waitForFunction(() => document.documentElement.dataset.wallpaper === 'peach');
     await expectState('classic', 'peach', '#fff7ed');
     assert.equal((await storedState()).classicTheme, 'peach');
 
-    // --------------------------------------- keyboard: switch to glass (aurora default)
+    // ----------------------------------------- keyboard: switch to glass (water default)
     await page.keyboard.press('Shift+Tab');
     assert.equal((await focused()).name, 'appearanceStyle', 'Shift+Tab returns to the interface radios');
     await page.keyboard.press('ArrowRight');
     await page.waitForFunction(() => document.documentElement.dataset.interface === 'glass');
-    await expectState('glass', 'aurora', '#eef0fb');
+    await expectState('glass', 'water', '#8fd8d2');
     assert.equal(await page.evaluate(() => localStorage.getItem('cet6_interface_style')), 'glass');
-    assert.equal(await page.evaluate(() => document.querySelector('.theme-option.is-selected input').value), 'aurora',
-      'switching interface applies the glass-specific remembered theme (default aurora)');
+    assert.equal(await page.evaluate(() => document.querySelector('.theme-option.is-selected input').value), 'water',
+      'switching interface applies the glass-specific remembered theme (default water)');
     assert.deepEqual(await storedState(), { iface: 'glass', classicTheme: 'peach', glassTheme: null },
       'switching interface must not overwrite the other interface theme');
     console.log('PASS: interface + theme switching via keyboard, per-interface theme keys stay independent');
@@ -338,6 +342,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     // -------------------------------------------------- glass + night wallpaper
     await page.keyboard.press('Tab');
     assert.equal((await focused()).name, 'wallpaperTheme');
+    await page.keyboard.press('ArrowRight'); // water -> aurora
     await page.keyboard.press('ArrowRight'); // aurora -> peach
     await page.keyboard.press('ArrowRight'); // peach -> night
     await page.waitForFunction(() => document.documentElement.dataset.wallpaper === 'night');
@@ -375,8 +380,8 @@ const portraitViewports = [1440, 1280, 390, 320];
       localStorage.setItem('cet6_theme_glass', 'neon');
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expectState('glass', 'aurora', '#eef0fb');
-    console.log('PASS: interface + theme survive reload; invalid theme values fall back to aurora');
+    await expectState('glass', 'water', '#8fd8d2');
+    console.log('PASS: interface + theme survive reload; invalid theme values fall back to water');
 
     // ------------------------------------- per-interface memory across switches
     await page.evaluate(() => window.Appearance.set('classic'));
@@ -414,7 +419,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     await page.waitForFunction(() => document.documentElement.dataset.wallpaper === 'peach');
     await page.evaluate(() => window.Appearance.set('glass'));
     await page.waitForFunction(() => document.documentElement.dataset.interface === 'glass');
-    await expectState('glass', 'aurora', '#eef0fb');
+    await expectState('glass', 'water', '#8fd8d2');
     assert.deepEqual(await storedState(), { iface: 'glass', classicTheme: 'peach', glassTheme: 'neon' },
       'per-interface remember keys are untouched by switching');
     console.log('PASS: each interface remembers its own theme; classic + night lightens all page chrome');

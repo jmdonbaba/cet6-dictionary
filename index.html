@@ -781,15 +781,15 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
 }
 </style>
 <link rel="stylesheet" href="study-tools.css?v=536a2258f0b5">
-<link rel="stylesheet" href="appearance.css?v=37b156ef41fb">
+<link rel="stylesheet" href="appearance.css?v=343d4aa4276f">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
   var savedInterface = localStorage.getItem('cet6_interface_style') === 'glass' ? 'glass' : 'classic';
-  var wallpaperThemes = ['minimal', 'aurora', 'peach', 'night', 'water'];
+  var wallpaperThemes = ['minimal', 'water', 'aurora', 'peach', 'night'];
   var savedTheme = localStorage.getItem('cet6_theme_' + savedInterface);
   if (wallpaperThemes.indexOf(savedTheme) === -1) {
-    savedTheme = savedInterface === 'glass' ? 'aurora' : 'minimal';
+    savedTheme = savedInterface === 'glass' ? 'water' : 'minimal';
   }
   document.documentElement.dataset.interface = savedInterface;
   document.documentElement.dataset.wallpaper = savedTheme;
@@ -985,7 +985,6 @@ try {
     <div class="modal-body">
       <section class="settings-section" aria-labelledby="appearanceSectionTitle">
         <h3 class="settings-section-title" id="appearanceSectionTitle">界面设置</h3>
-        <p class="settings-section-hint">选择界面的视觉风格，选择会保存在当前浏览器，下次打开自动生效。</p>
         <div class="appearance-options" role="radiogroup" aria-label="界面风格">
           <label class="appearance-option">
             <input class="appearance-radio" type="radio" name="appearanceStyle" value="classic">
@@ -1001,16 +1000,14 @@ try {
             <span class="appearance-option-preview is-glass" aria-hidden="true"></span>
             <span class="appearance-option-copy">
               <span class="appearance-option-title">玻璃质感<span class="appearance-dev">（开发中）</span></span>
-              <span class="appearance-option-desc">半透明磨砂卡片，配高饱和圆润背景，效果仍在打磨。</span>
+              <span class="appearance-option-desc">全透明液态玻璃，边缘折射与真实色散。</span>
             </span>
             <span class="appearance-option-mark" aria-hidden="true"></span>
           </label>
         </div>
-        <p class="settings-note">玻璃质感为实验性界面，仍在持续调整；若设备性能有限或开启了“减少透明度”，会自动降级为更清晰的卡片。主题会按界面分别记住。</p>
       </section>
       <section class="settings-section" aria-labelledby="themeSectionTitle">
         <h3 class="settings-section-title" id="themeSectionTitle">主题</h3>
-        <p class="settings-section-hint">背景主题两种界面都能用；传统界面默认“极简”（最初的样子），玻璃质感默认“极光”。</p>
         <div class="theme-options" role="radiogroup" aria-label="背景主题">
           <label class="theme-option">
             <input class="appearance-radio" type="radio" name="wallpaperTheme" value="minimal">
@@ -1022,11 +1019,20 @@ try {
             <span class="appearance-option-mark" aria-hidden="true"></span>
           </label>
           <label class="theme-option">
+            <input class="appearance-radio" type="radio" name="wallpaperTheme" value="water">
+            <span class="theme-swatch is-water" aria-hidden="true"></span>
+            <span class="appearance-option-copy">
+              <span class="appearance-option-title">水波</span>
+              <span class="appearance-option-desc">清澈浅水的焦散光纹</span>
+            </span>
+            <span class="appearance-option-mark" aria-hidden="true"></span>
+          </label>
+          <label class="theme-option">
             <input class="appearance-radio" type="radio" name="wallpaperTheme" value="aurora">
             <span class="theme-swatch is-aurora" aria-hidden="true"></span>
             <span class="appearance-option-copy">
               <span class="appearance-option-title">极光</span>
-              <span class="appearance-option-desc">冷调蓝紫，最衬玻璃</span>
+              <span class="appearance-option-desc">冷调蓝紫，清冷通透</span>
             </span>
             <span class="appearance-option-mark" aria-hidden="true"></span>
           </label>
@@ -1045,15 +1051,6 @@ try {
             <span class="appearance-option-copy">
               <span class="appearance-option-title">深空</span>
               <span class="appearance-option-desc">暗色底，对比最强</span>
-            </span>
-            <span class="appearance-option-mark" aria-hidden="true"></span>
-          </label>
-          <label class="theme-option">
-            <input class="appearance-radio" type="radio" name="wallpaperTheme" value="water">
-            <span class="theme-swatch is-water" aria-hidden="true"></span>
-            <span class="appearance-option-copy">
-              <span class="appearance-option-title">水波</span>
-              <span class="appearance-option-desc">清澈浅水的焦散光纹</span>
             </span>
             <span class="appearance-option-mark" aria-hidden="true"></span>
           </label>
@@ -1079,7 +1076,7 @@ try {
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=e69ab7911425"></script>
 <script src="study-tools-ui.js?v=05ff90d3d8d3"></script>
-<script src="appearance.js?v=27c49d6bedaa"></script>
+<script src="appearance.js?v=740d99430315"></script>
 <script src="glass-optics.js?v=c4a6448d2335"></script>
 <script src="glass-renderer.js?v=0626ad6fff04"></script>
 <script src="glass-refraction.js?v=4b9e3d9f6ac5"></script>

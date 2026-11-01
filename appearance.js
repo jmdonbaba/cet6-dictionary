@@ -3,7 +3,7 @@
    ----------------------------------------------------------------------------
    - 界面风格保存在 localStorage 的 cet6_interface_style：classic | glass；
    - 背景主题按界面分别保存：cet6_theme_classic（默认 minimal）、
-     cet6_theme_glass（默认 aurora），可选 minimal/aurora/peach/night/water；
+     cet6_theme_glass（默认 water），可选 minimal/water/aurora/peach/night；
    - <head> 里的内联预加载脚本会在首帧前把 html[data-interface] 与
      html[data-wallpaper] 设好，避免闪烁；
    - 本文件负责：应用界面与主题、同步设置面板选中态、处理切换与跨标签页同步。
@@ -16,7 +16,7 @@
   var CLASSIC = 'classic';
   var GLASS = 'glass';
   var STYLES = [CLASSIC, GLASS];
-  var THEMES = ['minimal', 'aurora', 'peach', 'night', 'water'];
+  var THEMES = ['minimal', 'water', 'aurora', 'peach', 'night'];
   var THEME_LABELS = {
     minimal: '极简',
     aurora: '极光',
@@ -24,7 +24,7 @@
     night: '深空',
     water: '水波'
   };
-  var DEFAULT_THEMES = { classic: 'minimal', glass: 'aurora' };
+  var DEFAULT_THEMES = { classic: 'minimal', glass: 'water' };
   var THEME_COLORS = {
     minimal: '#f8fafc',
     aurora: '#eef0fb',
