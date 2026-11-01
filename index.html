@@ -780,8 +780,8 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
   color: var(--primary);
 }
 </style>
-<link rel="stylesheet" href="study-tools.css?v=536a2258f0b5">
-<link rel="stylesheet" href="appearance.css?v=51aa4e753378">
+<link rel="stylesheet" href="study-tools.css?v=269dded17df1">
+<link rel="stylesheet" href="appearance.css?v=5c5e33f048fa">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -921,8 +921,9 @@ try {
       </div>
     </div>
     <div class="modal-body" id="modalVocabBody">
-      <div class="favorite-study-tabs" id="favoriteStudyTabs" role="tablist" aria-label="收藏类型" data-active="words">
-        <button type="button" id="wordFavoritesTab" role="tab" aria-selected="true" aria-controls="wordFavPanel" data-favorite-tab="words">单词 <span id="wordFavoriteCount">0</span></button>
+      <div class="favorite-study-tabs ws-mode-toggle" id="favoriteStudyTabs" role="tablist" aria-label="收藏类型" data-active="words">
+        <div class="ws-mode-slider" aria-hidden="true"></div>
+        <button type="button" class="active" id="wordFavoritesTab" role="tab" aria-selected="true" aria-controls="wordFavPanel" data-favorite-tab="words">单词 <span id="wordFavoriteCount">0</span></button>
         <button type="button" id="comparisonFavoritesTab" role="tab" aria-selected="false" aria-controls="comparisonFavPanel" tabindex="-1" data-favorite-tab="comparisons">词语对比 <span id="comparisonFavoriteCount">0</span></button>
       </div>
       <div id="wordFavPanel" role="tabpanel" aria-labelledby="wordFavoritesTab">
@@ -1054,11 +1055,11 @@ try {
 <script src="study-export.js?v=18626f1c6545"></script>
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=e69ab7911425"></script>
-<script src="study-tools-ui.js?v=05ff90d3d8d3"></script>
+<script src="study-tools-ui.js?v=82951d989a6e"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
-<script src="glass-optics.js?v=ff0bff1a5aa5"></script>
-<script src="glass-renderer.js?v=501d207f31ce"></script>
-<script src="glass-refraction.js?v=e01a497bb784"></script>
+<script src="glass-optics.js?v=016d06b9aa9e"></script>
+<script src="glass-renderer.js?v=4602ebfa18e5"></script>
+<script src="glass-refraction.js?v=a42beb30fada"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
@@ -2130,6 +2131,7 @@ function openModal(modal, skipFocus) {
   schedulePageJumpUpdate();
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
+  if (modal === $modalVocabFav) syncSlider(document.getElementById('favoriteStudyTabs'));
   // 弹窗首帧就要带上最终折射，避免“先闪一下、再变一次颜色”。
   if (window.LiquidGlass && typeof LiquidGlass.flush === 'function') LiquidGlass.flush();
   // Focus search input when opening vocab favorites (skip when navigating from "open in favorites")
@@ -2471,6 +2473,10 @@ function _finishToggleDrag(toggle) {
   syncSlider(toggle);
   toggle._wasDragging = d.moved;
   delete toggle._drag;
+  if (toggle.id === 'favoriteStudyTabs') {
+    StudyToolsUI.selectFavoriteTab(btns[idx].dataset.favoriteTab);
+    return;
+  }
   saveWordSearchSession();
 }
 

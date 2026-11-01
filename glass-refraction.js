@@ -695,9 +695,11 @@
       return;
     }
     var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
-    // Modals sit above a blurred overlay: their background must be captured there,
-    // not in the wallpaper canvas beneath the overlay.
-    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button, .modal-card.active :is('+GlassOptics.layers+', '+GlassOptics.controls+'), .modal-card.active :is('+MODAL_INNER+')' : config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls;
+    // The shared canvas owns modal optics, including inner rows and controls.
+    // Building SVG maps for those same surfaces causes a pause on tab changes.
+    if(gpu){clearSurfaces();return;}
+    // Calibrate individual maps only for the native fallback.
+    var nativeSelector = config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls+', '+MODAL_INNER;
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
       if(element.matches('.ws-mode-toggle button'))return;

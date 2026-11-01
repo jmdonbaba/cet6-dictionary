@@ -32,7 +32,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.evaluate(()=>GlassRenderer.setControlIntensity(1));
   await page.locator('#btnOpenVocabFav').click();await page.waitForTimeout(350);
   const close=await page.locator('#modalVocabFav .modal-close').boundingBox();assert.ok(Math.abs(close.width-close.height)<.1,'favorite close target is square');await page.keyboard.press('Escape');
-  await page.evaluate(()=>{Appearance.openSettings();const host=document.createElement('div');host.className='input-area input-native-fixture';host.innerHTML='<input aria-label="Native glass test" value="clear text">';document.querySelector('#modalSettings .modal-body').prepend(host);LiquidGlass.refresh()});
+  await page.evaluate(()=>{GlassRenderer.destroy();window.GlassRenderer=null;Appearance.openSettings();const host=document.createElement('div');host.className='input-area input-native-fixture';host.innerHTML='<input aria-label="Native glass test" value="clear text">';document.querySelector('#modalSettings .modal-body').prepend(host);LiquidGlass.refresh()});
   await page.waitForTimeout(400);
   assert.equal(await page.locator('.input-native-fixture input').evaluate(e=>getComputedStyle(e).filter),'none','input text is never displaced');
   assert.notEqual(await page.locator('.input-native-fixture .glass-input-optics').evaluate(e=>getComputedStyle(e).filter),'none','native input owns a separate optical background');

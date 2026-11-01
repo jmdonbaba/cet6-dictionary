@@ -40,6 +40,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     assert.ok(difference.edge > 1, `edge must bend the wallpaper: ${JSON.stringify(difference)}`);
     assert.ok(difference.center < .5, `center core must stay flat: ${JSON.stringify(difference)}`);
+    await page.evaluate(()=>{GlassRenderer.destroy();window.GlassRenderer=null;LiquidGlass.refresh()});
     await page.locator('#btnOpenSettings').click(); await page.waitForTimeout(400);
     assert.notEqual(await page.locator('#modalSettings .modal-close').evaluate(e => getComputedStyle(e,'::before').filter), 'none', 'modal button refraction belongs above the overlay');
     assert.equal(await page.locator('#modalSettings .modal-close').evaluate(e => getComputedStyle(e).filter), 'none', 'button text/icons must remain sharp');

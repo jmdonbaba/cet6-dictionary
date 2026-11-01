@@ -69,6 +69,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.ok(await page.evaluate(()=>Math.abs(document.querySelector('.glass-wallpaper-canvas').getBoundingClientRect().width-GlassRenderer.getState().width)<.1),'CSS zoom also aligns the real canvas bounds');
     await page.evaluate(()=>{
       document.body.style.zoom='1';
+      GlassRenderer.destroy();window.GlassRenderer=null;
       const modal=document.querySelector('#modalSettings');Appearance.openSettings();
       const layer=document.createElement('div');layer.className='word-result layer-modal-fixture';
       layer.innerHTML='<div class="word-forms">Transparent modal layer</div><div class="sentences"><div class="sen-item">One continuous plate.</div></div>';

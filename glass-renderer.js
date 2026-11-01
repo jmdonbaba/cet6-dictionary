@@ -375,13 +375,13 @@
     drawSurface(element,false,1,sx,sy,rects,shapes);
     if(layerIntensity){
       copyComposite();
-      element.querySelectorAll(GlassOptics.modalLayers+', '+GlassOptics.layers).forEach(function(layer){
+      element.querySelectorAll(':is('+GlassOptics.modalLayers+', '+GlassOptics.layers+'):not([hidden], [hidden] *)').forEach(function(layer){
         drawSurface(layer,false,layerIntensity,sx,sy,rects,shapes);
       });
     }
     if(buttonIntensity||controlIntensity){
       copyComposite();
-      element.querySelectorAll('button, '+GlassOptics.controls).forEach(function(button){
+      element.querySelectorAll(':is(button, '+GlassOptics.controls+'):not([hidden], [hidden] *)').forEach(function(button){
         if(button.matches('input, .ws-mode-toggle button'))return;
         var strength=button.matches(GlassOptics.controls)?controlIntensity:buttonIntensity;
         if(strength)drawSurface(button,true,strength,sx,sy,rects,shapes);

@@ -81,6 +81,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.evaluate(()=>LiquidGlass.enable({persist:false}));
     await page.waitForTimeout(200);
     assert.equal(await page.evaluate(()=>GlassInteraction.getState().hover),0,'enable does not resurrect the dent');
+    await page.evaluate(()=>{GlassRenderer.destroy();window.GlassRenderer=null;LiquidGlass.refresh()});
     await page.locator('#btnOpenSettings').click();await page.waitForTimeout(500);
     await page.locator('#modalSettings').dispatchEvent('pointermove',{clientX:650,clientY:350,pointerType:'mouse',bubbles:true});
     await page.waitForTimeout(350);

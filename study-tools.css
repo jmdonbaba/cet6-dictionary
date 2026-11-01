@@ -51,11 +51,9 @@
 .comparison-collocations { font-size: 13px; color: var(--text-secondary); }
 .mnemonic-block { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .mnemonic-block h3 { font-size: 13px; color: var(--primary); margin-bottom: 10px; }
-.favorite-study-tabs { position: relative; display: flex; padding: 3px; margin-bottom: 18px; background: #f1f5f9; border-radius: 999px; isolation: isolate; }
-.favorite-study-tabs::before { content: ''; position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: #fff; border-radius: 999px; box-shadow: var(--shadow); z-index: -1; transition: translate 320ms var(--motion-spring); }
-.favorite-study-tabs[data-active="comparisons"]::before { translate: 100% 0; }
+.favorite-study-tabs.ws-mode-toggle { display: flex; align-self: stretch; margin-bottom: 18px; }
 .favorite-study-tabs button { flex: 1; border: 0; border-radius: 999px; padding: 8px 12px; font: inherit; font-size: 13px; color: var(--text-secondary); background: transparent; cursor: pointer; }
-.favorite-study-tabs button[aria-selected="true"] { color: var(--primary); font-weight: 600; }
+.favorite-study-tabs button[aria-selected="true"] { color: var(--primary); }
 .comparison-search { margin-bottom: 14px; }
 .comparison-fav { padding: 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; }
 .comparison-fav.pinned { border-color: #c7d2fe; background: #fafaff; }
@@ -105,6 +103,6 @@
   .unfavorited-jump-btn { right: max(16px, env(safe-area-inset-right)); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .favorite-study-tabs::before, .mobile-tool-tabs::before { transition: none; }
+  .mobile-tool-tabs::before { transition: none; }
   .study-tool-form input, .comparison-search { transition: none; }
 }

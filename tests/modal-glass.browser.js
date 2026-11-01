@@ -39,8 +39,8 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     assert.equal(inputFocus.focused, true);
     assert.equal(inputFocus.border, 'rgba(0, 0, 0, 0)', 'focused search input must not draw a border');
     assert.equal(inputFocus.outline, 'none');
-    assert.match(inputFocus.background, /rgba\(255, 255, 255, 0\.16\)/, 'focus brightens the glass fill');
-    assert.match(inputFocus.backdrop, /blur\(8px\)/, 'focus applies a frosted glass blur instead of a lens seam');
+    assert.match(inputFocus.background, /rgba\(255, 255, 255, 0\.08\)/, 'card search keeps a clear glass fill');
+    assert.equal(inputFocus.backdrop, 'none', 'card search does not frost the card behind it');
     await page.screenshot({ path: path.join(OUT, 'search-focus.png') });
 
     // The API-key field is another search box; focus renders the same glass.
@@ -128,6 +128,6 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     assert.equal(restore.immediate.animation, 'none');
 
     assert.deepEqual(errors, []);
-    console.log('PASS: search focus is borderless frosted glass, modals open already-refracted and stay stable; screenshots in ' + OUT);
+    console.log('PASS: clear card search, borderless frosted modal fields, stable first-frame modal optics; screenshots in ' + OUT);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

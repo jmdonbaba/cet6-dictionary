@@ -62,6 +62,7 @@ const StudyToolsUI = (() => {
     wrapper._studyData = study;
     wrapper._studyFace = 'memory';
     wrapper.classList.add('study-card');
+    wrapper.classList.toggle('mnemonic-card', study.kind === 'mnemonic');
     if (!wrapper._wordData) wrapper.querySelector('.word-search-input').value = study.kind === 'mnemonic' ? study.word : `${study.left} 和 ${study.right}`;
     const isMnemonic = study.kind === 'mnemonic';
     wrapper.querySelector('.word-search-result').innerHTML = `
@@ -108,7 +109,7 @@ const StudyToolsUI = (() => {
   }
 
   function linkWordCard(wrapper, info) {
-    wrapper.classList.remove('study-card');
+    wrapper.classList.remove('study-card', 'mnemonic-card');
     if (!hasMnemonic(wrapper, info)) {
       delete wrapper._studyData;
       delete wrapper._studyFace;
@@ -425,13 +426,16 @@ const StudyToolsUI = (() => {
     tabs.querySelectorAll('button').forEach(button => {
       const active = button.dataset.favoriteTab === tab;
       button.setAttribute('aria-selected', String(active));
+      button.classList.toggle('active', active);
       button.tabIndex = active ? 0 : -1;
       if (active && focus) button.focus();
     });
     byId('wordFavPanel').hidden = tab !== 'words';
     byId('comparisonFavPanel').hidden = tab !== 'comparisons';
     closeStudyExportMenu();
-    refreshFavorites();
+    // Data changes refresh the lists separately; switching tabs only moves UI.
+    $btnStudyExport.disabled = !Number(byId(tab === 'words' ? 'wordFavoriteCount' : 'comparisonFavoriteCount').textContent);
+    syncSlider(tabs);
   }
 
   function exportComparisons(format) {
@@ -507,6 +511,7 @@ const StudyToolsUI = (() => {
       }
     });
     byId('favoriteStudyTabs').addEventListener('click', event => {
+      if (byId('favoriteStudyTabs')._wasDragging) { byId('favoriteStudyTabs')._wasDragging = false; return; }
       const button = event.target.closest('[data-favorite-tab]');
       if (button) selectTab(button.dataset.favoriteTab);
     });
@@ -546,9 +551,13 @@ const StudyToolsUI = (() => {
     window.addEventListener('storage', event => {
       if (event.key === COMPARISON_KEY || event.key === VFAV_KEY || event.key === null) refreshFavorites();
     });
+    const favoriteTabs = byId('favoriteStudyTabs');
+    const resizeCapsule = () => { if (favoriteTabs.offsetWidth) syncSlider(favoriteTabs); };
+    if (typeof ResizeObserver === 'function') new ResizeObserver(resizeCapsule).observe(favoriteTabs);
+    else window.addEventListener('resize', resizeCapsule);
     refreshFavorites();
   }
 
   return { init, mnemonicBlock, renderStudyCard, refreshFavorites, getComparisons, hasMnemonic, linkWordCard,
-    activeTab: () => tab, exportComparisons };
+    activeTab: () => tab, selectFavoriteTab: selectTab, exportComparisons };
 })();
