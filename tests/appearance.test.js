@@ -177,7 +177,10 @@ test('appearance.js exposes the full interface + theme API and remembers themes 
   assert.match(script, /function writeStoredTheme\(style, theme\) \{[\s\S]*?localStorage\.setItem\(themeKey\(style\), theme\);/);
   assert.match(script, /root\.setAttribute\('data-wallpaper', currentTheme\);/,
     'the theme must be exposed through html[data-wallpaper]');
-  assert.match(script, /meta\.setAttribute\('content', THEME_COLORS\[currentTheme\] \|\| '#f8fafc'\);/);
+  assert.match(script, /var color = THEME_COLORS\[currentTheme\] \|\| '#f8fafc';/);
+  assert.match(script, /color = 'hsl\(' \+ currentWaterHue \+ ', 38%, 72%\)';/,
+    'a custom water hue is reflected in the mobile theme-color');
+  assert.match(script, /meta\.setAttribute\('content', color\);/);
 
   // Switching interface applies that interface's remembered theme.
   assert.match(script, /function paint\(style, themeOverride\) \{[\s\S]*?root\.setAttribute\('data-interface', currentStyle\);[\s\S]*?applyTheme\([^;]*readStoredTheme\(currentStyle\)/);
@@ -206,8 +209,8 @@ test('settings, storage events and focus handling stay in sync for both control 
   assert.match(script, /applyThemeOption\(radio\.value, \{ announce: true \}\)/);
   assert.match(script, /applyStyle\(radio\.value, \{ announce: true \}\)/);
 
-  // Cross-tab sync reacts to the interface key, any theme key, and a full site-data wipe (key === null).
-  assert.match(script, /if \(event\.key !== null && event\.key !== STORAGE_KEY && event\.key\.indexOf\(THEME_PREFIX\) !== 0\) return;/);
+  // Cross-tab sync reacts to the interface key, any theme key, the water hue and a full site-data wipe (key === null).
+  assert.match(script, /if \(event\.key !== null && event\.key !== STORAGE_KEY && event\.key !== WATER_HUE_KEY &&\s*event\.key\.indexOf\(THEME_PREFIX\) !== 0\) return;/);
   assert.match(script, /window\.addEventListener\('storage', function \(event\) \{[\s\S]*?paint\(readStoredStyle\(\)\);/);
 
   // Opening focuses the checked interface radio; closing (MutationObserver on the overlay style) restores the gear.
