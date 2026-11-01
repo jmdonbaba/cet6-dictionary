@@ -27,6 +27,7 @@
     'uniform float uTime;',
     'uniform float waterMotion;',
     'uniform float buttonLens;',
+    'uniform float inputLens;',
     'uniform float overlayPass;',
     'uniform vec2 blurDirection;',
     'uniform float downsamplePass;',
@@ -82,10 +83,11 @@
     '  if(d<0.){',
     '   float unit=shapes[i].y;',
     '   float band=min(lensBand*unit*3.,min(halfSize.x,halfSize.y)*.98);',
-    '   vec2 field=edgeOffset(p,halfSize,band);',
+    '   vec2 field=inputLens>.5?inputOffset(p,halfSize,band):edgeOffset(p,halfSize,band);',
     '   float gain=mix(1.,clamp(72.*unit/min(rect.z,rect.w),1.,2.6),buttonLens);',
     '   float ratio=mix(.36,min(.4,.32+.05*(gain-1.)),buttonLens);',
-    '   float bend=min(min(80.*unit,band*ratio)*intensity,band*.4);',
+    '   ratio=mix(ratio,.30,inputLens);',
+    '   float bend=min(min(80.*unit,band*ratio)*intensity,band*mix(.4,.30,inputLens));',
     '   vec2 point=pixel-field*bend;',
     '   if(i==touchIndex){',
     '    vec2 v=pixel-touch.xy;float g=exp(-dot(v,v)/max(1.,touch.z*touch.z));float depth=touch.w*intensity;     point+=v*g*.26*depth;',
@@ -139,7 +141,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -272,6 +274,7 @@
       gl.uniform1f(locations.overlayPass,0);
       gl.uniform1i(locations.parentCount,0);
       gl.uniform1f(locations.buttonLens, 0);
+      gl.uniform1f(locations.inputLens, 0);
       gl.uniform1i(locations.count, count);
       gl.uniform1f(locations.intensity, intensity * lensScale);
       gl.uniform1f(locations.lensBand, lensBand);
@@ -428,6 +431,7 @@
     rects.set([(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy],0);
     shapes.set([materialRadius(element,r)*sx,sx],0);
     gl.uniform1f(locations.buttonLens,isButton?1:0);
+    gl.uniform1f(locations.inputLens,element.matches(GlassOptics.inputs)?1:0);
     gl.uniform1f(locations.overlayPass,1);
     gl.uniform1f(locations.intensity,intensity*lensScale*strength);
     gl.uniform1i(locations.count,1);

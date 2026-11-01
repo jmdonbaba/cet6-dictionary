@@ -19,6 +19,24 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    });
   }),selector);
   const diff=(a,b)=>a.reduce((sum,value,i)=>sum+(i%4===3?0:Math.abs(value-b[i])),0)/(a.length*.75);
+  // Recover the lens's local magnification from a known grayscale ramp. This
+  // distinguishes a convex rim from simply shifting the whole input harder.
+  await page.evaluate(()=>{
+   const input=document.createElement('input');input.className='comparison-search rim-fixture';input.setAttribute('aria-label','Rim optical fixture');
+   input.style.cssText='position:fixed;left:360px;top:24px;width:600px;height:60px;border-radius:30px;margin:0;z-index:9999';document.body.append(input);
+  });await page.waitForTimeout(400);
+  await page.evaluate(()=>{
+   const source=document.querySelector('.glass-wallpaper-canvas'),gl=source.getContext('webgl'),pattern=document.createElement('canvas');
+   pattern.width=source.width;pattern.height=source.height;const ctx=pattern.getContext('2d'),sy=source.height/source.getBoundingClientRect().height;
+   for(let y=0;y<pattern.height;y++){const v=Math.min(255,Math.round(y/sy*2));ctx.fillStyle=`rgb(${v},${v},${v})`;ctx.fillRect(0,y,pattern.width,1)}
+   gl.activeTexture(gl.TEXTURE0);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,pattern);
+  });
+  const slope=async()=>{const data=await pixels('.rim-fixture');const width=await page.locator('.rim-fixture').evaluate(el=>Math.round(el.getBoundingClientRect().width));
+   const green=y=>data[(y*width+Math.floor(width/2))*4+1];return {rim:(green(6)-green(2))/8,shoulder:(green(20)-green(16))/8,center:(green(32)-green(28))/8};};
+  const restingRim=await slope();await page.locator('.rim-fixture').focus();await page.waitForTimeout(330);const focusedRim=await slope();
+  assert.ok(focusedRim.rim<restingRim.rim*.65,'focus concentrates real magnification at the outside rim: '+JSON.stringify({restingRim,focusedRim}));
+  assert.ok(focusedRim.rim<focusedRim.shoulder*.7&&Math.abs(focusedRim.center-1)<.15,'the convex rim must blend into an undistorted center');
+  await page.locator('.rim-fixture').evaluate(el=>el.remove());
   const selectors=['.word-search-input','#mnemonicInput','#compareLeft','#compareRight','#apiKeyInput','#favSearchInput','#comparisonSearch'];
   for(const selector of selectors){
    if(selector==='#favSearchInput')await page.evaluate(()=>openModal(document.getElementById('modalVocabFav'),true));
@@ -55,6 +73,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.setViewportSize({width:390,height:900});await page.waitForTimeout(400);
   assert.ok(await page.locator('.glass-input-optics').count()>0,'small screens keep only the small input lenses');
   assert.deepEqual(errors,[]);
-  console.log('PASS: all seven input families focus through real refraction, restore on blur, keep sharp text and settle idly; native and mobile fallback covered');
+  console.log('PASS: convex outer rim, flat center; all seven input families focus/restore with sharp text and idle settlement; native/mobile covered',JSON.stringify({restingRim,focusedRim}));
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

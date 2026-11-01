@@ -329,8 +329,8 @@
         }
         // Separable smooth coordinates preserve corner orientation as well as
         // straight-edge order; normalized SDF normals can cross a small corner's center.
-        data[index] = toByte(128 - amplitude * GlassOptics.offset(px,halfWidth,band));
-        data[index + 1] = toByte(128 - amplitude * GlassOptics.offset(py,halfHeight,band));
+        data[index] = toByte(128 - amplitude * GlassOptics.offset(px,halfWidth,band,reference.input));
+        data[index + 1] = toByte(128 - amplitude * GlassOptics.offset(py,halfHeight,band,reference.input));
         data[index + 2] = 0;
         data[index + 3] = 255;
       }
@@ -734,12 +734,12 @@
       var width = Math.round(element.offsetWidth || rect.width);
       var height = Math.round(element.offsetHeight || rect.height);
       var radius = parseFloat(style.borderTopLeftRadius) || config.radius;
-      var key = [width, height, radius, config.band, config.mapSize, config.filterPadding, button].join(':');
+      var key = [width, height, radius, config.band, config.mapSize, config.filterPadding, button, input].join(':');
       var entry = surfaces.get(element);
       if (entry && entry.key === key) {if(input)positionInputBackground(entry,element,style);return;}
       var map = mapCache.get(key);
       if (!map) {
-        map = buildMapDataUrl({ width: width, height: height });
+        map = buildMapDataUrl({ width: width, height: height, input: input });
         if (!map) return;
         if (mapCache.size >= 24) mapCache.delete(mapCache.keys().next().value);
         mapCache.set(key, map);
@@ -754,8 +754,8 @@
       }
       entry.key = key;
       var gradedBand=GlassOptics.extent(Math.min(width,height),config.band);
-      entry.maxScale=2*GlassOptics.amplitude(gradedBand,Math.min(width,height),button,1);
-      entry.limitScale=gradedBand*.8;
+      entry.maxScale=2*GlassOptics.amplitude(gradedBand,Math.min(width,height),button,1,input);
+      entry.limitScale=gradedBand*(input ? .6 : .8);
       if(inner){entry.maxScale*=2.2;entry.limitScale*=2;}
       // Focus changes only displacement strength; cached maps keep their geometry.
       if(layer){element.classList.add('glass-layer-optics');if(style.position==='static')element.classList.add('glass-layer-positioned');}

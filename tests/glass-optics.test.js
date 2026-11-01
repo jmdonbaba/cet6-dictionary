@@ -26,6 +26,25 @@ test('rim curvature rises sharply while the interior settles continuously', () =
   assert.ok(optics.profile(.8)<.005,'the central region has no secondary lens band');
 });
 
+test('focused inputs concentrate magnification at the outside rim and keep an ordered flat center', () => {
+  const optics=require(file);
+  for(const side of [28,40,60,120]) {
+    const band=optics.extent(side,30);
+    const sample=(d,strength,dispersion=0)=>d+(optics.amplitude(band,side,true,strength,true)+dispersion*band)*optics.offset(side/2-d,side/2,band,true);
+    const slope=(u,strength)=>(sample((u+.001)*band,strength)-sample(u*band,strength))/(.001*band);
+    assert.ok(slope(.02,2)<.2,'the focused outermost rim must have strong magnification');
+    assert.ok(slope(.65,2)>.85,'the interior must settle toward a flat plate');
+    assert.ok(slope(.02,2)<slope(.02,.32)*.4,'focus changes the rim more strongly than rest');
+    for(const strength of [.2,.32,.7,1.44,2]) for(const dispersion of [-.025,0,.025]) {
+      let previous=-Infinity;
+      for(let i=0;i<=1000;i++){
+        const next=sample(band*i/1000,strength,dispersion);
+        assert.ok(next>previous,'input refraction cannot fold or introduce an interior seam');previous=next;
+      }
+    }
+  }
+});
+
 test('graded refraction has smooth endpoints and never folds wallpaper sampling', () => {
   assert.ok(fs.existsSync(file), 'a shared graded optics model must replace the narrow edge band');
   const optics = require(file);

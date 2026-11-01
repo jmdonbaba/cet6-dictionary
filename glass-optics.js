@@ -6,13 +6,15 @@
     var v=1-u*u*u*(u*(u*6-15)+10);
     return v*v;
   }
-  function offset(position,halfSize,band) { return Math.sign(position)*profile((halfSize-Math.abs(position))/band); }
+  function inputProfile(value) { var v=1-Math.max(0,Math.min(1,value));return v*v*v; }
+  function offset(position,halfSize,band,input) { return Math.sign(position)*(input?inputProfile:profile)((halfSize-Math.abs(position))/band); }
   function extent(shortSide,band) { return Math.max(.5,Math.min(band*5.25,shortSide*.49)); }
-  function amplitude(band,shortSide,button,strength) {
+  function amplitude(band,shortSide,button,strength,input) {
     var gain=Math.max(1,Math.min(2.6,72/shortSide));
-    var ratio=button ? Math.min(.4,.32+.05*(gain-1)) : .36;
-    // Squared curvature peaks at slope 2.39; this bound keeps sampling ordered.
-    return Math.min(Math.min(80,band*ratio)*strength,band*.4);
+    var ratio=input ? .30 : button ? Math.min(.4,.32+.05*(gain-1)) : .36;
+    // The cubic input profile peaks at slope 3 on the outer rim; .30 leaves
+    // room for dispersion while keeping sampling ordered through the whole lens.
+    return Math.min(Math.min(80,band*ratio)*strength,band*(input ? .30 : .4));
   }
   var focusStates=new WeakMap(), focusDuration=240;
   function focusLevel(element,now) {
@@ -26,8 +28,8 @@
     if(state&&state.to===target)return;
     focusStates.set(element,{from:state?focusLevel(element,now):1-target,to:target,start:now,duration:immediate?0:focusDuration});
   }
-  function inputStrength(element,now) { return .72+.8*focusLevel(element,now); }
-  var optics={profile:profile,offset:offset,extent:extent,amplitude:amplitude,
+  function inputStrength(element,now) { return .32+1.12*focusLevel(element,now); }
+  var optics={profile:profile,inputProfile:inputProfile,offset:offset,extent:extent,amplitude:amplitude,
     setFocus:setFocus,focusLevel:focusLevel,inputStrength:inputStrength,focusDuration:focusDuration,
     // A complete result is one plate above the outer card. Its forms, examples
     // and memory sections share that field instead of bending it independently.
@@ -35,7 +37,7 @@
     modalLayers:'.appearance-option, .theme-option, .vf-compact, .page-record-item, .comparison-fav',
     controls:'.ws-mode-slider, .input-area input, .study-tool-form input, .fav-search input, .key-area input, .comparison-search',
     inputs:'.input-area input, .study-tool-form input, .fav-search input, .key-area input, .comparison-search',
-    glsl:'float edgeProfile(float u){u=clamp(u,0.,1.);float v=1.-u*u*u*(u*(u*6.-15.)+10.);return v*v; } vec2 edgeOffset(vec2 p,vec2 h,float b){return sign(p)*vec2(edgeProfile((h.x-abs(p.x))/b),edgeProfile((h.y-abs(p.y))/b));}'
+    glsl:'float edgeProfile(float u){u=clamp(u,0.,1.);float v=1.-u*u*u*(u*(u*6.-15.)+10.);return v*v; } float inputProfile(float u){float v=1.-clamp(u,0.,1.);return v*v*v; } vec2 edgeOffset(vec2 p,vec2 h,float b){return sign(p)*vec2(edgeProfile((h.x-abs(p.x))/b),edgeProfile((h.y-abs(p.y))/b));} vec2 inputOffset(vec2 p,vec2 h,float b){return sign(p)*vec2(inputProfile((h.x-abs(p.x))/b),inputProfile((h.y-abs(p.y))/b));}'
   };
   if(typeof module==='object'&&module.exports)module.exports=optics;
   else root.GlassOptics=optics;
