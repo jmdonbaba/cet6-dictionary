@@ -43,3 +43,11 @@ test('modal inner rows get their own blurred-backdrop refraction', () => {
   assert.match(css, /\.modal-card :is\(\.appearance-option, \.theme-option,[\s\S]*?\.glass-layer-optics::before \{[\s\S]*?backdrop-filter: blur\(12px\) saturate\(145%\);[\s\S]*?filter: var\(--glass-filter, none\);/);
   assert.match(css, /\.modal-card :is\(\.appearance-option, \.theme-option,[\s\S]*?\.glass-layer-optics::after \{[\s\S]*?filter: var\(--glass-filter, none\);/);
 });
+
+test('modal card itself is transparent refractive glass, not a flat white sheet', () => {
+  assert.match(css, /html\[data-interface="glass"\] \.modal-card::before \{[\s\S]*?background-color: rgba\(255, 255, 255, 0\.32\);[\s\S]*?backdrop-filter: blur\(14px\) saturate\(145%\) brightness\(1\.02\);/);
+  const after = css.match(/html\[data-interface="glass"\] \.modal-card::after \{[\s\S]*?\n\}/);
+  assert.ok(after, 'modal refractive highlight layer must exist');
+  assert.match(after[0], /radial-gradient/);
+  assert.match(after[0], /filter: var\(--glass-filter, none\);/);
+});

@@ -99,15 +99,23 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
           afterOpacity: getComputedStyle(option, '::after').opacity
         };
       }, cardSelector);
+      const modalAfter = await page.evaluate(selector => {
+        const style = getComputedStyle(document.querySelector(selector), '::after');
+        return { filter: style.filter, opacity: style.opacity };
+      }, cardSelector);
       await page.keyboard.press('Escape');
       await page.waitForTimeout(250);
-      return { immediate, stable, styles, innerOptics };
+      return { immediate, stable, styles, innerOptics, modalAfter };
     };
 
     const settings = await openModal('#btnOpenSettings', '#modalSettings');
     assert.equal(settings.immediate.active, true);
     assert.match(settings.immediate.filter, /url\("?#?cet6-liquid-refract/, 'modal filter must exist in the same task as the open');
     assert.equal(settings.immediate.animation, 'none', 'glass modals must not animate opacity over their refraction');
+    assert.match(settings.immediate.backdrop, /blur\(14px\) saturate\(1\.45\)/,
+      'modal glass blurs the background before refracting it');
+    assert.match(settings.modalAfter.filter, /cet6-liquid-refract-surface/,
+      'modal highlight layer is displaced by the native refraction filter');
     assert.match(settings.styles.innerBackdrop, /blur\(16px\) saturate\(1\.4\)/);
     assert.match(settings.styles.innerBackground, /rgba\(255, 255, 255, 0\.1\)/);
     assert.ok(settings.stable, 'settings modal must keep the same filter and run no animations after painting');

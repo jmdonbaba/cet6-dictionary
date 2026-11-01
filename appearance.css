@@ -591,9 +591,22 @@ html[data-interface="glass"] .modal-overlay {
   backdrop-filter: blur(10px) saturate(108%);
   -webkit-backdrop-filter: blur(10px) saturate(108%);
 }
+/* 弹窗做成真正透出背景的折射玻璃：更低的白底、更厚的模糊，再用一层被
+   原生位移滤器扭曲的高光表现边缘折射；正文仍在未扭曲层上，保持可读。 */
 html[data-interface="glass"] .modal-card::before {
-  background-color: rgba(255, 255, 255, 0.5);
-  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.3));
+  background-color: rgba(255, 255, 255, 0.32);
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.14) 52%, rgba(255, 255, 255, 0.22));
+  backdrop-filter: blur(14px) saturate(145%) brightness(1.02);
+  -webkit-backdrop-filter: blur(14px) saturate(145%) brightness(1.02);
+}
+html[data-interface="glass"] .modal-card::after {
+  background:
+    radial-gradient(ellipse 46% 9% at 18% 0%, rgba(255, 255, 255, 0.8), transparent 72%),
+    radial-gradient(ellipse 10% 42% at 0% 22%, rgba(255, 255, 255, 0.32), transparent 72%),
+    radial-gradient(ellipse 30% 9% at 84% 100%, rgba(255, 255, 255, 0.4), transparent 76%),
+    linear-gradient(125deg, rgba(255, 255, 255, 0.26), transparent 46%, rgba(176, 204, 255, 0.2));
+  filter: var(--glass-filter, none);
+  opacity: 0.8;
 }
 /* 弹窗打开时不再播放透明度/位移入场动画：动画中的半透明画面会让
    背景折射先浅后深，看起来“闪一下再变色”。滤镜在 openModal 里已同步就位。 */
