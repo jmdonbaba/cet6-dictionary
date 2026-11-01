@@ -305,7 +305,7 @@
    * 位移图覆盖整个滤镜区域（含 filterPadding 外扩），但只有元素 bbox 内才有
    * 位移值，外扩区域保持中性 —— 这样 box-shadow 既不会被区域裁掉，也不会被位移。
    */
-  function buildMapDataUrl(reference, cornerRadius) {
+  function buildMapDataUrl(reference, cornerRadius, button) {
     reference = reference || state.reference;
     cornerRadius = cornerRadius === undefined ? config.radius : cornerRadius;
     var size = Math.round(clamp(config.mapSize, 128, 1024));
@@ -318,7 +318,7 @@
     var halfWidth = Math.max(1, reference.width / 2);
     var halfHeight = Math.max(1, reference.height / 2);
     var radius = clamp(cornerRadius, 0, Math.min(halfWidth, halfHeight));
-    var band = Math.max(2, Math.min(config.band, Math.min(halfWidth, halfHeight) * 0.85));
+    var band = Math.max(2, Math.min(config.band, Math.min(halfWidth, halfHeight) * (button ? 0.55 : 0.85)));
     var padding = clamp(Number(config.filterPadding) || 0, 0, 0.25);
     var regionScale = 1 + padding * 2;
     var image = ctx.createImageData(size, size);
@@ -659,6 +659,8 @@
   function clearSurfaces() {
     surfaces.forEach(function (entry, element) {
       element.style.removeProperty('--glass-filter');
+      element.classList.remove('glass-button-optics', 'glass-button-positioned');
+      element.style.removeProperty('--glass-button-radius');
       element.style.removeProperty('--glass-light-x');
       element.style.removeProperty('--glass-light-y');
       if (resizeObserver) resizeObserver.unobserve(element);
@@ -684,23 +686,25 @@
     var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
     // Modals sit above a blurred overlay: their background must be captured there,
     // not in the wallpaper canvas beneath the overlay.
-    var nativeSelector = gpu ? '.modal-card.active' : config.surfaceSelector;
+    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button' : config.surfaceSelector + ', button';
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
+      var button = element.matches('button:not(.btn-fav-nav)');
+      var minimum = button ? 8 : 32;
       var rect = element.getBoundingClientRect();
-      if (rect.width < 32 || rect.height < 32 || rect.bottom < -100 || rect.top > window.innerHeight + 100) return;
+      if (rect.width < minimum || rect.height < minimum || rect.bottom < -100 || rect.top > window.innerHeight + 100) return;
       var style = window.getComputedStyle(element);
       if (style.visibility === 'hidden' || style.display === 'none') return;
       visible.add(element);
       var width = Math.round(element.offsetWidth || rect.width);
       var height = Math.round(element.offsetHeight || rect.height);
       var radius = parseFloat(style.borderTopLeftRadius) || config.radius;
-      var key = [width, height, radius, config.band, config.mapSize, config.filterPadding].join(':');
+      var key = [width, height, radius, config.band, config.mapSize, config.filterPadding, button].join(':');
       var entry = surfaces.get(element);
       if (entry && entry.key === key) return;
       var map = mapCache.get(key);
       if (!map) {
-        map = buildMapDataUrl({ width: width, height: height }, radius);
+        map = buildMapDataUrl({ width: width, height: height }, radius, button);
         if (!map) return;
         if (mapCache.size >= 24) mapCache.delete(mapCache.keys().next().value);
         mapCache.set(key, map);
@@ -714,7 +718,12 @@
         if (resizeObserver) resizeObserver.observe(element);
       }
       entry.key = key;
-      entry.maxScale = Math.min(config.band * 1.65, Math.min(width, height) * 0.65);
+      entry.maxScale = Math.min(config.band * 1.65, Math.min(width, height) * (button ? 0.52 : 0.65));
+      if (button) {
+        element.classList.add('glass-button-optics');
+        element.style.setProperty('--glass-button-radius', Math.min(radius, width / 2, height / 2) + 'px');
+        if (style.position === 'static') element.classList.add('glass-button-positioned');
+      }
       var image = entry.filter.querySelector('feImage');
       image.setAttribute('href', map);
       image.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', map);
@@ -723,6 +732,8 @@
     surfaces.forEach(function (entry, element) {
       if (!visible.has(element)) {
         element.style.removeProperty('--glass-filter');
+        element.classList.remove('glass-button-optics', 'glass-button-positioned');
+        element.style.removeProperty('--glass-button-radius');
         if (resizeObserver) resizeObserver.unobserve(element);
         entry.filter.remove();
         surfaces.delete(element);
@@ -803,7 +814,7 @@
           scheduleSurfaces();
         }
       });
-      mutationObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+      mutationObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'style'] });
     }
     window.addEventListener('scroll', scheduleSurfaces, { passive: true });
 

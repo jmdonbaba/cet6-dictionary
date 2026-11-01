@@ -1,22 +1,25 @@
-/* A single, event-driven GPU pass for wallpaper and all visible glass lenses.
+/* Shared event-driven GPU wallpaper/card pass and scissored button lenses.
  * Text and controls stay in the DOM. No DOM capture, per-card render targets,
  * backdrop reads or perpetual animation loop. Native glass is the fallback.
  */
 (function () {
   'use strict';
   var root = document.documentElement;
-  var canvas, gl, program, texture, source, buffer;
+  var canvas, gl, program, texture, buttonTexture, source, buffer;
   var active = false, failed = false, frame = 0, intensity = 1, lensScale = 1, lensBand = 63;
-  var width = 0, height = 0, theme = '', draws = 0, lenses = 0;
+  var width = 0, height = 0, theme = '', draws = 0, lenses = 0, buttonCount = 0, buttonIntensity = 1;
   var selector = '.card, .modal-card, .btn-fav-nav';
   var observed = new Set(), resizeObserver;
   var water = null, waterLoading = false;
   var locations = {};
+  var motionUntil = 0;
   var MAX_LENSES = 16;
   var vertex = 'attribute vec2 position; void main(){ gl_Position=vec4(position,0.,1.); }';
   var fragment = [
     'precision mediump float;',
     'uniform sampler2D wallpaper;',
+    'uniform sampler2D underGlass;',
+    'uniform float buttonLens;',
     'uniform vec2 viewport;',
     'uniform vec4 rects[16];',
     'uniform vec2 shapes[16];',
@@ -24,7 +27,7 @@
     'uniform float intensity;',
     'uniform float lensBand;',
     'float sdf(vec2 p, vec2 h, float r){vec2 q=abs(p)-h+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}',
-    'vec3 sampleAt(vec2 p){ return texture2D(wallpaper,clamp(p/viewport,vec2(.001),vec2(.999))).rgb; }',
+    'vec3 sampleAt(vec2 p){ vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999)); if(buttonLens>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb; return texture2D(wallpaper,uv).rgb; }',
     'void main(){',
     ' vec2 pixel=vec2(gl_FragCoord.x,viewport.y-gl_FragCoord.y);',
     ' vec3 color=sampleAt(pixel);',
@@ -35,13 +38,14 @@
     '  float d=sdf(p,halfSize,radius);',
     '  if(d<0.){',
     '   float unit=shapes[i].y;',
-    '   float band=min(lensBand*unit,min(halfSize.x,halfSize.y)*.8);',
+    '   float band=min(lensBand*unit,min(halfSize.x,halfSize.y)*mix(.8,.55,buttonLens));',
     '   float edge=pow(max(0.,1.+d/band),1.6);',
     '   vec2 normal=vec2(sdf(p+vec2(1.,0.),halfSize,radius)-sdf(p-vec2(1.,0.),halfSize,radius),',
     '                    sdf(p+vec2(0.,1.),halfSize,radius)-sdf(p-vec2(0.,1.),halfSize,radius));',
     '   normal=normal/max(length(normal),.001);',
-    '   float bend=min(60.*unit,min(rect.z,rect.w)*.3)*edge*intensity;',
-    '   vec2 point=pixel-normal*bend-p*(.045*intensity);',
+    '   float gain=mix(1.,clamp(72.*unit/min(rect.z,rect.w),1.,2.6),buttonLens);',
+    '   float bend=min(60.*unit,min(rect.z,rect.w)*.3)*edge*intensity*gain;',
+    '   vec2 point=pixel-normal*bend-p*(.045*intensity*(1.-buttonLens));',
     '   vec2 dispersion=normal*edge*2.2*unit*intensity;',
     '   color=vec3(sampleAt(point+dispersion).r,sampleAt(point).g,sampleAt(point-dispersion).b);',
     '  }',
@@ -84,10 +88,18 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','viewport','rects[0]','shapes[0]','count','intensity','lensBand'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
+      gl.uniform1i(locations.underGlass, 1);
+      buttonTexture = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, buttonTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.activeTexture(gl.TEXTURE0);
       source = document.createElement('canvas');
       canvas.addEventListener('webglcontextlost', function (event) {
         event.preventDefault(); failed = true; disable();
@@ -148,6 +160,9 @@
     }
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, buttonTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, canvas.width, canvas.height, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+    gl.activeTexture(gl.TEXTURE0);
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.uniform2f(locations.viewport, width, height);
   }
@@ -181,7 +196,7 @@
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
       var count = 0;
       document.querySelectorAll(selector).forEach(function (element) {
-        if (element.matches('.modal-card')) return;
+        if (element.matches('.modal-card, button')) return;
         if (resizeObserver && !observed.has(element)) { resizeObserver.observe(element); observed.add(element); }
         var r = element.getBoundingClientRect();
         if (count >= MAX_LENSES || r.width < 32 || r.height < 32 || r.bottom < 0 || r.top > height) return;
@@ -191,6 +206,7 @@
         count++;
       });
       observed.forEach(function (element) { if (!element.isConnected) { resizeObserver.unobserve(element); observed.delete(element); } });
+      gl.uniform1f(locations.buttonLens, 0);
       gl.uniform1i(locations.count, count);
       gl.uniform1f(locations.intensity, intensity * lensScale);
       gl.uniform1f(locations.lensBand, lensBand);
@@ -200,9 +216,53 @@
       var sx = canvas.width / width, sy = canvas.height / height;
       for (var i=0;i<count;i++) { rects[i*4]*=sx;rects[i*4+1]*=sy;rects[i*4+2]*=sx;rects[i*4+3]*=sy;shapes[i*2]*=sx;shapes[i*2+1]=sx; }
       gl.uniform4fv(locations['rects[0]'], rects); gl.uniform2fv(locations['shapes[0]'], shapes);
-      gl.drawArrays(gl.TRIANGLES,0,3); draws++;
+      gl.drawArrays(gl.TRIANGLES,0,3);
+      drawButtons(sx, sy, rects, shapes);
+      draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
+      if (document.querySelector('.modal-card.active')) motionUntil = 0;
+      if (performance.now() < motionUntil) requestRender();
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
+  }
+
+  // Copy the card-composited wallpaper once on-GPU. Each button draws only its
+  // scissored pixels, so adding controls does not add full-screen shader loops.
+  // Sampling this copy also keeps flat button centers identical to their parent.
+  function drawButtons(sx, sy, rects, shapes) {
+    buttonCount = 0;
+    if (!buttonIntensity) return;
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, buttonTexture);
+    gl.copyTexSubImage2D(gl.TEXTURE_2D,0,0,0,0,0,canvas.width,canvas.height);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1f(locations.buttonLens, 1);
+    gl.uniform1f(locations.intensity, intensity * lensScale * buttonIntensity);
+    gl.uniform1i(locations.count, 1);
+    gl.enable(gl.SCISSOR_TEST);
+    document.querySelectorAll('button').forEach(function (button) {
+      if (button.closest('.modal-card')) return; // Modal-local native optics sit above its overlay.
+      var r = button.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8 || r.bottom <= 0 || r.top >= height || r.right <= 0 || r.left >= width) return;
+      var style = getComputedStyle(button);
+      if (style.visibility === 'hidden' || style.display === 'none') return;
+      if (resizeObserver && !observed.has(button)) { resizeObserver.observe(button); observed.add(button); }
+      var radius = Math.min(parseFloat(style.borderTopLeftRadius) || 0,r.width/2,r.height/2);
+      rects.set([r.left*sx,r.top*sy,r.width*sx,r.height*sy],0);
+      shapes.set([radius*sx,sx],0);
+      gl.uniform4fv(locations['rects[0]'],rects); gl.uniform2fv(locations['shapes[0]'],shapes);
+      var x = Math.max(0,Math.floor(r.left*sx)), y = Math.max(0,Math.floor(canvas.height-r.bottom*sy));
+      var right = Math.min(canvas.width,Math.ceil(r.right*sx));
+      var top = Math.min(canvas.height,Math.ceil(canvas.height-r.top*sy));
+      gl.scissor(x,y,Math.max(0,right-x),Math.max(0,top-y));
+      gl.drawArrays(gl.TRIANGLES,0,3); buttonCount++;
+    });
+    gl.disable(gl.SCISSOR_TEST);
+  }
+
+  function onControlTransition(event) {
+    if (!active || !event.target.matches('button') ||
+        ['scale','transform','translate'].indexOf(event.propertyName) < 0 || event.target.closest('.modal-card')) return;
+    motionUntil = event.type === 'transitionrun' ? performance.now() + 450 : 0;
+    requestRender();
   }
 
   function requestRender() { if (active && !frame) frame = requestAnimationFrame(draw); }
@@ -226,16 +286,21 @@
     window.removeEventListener('scroll', requestRender);
     window.removeEventListener('resize', requestRender);
     document.removeEventListener('visibilitychange', requestRender);
-    if (gl) { gl.deleteTexture(texture); gl.deleteProgram(program); gl.deleteBuffer(buffer); }
+    document.removeEventListener('transitionrun', onControlTransition);
+    document.removeEventListener('transitionend', onControlTransition);
+    if (gl) { gl.deleteTexture(texture); gl.deleteTexture(buttonTexture); gl.deleteProgram(program); gl.deleteBuffer(buffer); }
     if (canvas) canvas.remove();
     canvas = gl = source = null;
   }
   window.addEventListener('scroll', requestRender, { passive: true });
   window.addEventListener('resize', requestRender, { passive: true });
   document.addEventListener('visibilitychange', requestRender);
+  document.addEventListener('transitionrun', onControlTransition);
+  document.addEventListener('transitionend', onControlTransition);
   window.GlassRenderer = {
     enable: enable, disable: disable, destroy: destroy, render: requestRender,
+    setButtonIntensity: function (value) { buttonIntensity = Math.max(0,Math.min(2,Number(value)||0)); requestRender(); },
     setIntensity: function (value) { intensity = value; requestRender(); },
-    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses: lenses, width: width, height: height }; }
+    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses: lenses + buttonCount, buttons: buttonCount, width: width, height: height }; }
   };
 })();
