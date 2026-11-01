@@ -7,7 +7,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto('file:///' + path.resolve(__dirname, '../index.html').replaceAll('\\', '/'));
-    await page.evaluate(() => { Appearance.set('glass'); LiquidGlass.enable({ persist: false }); });
+    await page.evaluate(() => { Appearance.set('glass'); Appearance.setTheme('aurora'); LiquidGlass.enable({ persist: false }); });
     await page.addStyleTag({ content: '*,*::before,*::after{animation:none!important;transition:none!important}' });
     await page.waitForFunction(() => window.GlassRenderer && GlassRenderer.getState().buttons > 0, null, { timeout: 10000 });
     assert.ok(await page.evaluate(() => GlassRenderer.getState().buttons > 0), 'visible buttons must participate in real refraction');

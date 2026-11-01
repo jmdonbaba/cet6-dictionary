@@ -426,6 +426,19 @@ html[data-wallpaper="water"] .appearance-water {
   will-change: transform;
   animation: glass-water-drift 80s ease-in-out infinite alternate;
 }
+/* 传统界面：在静态水波图上叠一层软光漂移，制造持续流动感；玻璃界面由 GPU 着色器负责流动。 */
+html[data-interface="classic"][data-wallpaper="water"] .appearance-water::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  background-image: url("assets/water-caustics.webp?v=76af31542084");
+  background-size: cover;
+  background-position: center;
+  mix-blend-mode: soft-light;
+  opacity: 0.6;
+  will-change: transform;
+  animation: water-flow 14s ease-in-out infinite alternate;
+}
 
 html[data-wallpaper]:not([data-wallpaper="minimal"]) .appearance-aurora {
   border-radius: 50%;
@@ -504,6 +517,11 @@ html[data-wallpaper]:not([data-wallpaper="minimal"]) .appearance-noise {
   0% { transform: translate3d(0, 0, 0) scale(1.02); }
   50% { transform: translate3d(-1.4%, 1.2%, 0) scale(1.06); }
   100% { transform: translate3d(1.2%, -1%, 0) scale(1.03); }
+}
+@keyframes water-flow {
+  0% { transform: translate3d(-2.5%, -1.6%, 0) rotate(-0.6deg) scale(1.06); }
+  50% { transform: translate3d(0.3%, 1.8%, 0) rotate(0.3deg) scale(1.1); }
+  100% { transform: translate3d(2.6%, -0.6%, 0) rotate(0.8deg) scale(1.07); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1140,6 +1158,10 @@ html[data-interface="glass"] .glass-jelly::after {
   html[data-interface="glass"] .glass-jelly::after { animation: none; scale: none; }
   html[data-wallpaper] .appearance-aurora,
   html[data-wallpaper] .appearance-water {
+    animation: none !important;
+    transform: none !important;
+  }
+  html[data-wallpaper] .appearance-water::after {
     animation: none !important;
     transform: none !important;
   }

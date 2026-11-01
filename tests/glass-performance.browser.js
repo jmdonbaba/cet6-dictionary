@@ -9,7 +9,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto('file:///' + path.resolve(__dirname, '../index.html').replaceAll('\\', '/'));
-    await page.evaluate(() => { Appearance.set('glass'); LiquidGlass.enable({ persist: false }); });
+    await page.evaluate(() => { Appearance.set('glass'); Appearance.setTheme('minimal'); LiquidGlass.enable({ persist: false }); });
     await page.waitForTimeout(700);
     assert.equal(await page.locator('.appearance-aurora').first().evaluate(e => getComputedStyle(e).animationName), 'none',
       'static wallpaper must not continuously invalidate every glass surface');
@@ -69,6 +69,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         'context loss restores a native glass layer');
     }
     assert.deepEqual(errors, []);
-    console.log('PASS: no perpetual glass repaint or unchanged SVG writes;', JSON.stringify(samples));
+    console.log('PASS: static wallpapers never repaint idly, SVG writes and frame pacing hold;', JSON.stringify(samples));
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

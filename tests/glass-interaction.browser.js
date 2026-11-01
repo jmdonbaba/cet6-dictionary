@@ -8,7 +8,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto('file:///' + path.resolve(__dirname, '../index.html').replaceAll('\\', '/'));
     await page.evaluate(() => {
-      Appearance.set('glass'); LiquidGlass.enable({ persist: false });
+      Appearance.set('glass'); Appearance.setTheme('aurora'); LiquidGlass.enable({ persist: false });
       const card = document.createElement('div'); card.className = 'card interaction-fixture';
       card.style.cssText = 'position:fixed;left:400px;top:300px;width:500px;height:260px;z-index:8';
       card.innerHTML = '<span>清晰文字 · Glass</span>'; document.body.append(card);
