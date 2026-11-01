@@ -36,10 +36,9 @@
 - DeepSeek API（deepseek-flash）
 - IndexedDB 严格持久化事务保存页面记录；localStorage 保存 API Key 和收藏；sessionStorage 保存当前标签页的刷新快照
 - 界面外观（`appearance.css` / `appearance.js`）：界面（`cet6_interface_style`）与背景主题（`cet6_theme_classic` / `cet6_theme_glass`）双维度设置；玻璃质感用低雾度 `backdrop-filter` + SVG 背景折射 + 局部反光实现，不引入 React 或第三方运行时依赖；极光、蜜桃和深空增加共用光带轮廓（`assets/glass-ribbons.svg`，同一 SVG 内嵌为 CSS mask，支持直接打开本地 HTML）；水波背景由 `tools/generate-water-caustics.py` 程序生成的原创图 `assets/water-caustics.webp` 提供，不依赖第三方素材
-- 液态折射（`glass-renderer.js` / `glass-refraction.js`）：支持的桌面 Chromium 优先用一张共享 WebGL 画布，一次绘制主题壁纸和最多 16 个可见卡片透镜，中心平坦与边缘 RGB 色散共用同一个着色器；只在滚动、尺寸、主题或内容变化时重绘；水波主题例外，由时间 uniform 驱动逐帧流动，其他主题空闲时不循环绘制。折射采样来自壁纸，不捕获或扭曲 DOM 文字。弹窗复用同一个着色器，将弹窗范围的实际折射画面复制到遮罩上方的独立背景层；内部选项、列表和按钮继续叠加折射，不叠加厚重白底或模糊。
+- 液态折射（`glass-renderer.js` / `glass-refraction.js`）：支持的桌面 Chromium 优先用一张共享 WebGL 画布，一次绘制主题壁纸和最多 16 个可见卡片透镜，中心平坦与边缘 RGB 色散共用同一个着色器；只在滚动、尺寸、主题或内容变化时重绘；水波主题例外，由时间 uniform 驱动逐帧流动，其他主题空闲时不循环绘制。折射采样来自壁纸，不捕获或扭曲 DOM 文字。弹窗先按遮罩的模糊半径处理背景，再复用同一个着色器折射，将结果复制到遮罩上方的独立背景层；内部选项、列表和按钮继续叠加折射，不重复叠加模糊或厚重白底。模糊使用小尺寸纹理与限定范围的预过滤/双向处理，关闭弹窗会释放临时纹理。
 - 兼容与性能：无 WebGL 或显卡上下文丢失时自动退回单次 SVG 位移；位移图从 512² 降到 256²，避免重复写入未变化的滤镜参数。小屏（≤720px）、低性能设备及不支持的浏览器使用透明磨砂降级；支持减少动态效果与减少透明度偏好。各主题共用同一套材质/折射逻辑。
-- **弹窗与输入框光学**：设置/词汇收藏/恢复页面/导入选择等弹窗与页面卡片共用透明折射玻璃，`LiquidGlass.flush()` 同步完成首帧绘制；文字层不参与扭曲。弹窗内部列表滚动时同步更新折射，并裁切在内容区，避免列表透镜越过标题；关闭、切换界面或窄屏降级会释放背景画布，无 WebGL 时保留原生折射。所有搜索框（查词、API Key、收藏搜索、对比搜索等）聚焦时不再画边框，改用更亮的磨砂玻璃 + 顶部内高光 + 局部模糊提示焦点（文字输入不做位移折射，避免出现横向接缝）。
-- **高速滚动文字隐藏**：保留浏览器原生置顶/置底的加速和减速；玻璃卡片在高速滚动时暂时隐藏文字，低速阅读保持显示，连续降速约 90ms 或停止约 120ms 后恢复。进入/退出采用不同速度阈值，避免临界速度反复闪动；卡片和折射层保持显示、布局不变，页面导航和弹窗文字不受影响。
+- **弹窗与输入框光学**：设置/词汇收藏/恢复页面/导入选择等弹窗使用“背景先模糊 → 透明玻璃折射 → 清晰文字”的顺序，`LiquidGlass.flush()` 同步完成首帧绘制；文字层不参与模糊或扭曲。弹窗内部列表滚动时同步更新折射，并裁切在内容区，避免列表透镜越过标题；关闭、切换界面或窄屏降级会释放背景画布，无 WebGL 时保留原生折射。所有搜索框（查词、API Key、收藏搜索、对比搜索等）聚焦时不再画边框，改用更亮的磨砂玻璃 + 顶部内高光 + 局部模糊提示焦点（文字输入不做位移折射，避免出现横向接缝）。
 - **水波动画**：玻璃界面下的水波由壁纸着色器逐帧流动（`glass-renderer.js`，两层基于时间的 UV 扰动 + 微光闪烁），帧率跟随显示器刷新率（本机 144Hz 实测约 144fps，60Hz 屏幕即 60fps）；传统界面则用一层 `mix-blend-mode: soft-light` 的 CSS 漂移图层（纯合成，不触发布局）。系统开启“减少动态效果”或页面隐藏时水波冻结，其他主题保持完全静止、空闲不重绘。
 - 本地纹理：在线页面直接复用 `assets/water-caustics.webp`；直接打开本地 HTML 时，按需加载同一图片的内嵌版本 `assets/water-caustics-data.js`，避免 WebGL 跨源限制，不增加普通页面的阻塞加载。修改水波图片后运行 `python tools/generate-water-texture.py` 重新生成；脚本会同时刷新 `appearance.css` / `glass-renderer.js` 中对水波资产的引用哈希，避免浏览器继续用旧图。
 
@@ -78,8 +77,9 @@
 - `node tests/glass-interaction.browser.js`：验证悬停局部像素变化、纯色背景不添加明暗、按弹簧相位采样的点击回弹、固定点击区域、文字清晰度、停止绘制、禁用后无残留交互、弹窗原生压力场释放及减少动态效果。
 - `node tests/glass-layers.browser.js`：验证每个结果区只有一块内层折射板、移动词形/例句不改变连续的背景折射、整板的实际折射像素、滚动条与高分屏坐标、祖先圆角裁切、窗口缩放及原生弹窗整板。
 - `node tests/glass-controls.browser.js`：验证按钮/输入框透明底、胶囊选中同色、输入框实际折射、正方形关闭按钮、原生输入文字清晰、降低透明度及清理。
-- `node tests/glass-scroll.browser.js`：验证 100 张卡片的原生置顶/置底、高速隐藏文字、玻璃层与布局保留、停止后恢复及减少动态效果；`node --test tests/scroll-text.test.js` 验证速度临界防闪、持续降速恢复及界面切换清理。
+- `node tests/glass-scroll.browser.js`：验证 100 张卡片的原生置顶/置底、最快速度时文字仍保持显示、回到空闲及减少动态效果。
 - `node tests/modal-refraction.browser.js`：验证四类弹窗首帧即使用卡片着色器、实际壁纸像素折射、列表滚动与标题裁切、关闭/切换后的清理及原生降级；截图输出到 `.gstack/modal-clear/`。
+- `node tests/modal-blur.browser.js`：用高频图案验证背景已先模糊，再验证保留轮廓的实际折射、无后置文字模糊、缩放后的绘制状态与临时纹理释放。
 - `node tests/button-refraction.browser.js`：直接读取渲染像素，验证按钮中央零变化、边缘实际弯折、弹窗与新展开菜单的按钮折射及文字清晰度。
 - `node tests/glass-performance.browser.js`：验证空闲时不持续绘制、滚动/鼠标移动不重复重建 SVG、减少透明度降级和 WebGL 上下文丢失后的原生恢复；输出极简/玻璃的帧间隔对照。`GLASS_FORCE_FALLBACK=1 node tests/liquid-glass.browser.js` 可强制检查无 WebGL 路径（PowerShell 用 `$env:GLASS_FORCE_FALLBACK='1'`）。
 - `node tools/benchmark-glass.cjs`：隔离浏览器创建 10 张含释义、变形和例句分层的卡片，对比极简/玻璃在空闲、鼠标移动、连续滚动下的帧间隔、慢帧数和主线程耗时，结果写入 `.gstack/glass-perf/latest.json`。2026-11-01 的同机 Edge 1440×900 对照中，旧玻璃滚动 P95 约 139ms，当前透明分层版约 7ms，与极简约 7ms 接近，二者滚动超过 25ms 的慢帧均为 0；这属于该测试环境的帧调度结果，不代表所有设备或浏览器的固定帧率。

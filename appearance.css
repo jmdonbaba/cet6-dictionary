@@ -1342,23 +1342,6 @@ html[data-interface="glass"] .glass-jelly::after {
   }
 }
 
-/* Keep glass geometry, controls and accessibility intact during fast scrolling.
-   Transparent glyphs avoid repainting readable text that is moving too fast
-   to follow; do not hide the elements or their refractive backgrounds. */
-html[data-interface="glass"].glass-fast-scroll #wordSearchModules .word-search-wrapper,
-html[data-interface="glass"].glass-fast-scroll #wordSearchModules .word-search-wrapper * {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent !important;
-  text-shadow: none !important;
-  text-decoration-color: transparent !important;
-  caret-color: transparent !important;
-}
-html[data-interface="glass"].glass-fast-scroll #wordSearchModules .word-search-wrapper input::placeholder {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent !important;
-  text-shadow: none !important;
-}
-
 /* 深空主题的浅色文字覆盖放在最后，确保优先级高于玻璃界面的通用文字色 */
 /* 深空主题下页面上的文字改用浅色（卡片内部仍是浅玻璃 + 深色文字） */
 html[data-interface="classic"][data-wallpaper="night"] .header h1 { color: #eef2ff; }

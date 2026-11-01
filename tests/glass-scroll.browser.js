@@ -15,23 +15,15 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    const scroll=window.scrollTo.bind(window),calls=[];
    window.scrollTo=function(options){calls.push({top:options.top,behavior:options.behavior});return scroll(options)};
    const journey=edge=>new Promise((resolve,reject)=>{
-    let previous=scrollY,maxStep=0,frames=0,movingFrames=0,hiddenFrames=0,hiddenStyle;const start=performance.now();
+    let previous=scrollY,maxStep=0,frames=0,movingFrames=0,hiddenFrames=0;const start=performance.now();
     const content=document.querySelector('#wordSearchModules .word-result');
     const beforeHeight=content.offsetHeight;
     const before=calls.length,draws=GlassRenderer.getState().draws;
     document.querySelector(edge==='bottom'?'#btnJumpBottom':'#btnJumpTop').click();
     function tick(){const step=Math.abs(scrollY-previous);maxStep=Math.max(maxStep,step);if(step>0)movingFrames++;previous=scrollY;frames++;
-     if(document.documentElement.classList.contains('glass-fast-scroll')){
-      hiddenFrames++;
-      if(!hiddenStyle){const text=getComputedStyle(content.querySelector('strong')),panel=getComputedStyle(content);
-       hiddenStyle={text:text.webkitTextFillColor,panel:panel.visibility,opacity:panel.opacity,height:content.offsetHeight,
-        button:getComputedStyle(content.querySelector('button')).webkitTextFillColor,
-        placeholder:getComputedStyle(content.querySelector('input'),'::placeholder').webkitTextFillColor,
-        toolbar:getComputedStyle(document.querySelector('#btnJumpBottom')).webkitTextFillColor};
-      }
-     }
+     if(getComputedStyle(content.querySelector('strong')).webkitTextFillColor==='rgba(0, 0, 0, 0)')hiddenFrames++;
      const target=edge==='top'?0:document.documentElement.scrollHeight-innerHeight;
-     if(Math.abs(scrollY-target)<2&&frames>2)resolve({maxStep,frames,movingFrames,hiddenFrames,hiddenStyle,beforeHeight,calls:calls.slice(before),draws:GlassRenderer.getState().draws-draws});
+     if(Math.abs(scrollY-target)<2&&frames>2)resolve({maxStep,frames,movingFrames,hiddenFrames,beforeHeight,calls:calls.slice(before),draws:GlassRenderer.getState().draws-draws});
      else if(performance.now()-start>10000)reject(new Error('scroll did not reach '+edge));else requestAnimationFrame(tick);
     }requestAnimationFrame(tick);
    });
@@ -43,18 +35,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    assert.equal(result.calls[0].behavior,'smooth',edge+' retains the browser acceleration and deceleration');
    assert.ok(result.movingFrames>3,edge+' animates rather than jumping instantly');
    assert.ok(result.draws>1,'glass continues repainting during native scrolling');
-   assert.ok(result.hiddenFrames>0,edge+' hides text during the fast part of a native jump');
-   assert.equal(result.hiddenStyle.text,'rgba(0, 0, 0, 0)');
-   assert.equal(result.hiddenStyle.button,'rgba(0, 0, 0, 0)');
-   assert.equal(result.hiddenStyle.placeholder,'rgba(0, 0, 0, 0)');
-   assert.notEqual(result.hiddenStyle.toolbar,'rgba(0, 0, 0, 0)','navigation controls remain readable');
-   assert.equal(result.hiddenStyle.panel,'visible','the glass plate stays visible');
-   assert.equal(result.hiddenStyle.opacity,'1','do not fade the glass plate');
-   assert.equal(result.hiddenStyle.height,result.beforeHeight,'hiding text preserves card geometry');
+   assert.equal(result.hiddenFrames,0,edge+' always keeps text visible, including at peak speed');
   }
   assert.equal(sample.active,true);
   await page.waitForTimeout(1000); // Let the button's finite click spring finish.
-  assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('glass-fast-scroll')),false,'text is restored after scrolling stops');
   assert.notEqual(await page.locator('#wordSearchModules .word-result strong').first().evaluate(el=>getComputedStyle(el).webkitTextFillColor),'rgba(0, 0, 0, 0)');
   const draws=await page.evaluate(()=>GlassRenderer.getState().draws);await page.waitForTimeout(350);
   assert.equal(await page.evaluate(()=>GlassRenderer.getState().draws),draws,'navigation returns to idle');

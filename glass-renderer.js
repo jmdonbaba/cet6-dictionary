@@ -8,6 +8,7 @@
   var root = document.documentElement;
   var canvas, gl, program, texture, buttonTexture, source, buffer;
   var modalElement = null, modalCanvas = null;
+  var modalBlurTexture = null, modalBlurOutput = null, modalFramebuffer = null, modalBlurWidth = 0, modalBlurHeight = 0;
   var active = false, failed = false, frame = 0, intensity = 1, lensScale = 1, lensBand = 63;
   var originX=0,originY=0,pixelRatio=0,layerCount=0,layerIntensity=1;
   var width = 0, height = 0, theme = '', draws = 0, lenses = 0, buttonCount = 0, buttonIntensity = 1;
@@ -27,6 +28,8 @@
     'uniform float waterMotion;',
     'uniform float buttonLens;',
     'uniform float overlayPass;',
+    'uniform vec2 blurDirection;',
+    'uniform float downsamplePass;',
     'uniform vec4 parentRects[4];',
     'uniform float parentRadii[4];',
     'uniform int parentCount;',
@@ -55,6 +58,17 @@
     'vec3 sampleAt(vec2 p){ vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999)); if(overlayPass>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb; if(waterMotion>.5)return waterAt(uv); return texture2D(wallpaper,uv).rgb; }',
     'void main(){',
     ' vec2 pixel=vec2(gl_FragCoord.x,viewport.y-gl_FragCoord.y);',
+    ' if(downsamplePass>.5){',
+    '  vec3 average=vec3(0.);',
+    '  for(int y=0;y<4;y++)for(int x=0;x<4;x++)average+=sampleAt(pixel+(vec2(float(x),float(y))-1.5)*.25);',
+    '  gl_FragColor=vec4(average/16.,1.);return;',
+    ' }',
+    ' if(blurDirection.x>0.||blurDirection.y>0.){',
+    '  vec3 blurred=sampleAt(pixel)*.2270270270;',
+    '  blurred+=(sampleAt(pixel+blurDirection*1.3846153846)+sampleAt(pixel-blurDirection*1.3846153846))*.3162162162;',
+    '  blurred+=(sampleAt(pixel+blurDirection*3.2307692308)+sampleAt(pixel-blurDirection*3.2307692308))*.0702702703;',
+    '  gl_FragColor=vec4(blurred,1.);return;',
+    ' }',
     ' if(overlayPass>.5){',
     '  if(sdf(pixel-rects[0].xy-rects[0].zw*.5,rects[0].zw*.5,shapes[0].x)>=0.)discard;',
     '  for(int j=0;j<4;j++){if(j>=parentCount)break;if(sdf(pixel-parentRects[j].xy-parentRects[j].zw*.5,parentRects[j].zw*.5,parentRadii[j])>=0.)discard;}',
@@ -125,7 +139,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -290,6 +304,59 @@
     if(modalCanvas)modalCanvas.remove();
     if(modalElement)modalElement.classList.remove('glass-modal-gpu');
     modalCanvas=modalElement=null;
+    if(modalBlurTexture)gl.deleteTexture(modalBlurTexture);
+    if(modalBlurOutput)gl.deleteTexture(modalBlurOutput);
+    if(modalFramebuffer)gl.deleteFramebuffer(modalFramebuffer);
+    modalBlurTexture=modalBlurOutput=modalFramebuffer=null;modalBlurWidth=modalBlurHeight=0;
+  }
+  function blurModalBackdrop(element,sx,sy) {
+    var overlay=element.closest('.modal-overlay'),style=overlay&&getComputedStyle(overlay);
+    var match=style&&(style.backdropFilter||style.webkitBackdropFilter||'').match(/blur\(([\d.]+)px\)/);
+    var radius=match?Number(match[1]):0;
+    if(!radius)return;
+    radius*=overlay.getBoundingClientRect().width/(overlay.offsetWidth||width);
+    var factor=Math.max(1,radius*Math.max(sx,sy)/1.7);
+    var w=Math.max(1,Math.ceil(canvas.width/factor)),h=Math.max(1,Math.ceil(canvas.height/factor));
+    if(!modalBlurTexture){
+      modalBlurTexture=gl.createTexture();modalBlurOutput=gl.createTexture();modalFramebuffer=gl.createFramebuffer();
+    }
+    if(modalBlurWidth!==w||modalBlurHeight!==h){
+      [modalBlurTexture,modalBlurOutput].forEach(function(texture){
+        gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,texture);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      });
+      modalBlurWidth=w;modalBlurHeight=h;
+    }
+    // Prefilter into a small texture, then blur horizontally and vertically.
+    // The lens samples that blurred result. Nothing blurs the completed optics
+    // or the DOM text, and the page outside the modal is never overwritten.
+    var tx=w/width,ty=h/height,r=element.getBoundingClientRect();
+    var mx=(128+radius*3)*tx,my=(128+radius*3)*ty;
+    var x=Math.max(0,Math.floor((r.left-originX)*tx-mx)),y=Math.max(0,Math.floor(h-(r.bottom-originY)*ty-my));
+    var right=Math.min(w,Math.ceil((r.right-originX)*tx+mx)),top=Math.min(h,Math.ceil(h-(r.top-originY)*ty+my));
+    gl.scissor(x,y,Math.max(0,right-x),Math.max(0,top-y));
+    gl.uniform1f(locations.overlayPass,1);
+    gl.viewport(0,0,w,h);gl.uniform2f(locations.viewport,w,h);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,modalFramebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,modalBlurTexture,0);
+    if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('modal-blur-framebuffer');
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,buttonTexture);
+    gl.uniform1f(locations.downsamplePass,1);gl.drawArrays(gl.TRIANGLES,0,3);
+    gl.uniform1f(locations.downsamplePass,0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,modalBlurOutput,0);
+    gl.bindTexture(gl.TEXTURE_2D,modalBlurTexture);
+    gl.uniform2f(locations.blurDirection,radius*tx/1.7,0);gl.drawArrays(gl.TRIANGLES,0,3);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,modalBlurTexture,0);
+    gl.bindTexture(gl.TEXTURE_2D,modalBlurOutput);
+    gl.uniform2f(locations.blurDirection,0,radius*ty/1.7);gl.drawArrays(gl.TRIANGLES,0,3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+    gl.bindTexture(gl.TEXTURE_2D,modalBlurTexture);gl.activeTexture(gl.TEXTURE0);
+    gl.viewport(0,0,canvas.width,canvas.height);gl.uniform2f(locations.viewport,canvas.width,canvas.height);
+    gl.uniform2f(locations.blurDirection,0,0);
   }
   function drawModal(sx,sy,rects,shapes) {
     var element=document.querySelector('.modal-card.active');
@@ -300,10 +367,11 @@
       modalCanvas.className='glass-modal-canvas';modalCanvas.setAttribute('aria-hidden','true');
       element.prepend(modalCanvas);element.classList.add('glass-modal-gpu');
     }
-    // Reuse the card shader and its already-composited backdrop. Copy only this
-    // plate above the dimmed overlay; page text never enters its optical layer.
+    // Refract the blurred background, then present this plate above the overlay.
+    // Text stays sharp on its own DOM layer above the completed optics.
     // This is one shared GL context, with no DOM capture or per-control canvas.
     copyComposite();gl.enable(gl.SCISSOR_TEST);
+    blurModalBackdrop(element,sx,sy);
     drawSurface(element,false,1,sx,sy,rects,shapes);
     if(layerIntensity){
       copyComposite();
