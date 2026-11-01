@@ -587,9 +587,13 @@ html[data-interface="glass"] .modal-header {
   border-bottom-color: rgba(255, 255, 255, 0.5);
 }
 html[data-interface="glass"] .modal-overlay {
-  background: rgba(30, 17, 58, 0.28);
-  backdrop-filter: blur(7px) saturate(120%);
-  -webkit-backdrop-filter: blur(7px) saturate(120%);
+  background: rgba(10, 16, 28, 0.24);
+  backdrop-filter: blur(10px) saturate(108%);
+  -webkit-backdrop-filter: blur(10px) saturate(108%);
+}
+html[data-interface="glass"] .modal-card::before {
+  background-color: rgba(255, 255, 255, 0.5);
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.3));
 }
 /* 弹窗打开时不再播放透明度/位移入场动画：动画中的半透明画面会让
    背景折射先浅后深，看起来“闪一下再变色”。滤镜在 openModal 里已同步就位。 */
@@ -607,6 +611,26 @@ html[data-interface="glass"] .appearance-option.is-selected,
 html[data-interface="glass"] .theme-option.is-selected {
   background-color: rgba(255, 255, 255, 0.26);
 }
+html[data-interface="glass"] .modal-card .vf-compact {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.34);
+  margin: 6px 4px;
+  padding: 12px 14px;
+  background-color: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 10px 24px -22px rgba(18, 20, 40, 0.45);
+}
+html[data-interface="glass"] .modal-card .vf-detail {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  margin: 0 4px 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+html[data-interface="glass"] .modal-card .fav-search input {
+  border-radius: 999px;
+  padding-left: 18px;
+  padding-right: 38px;
+}
 html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf-detail,
   .comparison-fav, .fav-search, .study-export-menu, .more-menu, .fav-search-dropdown) {
   background-color: rgba(255, 255, 255, 0.16);
@@ -615,14 +639,18 @@ html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf
   backdrop-filter: blur(14px) saturate(135%);
   -webkit-backdrop-filter: blur(14px) saturate(135%);
 }
-/* 所有搜索框聚焦都不画描边：由各自的控件透镜在聚焦时加强折射来提示焦点。 */
+/* 所有搜索框聚焦都不画描边；用更亮的磨砂玻璃 + 内高光提示焦点，不再做位移折射（避免接缝）。 */
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
   .study-tool-form input, .key-area input, .comparison-search):focus,
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
   .study-tool-form input, .key-area input, .comparison-search):focus-visible {
   border-color: transparent !important;
-  box-shadow: none !important;
   outline: none !important;
+  background-color: rgba(255, 255, 255, 0.16) !important;
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62), inset 0 -1px 0 rgba(255, 255, 255, 0.18) !important;
+  backdrop-filter: blur(8px) saturate(150%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
 }
 html[data-interface="glass"] .word-search-wrapper:focus-within {
   box-shadow: var(--glass-shadow);

@@ -21,73 +21,36 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     await page.waitForFunction(() => window.GlassRenderer && GlassRenderer.getState().active, null, { timeout: 10000 });
     await page.waitForTimeout(700);
 
-    // ---------------------------------------------------------- focus lens
+    // ---------------------------------------------------------- focus glass
+    const focusStyle = async selector => page.locator(selector).first().evaluate(element => {
+      const style = getComputedStyle(element);
+      return {
+        border: style.borderTopColor,
+        outline: style.outlineStyle,
+        background: style.backgroundColor,
+        backdrop: style.backdropFilter,
+        focused: document.activeElement === element
+      };
+    });
     const input = page.locator('.word-search-input').first();
-    const canvasRegion = (selector, inset) => page.evaluate(([name, pad]) => new Promise(resolve => {
-      GlassRenderer.render();
-      requestAnimationFrame(() => {
-        const source = document.querySelector('.glass-wallpaper-canvas');
-        const copy = document.createElement('canvas'); copy.width = source.width; copy.height = source.height;
-        copy.getContext('2d').drawImage(source, 0, 0);
-        const box = source.getBoundingClientRect();
-        const r = document.querySelector(name).getBoundingClientRect();
-        const sx = source.width / box.width, sy = source.height / box.height;
-        const x = Math.max(0, Math.round((r.left - box.left + pad) * sx));
-        const y = Math.max(0, Math.round((r.top - box.top + pad) * sy));
-        const w = Math.max(1, Math.round((r.width - pad * 2) * sx));
-        const h = Math.max(1, Math.round((r.height - pad * 2) * sy));
-        resolve(Array.from(copy.getContext('2d').getImageData(x, y, w, h).data));
-      });
-    }), [selector, inset || 0]);
-    const canvasRect = (selector, offset) => page.evaluate(([name, dx, dy, dw, dh]) => new Promise(resolve => {
-      GlassRenderer.render();
-      requestAnimationFrame(() => {
-        const source = document.querySelector('.glass-wallpaper-canvas');
-        const copy = document.createElement('canvas'); copy.width = source.width; copy.height = source.height;
-        copy.getContext('2d').drawImage(source, 0, 0);
-        const box = source.getBoundingClientRect();
-        const r = document.querySelector(name).getBoundingClientRect();
-        const sx = source.width / box.width, sy = source.height / box.height;
-        const x = Math.max(0, Math.round((r.left - box.left + dx) * sx));
-        const y = Math.max(0, Math.round((r.top - box.top + dy) * sy));
-        resolve(Array.from(copy.getContext('2d').getImageData(x, y,
-          Math.max(1, Math.round(dw * sx)), Math.max(1, Math.round(dh * sy))).data));
-      });
-    }), [selector, offset[0], offset[1], offset[2], offset[3]]);
-    const mean = (a, b) => a.reduce((sum, value, index) => index % 4 === 3 ? sum : sum + Math.abs(value - b[index]), 0) / (a.length * .75);
-    const drawsBeforeFocus = await page.evaluate(() => GlassRenderer.getState().draws);
-    const unfocused = await canvasRegion('.word-search-input');
-    const cardCornerBefore = await canvasRect('.word-search-wrapper', [8, 4, 120, 12]);
     await input.focus();
     await page.waitForTimeout(250);
-    const focused = await canvasRegion('.word-search-input');
-    const cardCornerAfter = await canvasRect('.word-search-wrapper', [8, 4, 120, 12]);
-    const focusStyles = await input.evaluate(element => {
-      const style = getComputedStyle(element);
-      return { border: style.borderTopColor, outline: style.outlineStyle, shadow: style.boxShadow, focused: document.activeElement === element };
-    });
-    assert.equal(focusStyles.focused, true);
-    assert.equal(focusStyles.border, 'rgba(0, 0, 0, 0)', 'focused search input must not draw a border');
-    assert.equal(focusStyles.outline, 'none');
-    assert.equal(focusStyles.shadow, 'none');
-    assert.ok(await page.evaluate(draws => GlassRenderer.getState().draws > draws, drawsBeforeFocus),
-      'focusing the search input must request a lens redraw');
-    const inputBoost = mean(unfocused, focused);
-    assert.ok(inputBoost > .3, `focus must visibly strengthen the input's own lens, mean=${inputBoost.toFixed(2)}`);
-    const cardRegionBoost = mean(cardCornerBefore, cardCornerAfter);
-    assert.ok(cardRegionBoost < .2,
-      `focus must not warp the whole card, card-corner mean=${cardRegionBoost.toFixed(2)}`);
+    const inputFocus = await focusStyle('.word-search-input');
+    assert.equal(inputFocus.focused, true);
+    assert.equal(inputFocus.border, 'rgba(0, 0, 0, 0)', 'focused search input must not draw a border');
+    assert.equal(inputFocus.outline, 'none');
+    assert.match(inputFocus.background, /rgba\(255, 255, 255, 0\.16\)/, 'focus brightens the glass fill');
+    assert.match(inputFocus.backdrop, /blur\(8px\)/, 'focus applies a frosted glass blur instead of a lens seam');
     await page.screenshot({ path: path.join(OUT, 'search-focus.png') });
-    // The API-key field is another search box; it gets the same focus lens.
+
+    // The API-key field is another search box; focus renders the same glass.
     const keyInput = page.locator('.key-area input').first();
-    const keyUnfocused = await canvasRegion('.key-area input');
     await keyInput.focus();
     await page.waitForTimeout(250);
-    const keyFocused = await canvasRegion('.key-area input');
-    assert.ok(mean(keyUnfocused, keyFocused) > .25, 'every search box must boost its own lens on focus');
-    const keyStyle = await keyInput.evaluate(element => getComputedStyle(element).borderTopColor);
-    assert.equal(keyStyle, 'rgba(0, 0, 0, 0)', 'focusing another search box must not add a border');
-    await page.locator('.word-search-input').first().focus();
+    const keyFocus = await focusStyle('.key-area input');
+    assert.equal(keyFocus.border, 'rgba(0, 0, 0, 0)', 'focusing another search box must not add a border');
+    assert.match(keyFocus.background, /rgba\(255, 255, 255, 0\.16\)/);
+    assert.match(keyFocus.backdrop, /blur\(8px\)/);
 
     // ------------------------------------------------------- modal opening
     const openModal = async (trigger, cardSelector) => {
@@ -159,6 +122,6 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     assert.equal(restore.immediate.animation, 'none');
 
     assert.deepEqual(errors, []);
-    console.log('PASS: focus drops the border for a stronger card lens, modals open already-refracted and stay stable; screenshots in ' + OUT);
+    console.log('PASS: search focus is borderless frosted glass, modals open already-refracted and stay stable; screenshots in ' + OUT);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

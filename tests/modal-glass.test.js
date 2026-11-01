@@ -14,14 +14,12 @@ test('focused search fields drop the border and bend their glass card harder', (
   assert.ok(focusRule, 'glass focus rule must exist');
   assert.match(focusRule[0], /border-color: transparent !important;/);
   assert.match(focusRule[0], /outline: none !important;/);
-  assert.match(focusRule[0], /box-shadow: none !important;/);
+  assert.match(focusRule[0], /background-color: rgba\(255, 255, 255, 0\.16\) !important;/);
+  assert.match(focusRule[0], /backdrop-filter: blur\(8px\) saturate\(150%\);/);
   assert.match(focusRule[0], /\.fav-search input/);
   assert.match(focusRule[0], /\.comparison-search/);
-  assert.match(renderer, /uniform float focusLens;/);
-  assert.match(renderer, /focusLens>\.5\?2\.1:1\./);
-  assert.match(renderer, /gl\.uniform1f\(locations\.focusLens,element===document\.activeElement\?1:0\);/);
-  assert.match(renderer, /document\.addEventListener\('focusin', requestRender\)/);
-  assert.doesNotMatch(renderer, /focusRect|focusBoost/, 'focus must boost the control lens, not the whole card');
+  assert.match(renderer, /button\.matches\('input'\)/);
+  assert.doesNotMatch(renderer, /focusLens|focusRect|focusBoost/, 'text inputs must not run a displacement focus lens');
 });
 
 test('modals get their final refraction before the first paint without an entry animation', () => {

@@ -24,7 +24,6 @@
     'uniform sampler2D underGlass;',
     'uniform float uTime;',
     'uniform float waterMotion;',
-    'uniform float focusLens;',
     'uniform float buttonLens;',
     'uniform float overlayPass;',
     'uniform vec4 parentRects[4];',
@@ -67,7 +66,7 @@
     '  float d=sdf(p,halfSize,radius);',
     '  if(d<0.){',
     '   float unit=shapes[i].y;',
-    '   float band=min(lensBand*unit*3.,min(halfSize.x,halfSize.y)*.98)*(focusLens>.5?2.1:1.);',
+    '   float band=min(lensBand*unit*3.,min(halfSize.x,halfSize.y)*.98);',
     '   vec2 field=edgeOffset(p,halfSize,band);',
     '   float gain=mix(1.,clamp(72.*unit/min(rect.z,rect.w),1.,2.6),buttonLens);',
     '   float ratio=mix(.36,min(.4,.32+.05*(gain-1.)),buttonLens);',
@@ -79,7 +78,7 @@
     '   if(i==recoilIndex){',
     '    vec2 q=pixel-recoil.xy;float g=exp(-dot(q,q)/max(1.,recoil.z*recoil.z));float depth=recoil.w*intensity;     point+=q*g*.32*depth;',
     '   }',
-    '   vec2 dispersion=field*min(2.2*unit*intensity*(focusLens>.5?2.1:1.),band*.025*(focusLens>.5?2.1:1.));',
+    '   vec2 dispersion=field*min(2.2*unit*intensity,band*.025);',
     '   color=vec3(sampleAt(point+dispersion).r,sampleAt(point).g,sampleAt(point-dispersion).b);',
     '  }',
     ' }',
@@ -125,7 +124,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','focusLens'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -270,7 +269,6 @@
       var sx = canvas.width / width, sy = canvas.height / height;
       for (var i=0;i<count;i++) { rects[i*4]*=sx;rects[i*4+1]*=sy;rects[i*4+2]*=sx;rects[i*4+3]*=sy;shapes[i*2]*=sx;shapes[i*2+1]=sx; }
       gl.uniform4fv(locations['rects[0]'], rects); gl.uniform2fv(locations['shapes[0]'], shapes);
-      gl.uniform1f(locations.focusLens, 0);
       gl.drawArrays(gl.TRIANGLES,0,3);
       drawLayers(sx,sy,rects,shapes);
       drawButtons(sx, sy, rects, shapes);
@@ -318,7 +316,6 @@
     gl.uniform1f(locations.buttonLens,isButton?1:0);
     gl.uniform1f(locations.overlayPass,1);
     gl.uniform1f(locations.intensity,intensity*lensScale*strength);
-    gl.uniform1f(locations.focusLens,element===document.activeElement?1:0);
     gl.uniform1i(locations.count,1);
     setTouch(element,0,element,0,sx,sy);setParents(element,sx,sy);
     gl.uniform4fv(locations['rects[0]'],rects);gl.uniform2fv(locations['shapes[0]'],shapes);
@@ -348,7 +345,7 @@
     buttonCount=0;controlCount=0;if(!buttonIntensity&&!controlIntensity)return;
     copyComposite();gl.enable(gl.SCISSOR_TEST);
     document.querySelectorAll('button, '+GlassOptics.controls).forEach(function(button){
-      if(button.closest('.modal-card')||button.matches('.ws-mode-toggle button'))return;
+      if(button.closest('.modal-card')||button.matches('.ws-mode-toggle button')||button.matches('input'))return;
       var control=button.matches(GlassOptics.controls),strength=control?controlIntensity:buttonIntensity;
       // Focused inputs/sliders bend their whole silhouette harder instead of
       // drawing a CSS focus border; the boost is visible even without hover.
