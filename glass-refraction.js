@@ -1,79 +1,15 @@
-/* ============================================================================
-   玻璃折射（液态玻璃）实验模块 —— glass-refraction.js
-   ----------------------------------------------------------------------------
-   目标：在 Chromium 上给「玻璃质感」界面加一层真实的背景折射，而不扭曲文字。
-
-   原理（已在 Edge / Chromium 实测）：
-   - `backdrop-filter: url(#svgFilter)` 无效；但把 `filter: url(#feDisplacementMap)`
-     加在**同时拥有 backdrop-filter 的伪元素**上时，Chromium 会先算完磨砂背景，
-     再对磨砂结果做像素位移 → 边缘背景被弯折/放大，形成镜片感。
-   - 因此本项目 appearance.css 把玻璃层放在 `.card::before` 上（元素背景透明、
-     内容压在伪元素之上），本模块只负责提供位移滤镜 + 状态类：
-       html.glass-refraction[data-interface="glass"] .card::before {
-         filter: url(#cet6-liquid-refract);
-       }
-     该规则已写在 appearance.css 里，本模块不重复注入业务样式。
-   - 位移图由本模块在运行时用 canvas 生成（R=dx, G=dy, 128=中性）：
-     只把最外圈「折射带」里的采样点向元素内部推，中心区域保持中性；
-     由此文字/内容不受影响，边缘也不会采到元素框外的透明像素（不会出现破洞）。
-   - 滤镜区域比元素 bbox 外扩 10%（x/y=-10%、宽高=120%），位移图铺满整个区域、
-     外扩部分保持中性：元素自带的 box-shadow 不会被滤镜区域裁掉，也不会被位移。
-     （实测 Chromium 里 feImage 的百分比按元素 bbox 解析，所以要用负百分比外扩。）
-
-   对外 API（window.LiquidGlass）：
-     supported         Boolean，当前浏览器是否满足「Chromium + CSS filter url + backdrop-filter」
-     supportedReason   String，不支持时的原因（not-chromium / no-svg-filter-url / no-backdrop-filter）
-     enabled()         Boolean，当前是否已开启（class 是否存在）
-     enable(opts)      开启（幂等：重复调用不会重复创建 SVG / 重复生成位移图）
-     disable(opts)     关闭（幂等）
-     toggle()          切换
-     setIntensity(n)   位移强度 0..2（1 = 默认；0 = 不位移但保留状态）
-     configure(opts)   调整参数（scale / band / radius / mapSize / filterPadding /
-                       calibrate / surfaceSelector / reference），会重建位移图
-     refresh()         重新测量主玻璃表面尺寸并重建位移图（布局大改后可手动调用）
-     getState()        只读状态快照（调试 / 校验用）
-     destroy()         移除 SVG、class、CSS 变量与监听器（测试收尾用）
-     filterId / svgId / version / INTEGRATION_CSS  常量，便于集成方引用
-
-   自动开启策略（可在本地记忆后覆盖）：
-     - 非 Chromium / 缺少 CSS filter url / 缺少 backdrop-filter → 永不开启；
-     - 用户显式开启/关闭过 → 以 localStorage 记忆为准（cet6_liquid_glass = on/off）；
-     - 否则默认开启，但以下情况默认关闭：
-         * prefers-reduced-motion: reduce（尊重减动效偏好）
-         * 低端设备：navigator.hardwareConcurrency <= 4 或 deviceMemory <= 4 或 saveData
-     - 自动开启只加 class / 生成滤镜，不改写用户偏好。
-
-   接入建议（已由 appearance.css 实现，模块只提供 class + 滤镜）：
-     - 只在「水波」这种有细节的壁纸上开启折射（纯极光渐变上几乎看不出位移，
-       反而会让描边出现轻微重影）；
-     - 开启时把 --glass-blur 降到 9~12px（模糊越重，边缘弯折越不明显）；
-     - 手机（<=720px）关闭 filter。
-
-   已知限制：
-     - 只在 Chromium（Blink）内核生效；Safari / Firefox 会判定为不支持。
-     - 折射在「有细节的背景」上才明显（水波焦散、条纹、文字），纯色/极缓渐变
-       背景几乎看不出来（实测 aurora 壁纸 on/off 像素差异 < 0.5/255）。
-     - 每屏同时可见的折射表面建议 <= 4 个（每个表面 = backdrop-filter + SVG 位移）；
-       持续动画时实测（Edge headless、1440×900）：1 个表面 ~15ms/帧、3 个 ~21ms、
-       6 个 ~29ms、12 个 ~49ms；静态页面几乎无额外每帧开销。
-       移动端 / 低端设备默认关闭；appearance.css 在 <=720px 也已把 filter 关掉。
-     - 默认参数 scale 48 / band 30（按主玻璃表面尺寸校准，四个边的折射带物理宽度
-       一致）；需要更强可 setIntensity(1.2~1.5) 或 configure({ scale: 56, band: 34 })。
-
-   用法：
-     <script src="glass-refraction.js"></script>
-     // 默认会按策略自动开启；也可显式控制：
-     LiquidGlass.enable();
-     LiquidGlass.setIntensity(1.2);
-     LiquidGlass.disable();
-   ========================================================================== */
+/* Liquid glass: size-calibrated background refraction, with separate sharp content.
+ * RGB displacement adapted from rdev/liquid-glass-react (Copyright 2025 MAX
+ * ROVENSKY, MIT). Full license: assets/liquid-glass-react.LICENSE.
+ * Retains the LiquidGlass API, saved preferences and conservative device fallbacks.
+ */
 (function () {
   'use strict';
 
   // 重复引入时保持第一个实例，避免重复创建 SVG / 重复监听。
   if (window.LiquidGlass) return;
 
-  var VERSION = '1.0.0';
+  var VERSION = '2.0.0';
   var CLASS_NAME = 'glass-refraction';
   var ATTR_NAME = 'data-glass-refraction';
   var FILTER_ID = 'cet6-liquid-refract';
@@ -84,25 +20,7 @@
   var NS = 'http://www.w3.org/2000/svg';
   var MAX_INTENSITY = 2;
 
-  var INTEGRATION_CSS = [
-    '/* 推荐：只在有细节的「水波」壁纸上开启折射；开启时降低玻璃模糊 */',
-    'html.glass-refraction[data-interface="glass"][data-wallpaper="water"] {',
-    '  --glass-blur: blur(11px) saturate(200%) brightness(1.05);',
-    '}',
-    'html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .card::before,',
-    'html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .modal-card::before,',
-    'html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .btn-fav-nav::before {',
-    '  filter: url(#' + FILTER_ID + ');',
-    '}',
-    '/* 手机端关闭：每屏可承受的「backdrop-filter + SVG 位移」表面有限 */',
-    '@media (max-width: 720px) {',
-    '  html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .card::before,',
-    '  html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .modal-card::before,',
-    '  html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .btn-fav-nav::before {',
-    '    filter: none;',
-    '  }',
-    '}'
-  ].join('\n');
+  var INTEGRATION_CSS = 'html.glass-refraction[data-interface="glass"] .card::before { filter: var(--glass-filter, none); }';
 
   // ---------------------------------------------------------------------------
   // 参数
@@ -295,15 +213,59 @@
     feImage.setAttribute('preserveAspectRatio', 'none');
     feImage.setAttribute('result', 'map');
 
-    var feDisplacement = document.createElementNS(NS, 'feDisplacementMap');
-    feDisplacement.setAttribute('in', 'SourceGraphic');
-    feDisplacement.setAttribute('in2', 'map');
-    feDisplacement.setAttribute('scale', '0');
-    feDisplacement.setAttribute('xChannelSelector', 'R');
-    feDisplacement.setAttribute('yChannelSelector', 'G');
-
     filter.appendChild(feImage);
-    filter.appendChild(feDisplacement);
+    // Upstream's separate RGB displacements produce actual optical dispersion,
+    // rather than a painted rainbow border. Neutral center pixels stay unchanged.
+    ['R', 'G', 'B'].forEach(function (channel, index) {
+      var displacement = document.createElementNS(NS, 'feDisplacementMap');
+      displacement.setAttribute('in', 'SourceGraphic');
+      displacement.setAttribute('in2', 'map');
+      displacement.setAttribute('scale', '0');
+      displacement.setAttribute('xChannelSelector', 'R');
+      displacement.setAttribute('yChannelSelector', 'G');
+      displacement.setAttribute('result', channel + '_displaced');
+      displacement.setAttribute('data-channel-factor', String(1 + index * 0.035));
+      filter.appendChild(displacement);
+      var matrix = document.createElementNS(NS, 'feColorMatrix');
+      matrix.setAttribute('in', channel + '_displaced');
+      matrix.setAttribute('type', 'matrix');
+      matrix.setAttribute('values', [
+        index === 0 ? '1 0 0 0 0' : '0 0 0 0 0',
+        index === 1 ? '0 1 0 0 0' : '0 0 0 0 0',
+        index === 2 ? '0 0 1 0 0' : '0 0 0 0 0', '0 0 0 1 0'
+      ].join(' '));
+      matrix.setAttribute('result', channel + '_channel');
+      filter.appendChild(matrix);
+    });
+    [['G_channel', 'B_channel', 'GB'], ['R_channel', 'GB', 'RGB']].forEach(function (inputs) {
+      var blend = document.createElementNS(NS, 'feBlend');
+      blend.setAttribute('in', inputs[0]);
+      blend.setAttribute('in2', inputs[1]);
+      blend.setAttribute('mode', 'screen');
+      blend.setAttribute('result', inputs[2]);
+      filter.appendChild(blend);
+    });
+    // Keep the original displaced glass in the center. Limit RGB recombination
+    // to a faint edge mask; accumulating translucent channel alpha over the whole
+    // backdrop otherwise introduces a dark veil in Chromium.
+    var edgeMask = document.createElementNS(NS, 'feColorMatrix');
+    edgeMask.setAttribute('in', 'map');
+    edgeMask.setAttribute('type', 'matrix');
+    edgeMask.setAttribute('values', '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0');
+    edgeMask.setAttribute('result', 'edge_mask');
+    filter.appendChild(edgeMask);
+    var edgeColor = document.createElementNS(NS, 'feComposite');
+    edgeColor.setAttribute('in', 'RGB');
+    edgeColor.setAttribute('in2', 'edge_mask');
+    edgeColor.setAttribute('operator', 'in');
+    edgeColor.setAttribute('result', 'edge_color');
+    filter.appendChild(edgeColor);
+    var final = document.createElementNS(NS, 'feComposite');
+    final.setAttribute('in', 'edge_color');
+    final.setAttribute('in2', 'R_displaced');
+    final.setAttribute('operator', 'over');
+    filter.appendChild(final);
+    var feDisplacement = filter.querySelector('feDisplacementMap');
     defs.appendChild(filter);
     svg.appendChild(defs);
 
@@ -365,7 +327,7 @@
     var qy = Math.abs(py) - (halfHeight - r);
     var ox = Math.max(qx, 0);
     var oy = Math.max(qy, 0);
-    return Math.min(Math.max(qx, qy), 0) + Math.sqrt(ox * ox + oy * oy);
+    return Math.min(Math.max(qx, qy), 0) + Math.sqrt(ox * ox + oy * oy) - r;
   }
 
   function toByte(value) {
@@ -377,7 +339,7 @@
    * 生成位移图（canvas → PNG dataURL）。
    *
    * 约定：R 通道 = x 位移方向，G 通道 = y 位移方向，128 = 中性。
-   * 中心区域（离边缘 > band）保持 (128,128,128)；
+   * 中心区域（离边缘 > band）保持 (128,128,0)，B 通道存储微弱的边缘色散遮罩；
    * 边缘带内沿「指向元素内部」的法线方向做位移，越靠边强度越大：
    *   位移像素 = scale * (2 * p * n / 255) ≈ (scale/2) * p * n
    * 由于采样点始终朝内部推，SourceGraphic（磨砂背景）不会采到框外透明区域，
@@ -386,7 +348,9 @@
    * 位移图覆盖整个滤镜区域（含 filterPadding 外扩），但只有元素 bbox 内才有
    * 位移值，外扩区域保持中性 —— 这样 box-shadow 既不会被区域裁掉，也不会被位移。
    */
-  function buildMapDataUrl() {
+  function buildMapDataUrl(reference, cornerRadius) {
+    reference = reference || state.reference;
+    cornerRadius = cornerRadius === undefined ? config.radius : cornerRadius;
     var size = Math.round(clamp(config.mapSize, 128, 1024));
     var canvas = document.createElement('canvas');
     canvas.width = size;
@@ -394,27 +358,27 @@
     var ctx = canvas.getContext ? canvas.getContext('2d') : null;
     if (!ctx || !ctx.createImageData) return '';
 
-    var halfWidth = Math.max(1, state.reference.width / 2);
-    var halfHeight = Math.max(1, state.reference.height / 2);
-    var radius = clamp(config.radius, 0, Math.min(halfWidth, halfHeight));
-    var band = Math.max(2, Math.min(config.band, Math.min(halfWidth, halfHeight) * 1.5));
+    var halfWidth = Math.max(1, reference.width / 2);
+    var halfHeight = Math.max(1, reference.height / 2);
+    var radius = clamp(cornerRadius, 0, Math.min(halfWidth, halfHeight));
+    var band = Math.max(2, Math.min(config.band, Math.min(halfWidth, halfHeight) * 0.85));
     var padding = clamp(Number(config.filterPadding) || 0, 0, 0.25);
     var regionScale = 1 + padding * 2;
     var image = ctx.createImageData(size, size);
     var data = image.data;
-    var amplitude = 127; // 编码幅度：127 → 最大 ±1（feDisplacementMap 再乘 scale）
+    var amplitude = 127; // 编码幅度：127 → 最大约 ±0.5（feDisplacementMap 再乘 scale）
     var epsilon = Math.max(1, band * 0.25);
 
     for (var y = 0; y < size; y += 1) {
       // 位移图铺满「滤镜区域」：先换算到元素 bbox 坐标系（px），bbox 外保持中性。
-      var py = ((y + 0.5) / size - 0.5) * regionScale * state.reference.height;
+      var py = ((y + 0.5) / size - 0.5) * regionScale * reference.height;
       for (var x = 0; x < size; x += 1) {
         var index = (y * size + x) * 4;
-        var px = ((x + 0.5) / size - 0.5) * regionScale * state.reference.width;
+        var px = ((x + 0.5) / size - 0.5) * regionScale * reference.width;
         if (Math.abs(px) > halfWidth || Math.abs(py) > halfHeight) {
           data[index] = 128;
           data[index + 1] = 128;
-          data[index + 2] = 128;
+          data[index + 2] = 0;
           data[index + 3] = 255;
           continue;
         }
@@ -426,7 +390,7 @@
         } else if (distance >= band) {
           data[index] = 128;
           data[index + 1] = 128;
-          data[index + 2] = 128;
+          data[index + 2] = 0;
           data[index + 3] = 255;
           continue;
         } else {
@@ -450,7 +414,7 @@
 
         data[index] = toByte(128 + amplitude * profile * nx);
         data[index + 1] = toByte(128 + amplitude * profile * ny);
-        data[index + 2] = 128;
+        data[index + 2] = toByte(profile * 20);
         data[index + 3] = 255;
       }
     }
@@ -536,7 +500,11 @@
     var scale = activeScale();
     state.activeScale = scale;
     if (state.feDisplacement) {
-      state.feDisplacement.setAttribute('scale', String(scale));
+      state.svg.querySelectorAll('feDisplacementMap').forEach(function (node) {
+        var localScale = scale;
+        surfaces.forEach(function (entry) { if (entry.filter.contains(node)) localScale = Math.min(scale, entry.maxScale * state.intensity); });
+        node.setAttribute('scale', String(localScale * Number(node.getAttribute('data-channel-factor') || 1)));
+      });
     }
     root().style.setProperty('--glass-refract-scale', String(scale));
     return scale;
@@ -570,6 +538,7 @@
     root().classList.add(CLASS_NAME);
     root().setAttribute(ATTR_NAME, 'on');
     state.enabled = true;
+    scheduleSurfaces();
     if (settings.persist) storageSet(STORAGE_PREF, 'on');
     if (!settings.silent) dispatchChange();
     return true;
@@ -584,6 +553,7 @@
     }
     state.enabled = false;
     state.activeScale = 0;
+    clearSurfaces();
     if (settings.persist) storageSet(STORAGE_PREF, 'off');
     if (!settings.silent) dispatchChange();
     return true;
@@ -630,6 +600,9 @@
       applyMap(true); // 参数变了必须重建位移图
       applyScale();
     }
+    mapCache.clear();
+    clearSurfaces();
+    scheduleSurfaces();
     return getState();
   }
 
@@ -637,6 +610,7 @@
     if (!state.svg) return false;
     var changed = updateReference(true) || !state.mapReady;
     applyMap(true);
+    scheduleSurfaces();
     if (state.enabled) applyScale();
     return changed;
   }
@@ -648,6 +622,7 @@
   function getState() {
     var connection = nav.connection || nav.mozConnection || nav.webkitConnection;
     return {
+      surfaces: surfaces.size,
       version: VERSION,
       supported: supported,
       supportedReason: supportedReason,
@@ -675,6 +650,15 @@
   }
 
   function destroy() {
+    clearTimeout(surfaceTimer);
+    if (resizeObserver) resizeObserver.disconnect();
+    if (mutationObserver) mutationObserver.disconnect();
+    window.removeEventListener('scroll', scheduleSurfaces);
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerout', onPointerOut);
+    if (pointerFrame) cancelAnimationFrame(pointerFrame);
+    clearSurfaces();
+    mapCache.clear();
     var svg = state.svg || document.getElementById(SVG_ID);
     if (svg && svg.parentNode) svg.parentNode.removeChild(svg);
     if (state.enabled) disable({ persist: false, silent: true });
@@ -700,9 +684,113 @@
   // ---------------------------------------------------------------------------
   // 生命周期与监听
   // ---------------------------------------------------------------------------
+  // Only visible surfaces own a filter. Each map matches its actual aspect ratio
+  // and corner radius; using the largest card's map on every card stretches edges.
+  var surfaces = new Map();
+  var mapCache = new Map();
+  var surfaceSerial = 0;
+  var surfaceTimer = 0;
+  var resizeObserver = null;
+  var mutationObserver = null;
+  var pointerFrame = 0;
+  var pointerEvent = null;
+
+  function clearSurfaces() {
+    surfaces.forEach(function (entry, element) {
+      element.style.removeProperty('--glass-filter');
+      element.style.removeProperty('--glass-light-x');
+      element.style.removeProperty('--glass-light-y');
+      if (resizeObserver) resizeObserver.unobserve(element);
+      entry.filter.remove();
+    });
+    surfaces.clear();
+  }
+
+  function scheduleSurfaces() {
+    if (surfaceTimer) return;
+    surfaceTimer = window.setTimeout(function () {
+      surfaceTimer = 0;
+      syncSurfaces();
+    }, 100);
+  }
+
+  function syncSurfaces() {
+    if (!state.enabled || !state.svg || root().dataset.interface !== 'glass' || window.innerWidth <= 720) {
+      clearSurfaces();
+      return;
+    }
+    var visible = new Set();
+    document.querySelectorAll(config.surfaceSelector).forEach(function (element) {
+      var rect = element.getBoundingClientRect();
+      if (rect.width < 32 || rect.height < 32 || rect.bottom < -100 || rect.top > window.innerHeight + 100) return;
+      var style = window.getComputedStyle(element);
+      if (style.visibility === 'hidden' || style.display === 'none') return;
+      visible.add(element);
+      var width = Math.round(element.offsetWidth || rect.width);
+      var height = Math.round(element.offsetHeight || rect.height);
+      var radius = parseFloat(style.borderTopLeftRadius) || config.radius;
+      var key = [width, height, radius, config.band, config.mapSize, config.filterPadding].join(':');
+      var entry = surfaces.get(element);
+      if (entry && entry.key === key) return;
+      var map = mapCache.get(key);
+      if (!map) {
+        map = buildMapDataUrl({ width: width, height: height }, radius);
+        if (!map) return;
+        if (mapCache.size >= 24) mapCache.delete(mapCache.keys().next().value);
+        mapCache.set(key, map);
+      }
+      if (!entry) {
+        var filter = state.svg.querySelector('filter').cloneNode(true);
+        filter.id = FILTER_ID + '-surface-' + (++surfaceSerial);
+        state.svg.querySelector('defs').appendChild(filter);
+        entry = { filter: filter, key: key, maxScale: 64 };
+        surfaces.set(element, entry);
+        if (resizeObserver) resizeObserver.observe(element);
+      }
+      entry.key = key;
+      entry.maxScale = Math.min(config.band * 1.65, Math.min(width, height) * 0.65);
+      var image = entry.filter.querySelector('feImage');
+      image.setAttribute('href', map);
+      image.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', map);
+      element.style.setProperty('--glass-filter', 'url(#' + entry.filter.id + ')');
+    });
+    surfaces.forEach(function (entry, element) {
+      if (!visible.has(element)) {
+        element.style.removeProperty('--glass-filter');
+        if (resizeObserver) resizeObserver.unobserve(element);
+        entry.filter.remove();
+        surfaces.delete(element);
+      }
+    });
+    applyScale();
+  }
+
+  function onPointerMove(event) {
+    if (!state.enabled || prefersReducedMotion() || event.pointerType === 'touch' || root().dataset.interface !== 'glass') return;
+    pointerEvent = event;
+    if (pointerFrame) return;
+    pointerFrame = requestAnimationFrame(function () {
+      pointerFrame = 0;
+      var element = pointerEvent.target.closest && pointerEvent.target.closest(config.surfaceSelector);
+      if (!element) return;
+      var rect = element.getBoundingClientRect();
+      element.style.setProperty('--glass-light-x', ((pointerEvent.clientX - rect.left) / rect.width * 100).toFixed(1) + '%');
+      element.style.setProperty('--glass-light-y', ((pointerEvent.clientY - rect.top) / rect.height * 100).toFixed(1) + '%');
+    });
+  }
+
+  function onPointerOut(event) {
+    var element = event.target.closest && event.target.closest(config.surfaceSelector);
+    if (element && !element.contains(event.relatedTarget)) {
+      element.style.removeProperty('--glass-light-x');
+      element.style.removeProperty('--glass-light-y');
+    }
+  }
+
   var resizeTimer = 0;
 
   function onResize() {
+    scheduleSurfaces();
     if (!state.enabled) return;
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(function () {
@@ -713,6 +801,7 @@
   }
 
   function onAppearanceChange() {
+    scheduleSurfaces();
     if (!state.enabled) return;
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(function () {
@@ -760,6 +849,16 @@
       if (typeof motionQuery.addEventListener === 'function') motionQuery.addEventListener('change', onMotionChange);
       else if (typeof motionQuery.addListener === 'function') motionQuery.addListener(onMotionChange);
     }
+    if (window.ResizeObserver) resizeObserver = new ResizeObserver(scheduleSurfaces);
+    if (window.MutationObserver) {
+      mutationObserver = new MutationObserver(function (records) {
+        if (records.some(function (record) { return record.target.namespaceURI !== NS; })) scheduleSurfaces();
+      });
+      mutationObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    }
+    window.addEventListener('scroll', scheduleSurfaces, { passive: true });
+    document.addEventListener('pointermove', onPointerMove, { passive: true });
+    document.addEventListener('pointerout', onPointerOut, { passive: true });
     applyAutoPolicy();
   }
 

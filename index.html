@@ -1060,9 +1060,9 @@ try {
 <script src="glass-refraction.js"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
-// 这里把透镜带宽/强度调到「水波」主题下更明显的一档。
+// 每张可见卡片独立校准折射带，文字不参与滤镜。
 if (window.LiquidGlass && LiquidGlass.supported) {
-  try { LiquidGlass.configure({ scale: 52, band: 34 }); } catch (error) { /* 参数不支持时用默认值 */ }
+  try { LiquidGlass.configure({ scale: 64, band: 36 }); } catch (error) { /* 参数不支持时用默认值 */ }
 }
 </script>
 <script>

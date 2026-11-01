@@ -19,7 +19,7 @@
 - **定位未收藏卡片**：点击卡片右侧下方的方形双星按钮（上实心、下空心），跳到页面中第一个尚未收藏的查询结果
 - **轻量 Q 弹交互**：按钮按压回弹、模式滑块、卡片入场和弹层展开采用统一的轻弹效果，支持系统减少动态效果设置
 - **界面设置与主题**：右上角齿轮打开设置面板，可切换「传统界面 / 玻璃质感（开发中）」，并从「极简 / 极光 / 蜜桃 / 深空 / 水波」中选择背景主题。两套界面分别记住各自的主题：传统界面默认「极简」（最初的样子），玻璃质感默认「极光」。选择保存在本地浏览器，刷新或下次打开自动恢复；切换即时生效，支持键盘操作、Esc 关闭与点击遮罩关闭
-- **玻璃质感界面（开发中）**：卡片为半透明磨砂玻璃，内容与玻璃层分离（文字不会被折射滤镜扭曲），叠加 1px 色散描边、镜片高光和 Q 弹入场；背景可选极慢漂移的极光色域、暖色日落、暗色深空或程序生成的浅水焦散（水波），配合过冲弹簧缓动形成 Q 弹手感。系统开启“减少动态效果”时背景停止动画；不支持背景模糊或开启“减少透明度”时自动降级为清晰卡片，可读性优先
+- **玻璃质感界面（开发中）**：卡片采用无连续描边的透明玻璃，内容与玻璃层分离（文字不会被折射滤镜扭曲），通过按尺寸校准的边缘折射、微弱 RGB 色散、跟随鼠标的局部反光和柔和投影表现厚度；不同背景主题共用同一套 UI、材质与交互，只替换壁纸，不为深空等主题单独修改卡片和控件样式；背景可选极慢漂移的极光色域、暖色日落、暗色深空或程序生成的浅水焦散（水波），配合过冲弹簧缓动形成 Q 弹手感。系统开启“减少动态效果”时背景停止动画；不支持背景模糊或开启“减少透明度”时自动降级为清晰卡片，可读性优先
 - **收藏打开卡片**：展开收藏后点击“在卡片中打开”，保留收藏夹并定位背景卡片；已打开的单词直接定位
 - **刷新恢复卡片**：自动保存卡片顺序、输入、查询模式和结果，在当前标签页刷新时恢复，无需重新查词
 - **多标签页恢复**：每个标签页刷新时恢复自己的卡片，新打开的页面保持空白；关闭浏览器或重启电脑前，请使用“保存页面”保留需要的内容
@@ -32,12 +32,12 @@
 - 纯前端 HTML/CSS/JS（无依赖）
 - DeepSeek API（deepseek-flash）
 - IndexedDB 严格持久化事务保存页面记录；localStorage 保存 API Key 和收藏；sessionStorage 保存当前标签页的刷新快照
-- 界面外观（`appearance.css` / `appearance.js`）：界面（`cet6_interface_style`）与背景主题（`cet6_theme_classic` / `cet6_theme_glass`）双维度设置；玻璃质感用纯 CSS `backdrop-filter` 磨砂 + 分层高光/色散实现，不引入第三方运行时依赖；水波背景由 `tools/generate-water-caustics.py` 程序生成的原创图 `assets/water-caustics.webp` 提供，不依赖第三方素材
-- 液态折射（`glass-refraction.js`）：仅 Chromium 下可用的可选项。把 SVG `feDisplacementMap` 滤镜施加在「承载 backdrop-filter 的玻璃层」上，让边缘背景产生真实弯曲/放大，而文字不受影响；在「水波」主题下开启，其他浏览器、手机与低端设备自动退回静态磨砂
+- 界面外观（`appearance.css` / `appearance.js`）：界面（`cet6_interface_style`）与背景主题（`cet6_theme_classic` / `cet6_theme_glass`）双维度设置；玻璃质感用低雾度 `backdrop-filter` + SVG 背景折射 + 局部反光实现，不引入 React 或第三方运行时依赖；极光、蜜桃和深空增加共用光带轮廓（`assets/glass-ribbons.svg`，同一 SVG 内嵌为 CSS mask，支持直接打开本地 HTML）；水波背景由 `tools/generate-water-caustics.py` 程序生成的原创图 `assets/water-caustics.webp` 提供，不依赖第三方素材
+- 液态折射（`glass-refraction.js`）：Chromium 增强效果，各主题共用同一折射逻辑。每个可见玻璃表面独立测量宽高/圆角，生成并缓存位移图；新增卡片、尺寸变化、滚动和弹窗展开时自动更新，离屏时释放滤镜。修正圆角距离场缺少半径偏移的问题，短胶囊表面按高度限制强度，避免边缘破洞和滤镜越出圆角。小屏（≤720px）、低性能设备及不支持的浏览器使用透明磨砂降级；支持减少动态效果与减少透明度偏好。
 
 ## 致谢
 
-- 玻璃质感的视觉与折射思路参考了 [rdev/liquid-glass-react](https://github.com/rdev/liquid-glass-react)（MIT，Copyright (c) 2025 Max Rovensky）与 [shuding/liquid-glass](https://github.com/shuding/liquid-glass)（MIT，Copyright (c) 2025 Shu Ding）。本项目为独立重写，未直接复制其代码、位移图或素材；若后续再借用其代码或素材，会在此保留 MIT 版权与许可声明。
+- 玻璃质感的 RGB 通道折射与重组实现改编自 [rdev/liquid-glass-react](https://github.com/rdev/liquid-glass-react)（MIT，Copyright 2025 MAX ROVENSKY），已保留完整许可：[`assets/liquid-glass-react.LICENSE`](assets/liquid-glass-react.LICENSE)。圆角位移图、按表面校准、生命周期与背景光带为本项目实现；另参考 [shuding/liquid-glass](https://github.com/shuding/liquid-glass) 的光学思路。
 
 ## 与Cet6Writing的关系
 
@@ -56,5 +56,6 @@
 
 - `node --test tests/*.test.js`：运行无依赖的自动化测试（含 `tests/appearance.test.js` 对设置入口、界面/主题持久化、玻璃分层与降级规则的结构断言）。
 - 安装 Playwright 后，运行 `node tests/study-tools.browser.js` 验证双面翻转与恢复、收藏/取消收藏、原位查词、查询/存储失败重试、备份与讲义导出、页面恢复、手机真实触摸滑动及 320–1920px 居中布局。使用隔离浏览器和模拟 API，不读取日常浏览器数据、不消耗真实 API 配额；支持 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE`。
+- 安装 Playwright 后，运行 `node tests/liquid-glass.browser.js` 验证默认主题实际折射像素差、不同尺寸/动态卡片的独立滤镜、主题只替换背景、无卡片描边、清晰文字、手机降级和资源释放，截图输出到 `.gstack/liquid-glass/`；支持 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE`。
 - 安装 Playwright 后，运行 `node tests/appearance.browser.js` 验证右上角设置入口、界面与主题切换、刷新持久化、键盘操作、深空主题文字对比、无横向滚动与减少动态效果降级；同样支持 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE`。
 - Windows 上安装 Playwright 后，可运行 `node tests/saved-page-durability.browser.js`，验证 Edge 被强制结束后的保存记录、旧数据迁移、删除防恢复和多标签页同步。测试使用独立临时浏览器配置，不操作日常使用的 Edge；可通过 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE` 指定已有的运行环境。

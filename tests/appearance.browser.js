@@ -349,21 +349,11 @@ const portraitViewports = [1440, 1280, 390, 320];
       glassText: getComputedStyle(document.documentElement).getPropertyValue('--text').trim(),
       tint: getComputedStyle(document.documentElement).getPropertyValue('--glass-tint-solid').trim()
     }));
-    assert.equal(nightColors.header, 'rgb(238, 242, 255)', 'night wallpaper lightens the page header');
-    assert.equal(nightColors.glassText, '#171126', 'glass + night keeps dark text inside the light glass cards');
-    assert.equal(nightColors.tint, 'rgba(255, 255, 255, 0.42)', 'glass + night raises the card tint opacity');
-    // The footer link + gear colours animate through a 180ms transition; wait for the settled values.
-    await page.waitForFunction(() => {
-      const footer = getComputedStyle(document.querySelector('.footer')).color;
-      const link = getComputedStyle(document.querySelector('.footer-project-link')).color;
-      const gear = getComputedStyle(document.getElementById('btnOpenSettings')).color;
-      return footer === 'rgba(226, 232, 255, 0.72)'
-        && link === 'rgb(199, 210, 254)'
-        && gear === 'rgb(219, 234, 254)';
-    }, null, { timeout: 5000 });
-    assert.equal(nightColors.footer, 'rgba(226, 232, 255, 0.72)', 'glass + night lightens the footer');
+    assert.equal(nightColors.header, 'rgb(53, 40, 121)', 'glass header is identical across wallpapers');
+    assert.equal(nightColors.glassText, '#1f1430');
+    assert.equal(nightColors.tint, 'rgba(255, 255, 255, 0.42)');
     await shots.capture(page, '01-settings-glass-night.png');
-    console.log('PASS: night wallpaper lightens page chrome while glass cards keep dark readable text');
+    console.log('PASS: night uses the shared glass material and typography');
 
     // ---------------------------------------------------------- close + focus
     await closeSettings();
@@ -512,12 +502,12 @@ const portraitViewports = [1440, 1280, 390, 320];
     assert.notEqual(glassStyles.cardShadow, 'none', 'the drop shadow stays on the element');
     assert.equal(glassStyles.cardRadius, '22px');
     assert.equal(glassStyles.glassZ, '-1', 'the glass layer sits behind the card content');
-    assert.match(glassStyles.glassBackdrop, /blur\(16px\)[\s\S]*?saturate\(2\.1\)/, 'the glass layer carries the frosted blur');
+    assert.match(glassStyles.glassBackdrop, /blur\(2px\)[\s\S]*?saturate\(1\.45\)/, 'the glass layer carries the frosted blur');
     assert.match(glassStyles.glassBackground, /linear-gradient/);
     assert.notEqual(glassStyles.glassContent, 'none');
     assert.notEqual(glassStyles.ringContent, 'none', 'the edge dispersion ring is rendered');
-    assert.match(glassStyles.ringMask, /exclude|xor/);
-    assert.match(glassStyles.smallBackdrop, /blur\(16px\)/, 'small control surfaces keep a direct frosted layer');
+    assert.match(glassStyles.ringMask, /add/);
+    assert.match(glassStyles.smallBackdrop, /blur\(2px\)/, 'small control surfaces keep a direct frosted layer');
 
     // Water wallpaper: caustics layer + optional liquid refraction on supported Chromium.
     await page.evaluate(() => window.Appearance.setTheme('water'));
@@ -535,7 +525,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     } else {
       console.log('SKIP: liquid refraction not auto-enabled in this environment (supported module? checked at runtime)');
     }
-    console.log('PASS: glass architecture = transparent surface + ::before frost + ::after dispersion + direct frost on small surfaces');
+    console.log('PASS: glass architecture = transparent surface + ::before frost + ::after reflections + direct frost on small surfaces');
 
     // Regression diagnostics (non-fatal while the implementation is being tuned).
     const stickyPosition = await page.evaluate(() => getComputedStyle(document.querySelector('.study-toolbox')).position);

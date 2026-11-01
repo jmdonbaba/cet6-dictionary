@@ -258,9 +258,7 @@ test('background layer is wallpaper-driven and contains the aurora, water and no
   // night glass keeps light text on a whiter tint.
   assert.match(ruleBody(/^html\[data-interface="glass"\]\[data-wallpaper="minimal"\]$/), /background-color: #eef0f8;/);
   assert.match(ruleBody(/^html\[data-interface="glass"\] body$/), /background: transparent;/);
-  const nightGlass = ruleBody(/^html\[data-interface="glass"\]\[data-wallpaper="night"\]$/);
-  assert.match(nightGlass, /--glass-tint-solid: rgba\(255, 255, 255, 0\.42\);/);
-  assert.match(nightGlass, /--text: #171126;/);
+  assert.doesNotMatch(css, /html\[data-interface="glass"\]\[data-wallpaper="night"\] \{/);
 
   // Water theme uses the caustics image layer and hides the aurora blobs; other themes hide the water layer.
   assert.match(css, /html\[data-wallpaper="water"\] \.appearance-water \{[\s\S]*?url\("assets\/water-caustics\.webp"\)[\s\S]*?animation: glass-water-drift 80s ease-in-out infinite alternate;/);
@@ -275,23 +273,23 @@ test('background layer is wallpaper-driven and contains the aurora, water and no
 
 test('night wallpaper overrides light page text and keeps cards readable', () => {
   const nightTextRules = [
-    [/^html\[data-wallpaper="night"\] \.header h1$/, /color: #eef2ff;/],
-    [/^html\[data-wallpaper="night"\] \.header p$/, /color: rgba\(226, 232, 255, 0\.8\);/],
-    [/^html\[data-wallpaper="night"\] \.footer$/, /color: rgba\(226, 232, 255, 0\.72\);/],
-    [/^html\[data-wallpaper="night"\] \.footer-project-link$/, /color: #c7d2fe;/],
-    [/^html\[data-wallpaper="night"\] \.key-guide$/, /color: rgba\(226, 232, 255, 0\.72\);/],
-    [/^html\[data-wallpaper="night"\] \.key-status$/, /color: rgba\(226, 232, 255, 0\.82\);/]
+    [/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.header h1$/, /color: #eef2ff;/],
+    [/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.header p$/, /color: rgba\(226, 232, 255, 0\.8\);/],
+    [/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.footer$/, /color: rgba\(226, 232, 255, 0\.72\);/],
+    [/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.footer-project-link$/, /color: #c7d2fe;/],
+    [/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.key-guide$/, /color: rgba\(226, 232, 255, 0\.72\);/],
+    [/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.key-status$/, /color: rgba\(226, 232, 255, 0\.82\);/]
   ];
   for (const [selector, declaration] of nightTextRules) {
     assert.match(ruleBody(selector), declaration, `night wallpaper must lighten page text for ${selector}`);
   }
-  assert.match(ruleBody(/^html\[data-wallpaper="night"\] \.key-area input$/), /color: #eef2ff;/,
+  assert.match(ruleBody(/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.key-area input$/), /color: #eef2ff;/,
     'the API key input must stay readable on the dark wallpaper');
-  assert.match(css, /html\[data-wallpaper="night"\] \.settings-entry,[\s\S]*?color: #dbeafe;/,
+  assert.match(css, /html\[data-interface="classic"\]\[data-wallpaper="night"\] \.settings-entry,[\s\S]*?color: #dbeafe;/,
     'floating controls need a light icon on the dark wallpaper');
 });
 
-test('glass architecture puts the frosted layer behind content and disperses edges on ::after', () => {
+test('glass keeps refraction behind sharp text and uses borderless reflections', () => {
   const surfaces = ruleBody(/^html\[data-interface="glass"\] \.card, html\[data-interface="glass"\] \.modal-card, html\[data-interface="glass"\] \.btn-fav-nav$/);
   assert.match(surfaces, /background: transparent;/);
   assert.match(surfaces, /border: 1px solid transparent;/);
@@ -314,7 +312,7 @@ test('glass architecture puts the frosted layer behind content and disperses edg
   assert.match(glassLayer, /pointer-events: none;/);
   assert.match(glassLayer, /background-color: var\(--glass-tint-solid\);/);
   assert.match(glassLayer, /background-image: var\(--glass-tint\);/);
-  assert.match(glassLayer, /border: 1px solid var\(--glass-rim\);/);
+  assert.match(glassLayer, /border: none;/);
   assert.match(glassLayer, /box-shadow:[\s\S]*?var\(--glass-edge\)/);
   assert.match(glassLayer, /backdrop-filter: var\(--glass-blur\);/);
   assert.match(glassLayer, /-webkit-backdrop-filter: var\(--glass-blur\);/);
@@ -323,18 +321,12 @@ test('glass architecture puts the frosted layer behind content and disperses edg
   assert.match(ruleBody(/^html\[data-interface="glass"\] \.modal-card::before$/), /inset 0 20px 36px -28px/,
     'the modal glass layer keeps its inner highlight');
 
-  // Edge dispersion ring moved to ::after.
-  const ring = ruleBody(/^html\[data-interface="glass"\] \.card::after, html\[data-interface="glass"\] \.modal-card::after, html\[data-interface="glass"\] \.btn-fav-nav::after$/);
-  assert.match(ring, /content: "";/);
-  assert.match(ring, /position: absolute;/);
-  assert.match(ring, /border-radius: inherit;/);
-  assert.match(ring, /padding: 1px;/);
-  assert.match(ring, /pointer-events: none;/);
-  assert.match(ring, /background: conic-gradient\(from 130deg at 50% 50%/);
-  assert.match(ring, /-webkit-mask: linear-gradient\(#fff 0 0\) content-box, linear-gradient\(#fff 0 0\);/);
-  assert.match(ring, /mask-composite: exclude;/);
-  assert.doesNotMatch(glassLayer, /mask-composite: exclude;/,
-    'the glass layer must not carry the dispersion mask');
+  // Soft localized reflections replace the continuous painted outline.
+  const reflection = ruleBody(/^html\[data-interface="glass"\] \.card::after, html\[data-interface="glass"\] \.modal-card::after, html\[data-interface="glass"\] \.btn-fav-nav::after$/);
+  assert.match(reflection, /pointer-events: none;/);
+  assert.match(reflection, /radial-gradient/);
+  assert.doesNotMatch(reflection, /conic-gradient|mask-composite|border:/);
+  assert.match(glassLayer, /clip-path: inset/);
 
   // Small surfaces keep a direct frosted layer.
   const small = ruleBody(/^html\[data-interface="glass"\] \.page-actions \.btn-sm, html\[data-interface="glass"\] \.page-jump-btn, html\[data-interface="glass"\] \.unfavorited-jump-btn, html\[data-interface="glass"\] \.settings-entry, html\[data-interface="glass"\] \.toast$/);
@@ -348,21 +340,17 @@ test('glass architecture puts the frosted layer behind content and disperses edg
 });
 
 test('refraction hook and small-screen fallbacks are wired without a hard dependency', () => {
-  // The liquid refraction is a water-wallpaper enhancement only (it needs texture to bend).
-  assert.match(css, /html\.glass-refraction\[data-interface="glass"\]\[data-wallpaper="water"\] \{\s*--glass-blur: blur\(11px\) saturate\(200%\) brightness\(1\.05\);/);
-  const hook = ruleBody(/^html\.glass-refraction\[data-interface="glass"\]\[data-wallpaper="water"\] \.card::before, html\.glass-refraction\[data-interface="glass"\]\[data-wallpaper="water"\] \.modal-card::before, html\.glass-refraction\[data-interface="glass"\]\[data-wallpaper="water"\] \.btn-fav-nav::before$/);
-  assert.match(hook, /filter: url\(#cet6-liquid-refract\);/);
-  assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*?html\.glass-refraction\[data-interface="glass"\]\[data-wallpaper="water"\] \.card::before,[\s\S]*?filter: none;/,
-    'the SVG displacement filter must be disabled on small screens');
-  assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*?html\[data-wallpaper="water"\] \.appearance-water \{ animation: none; \}/);
-  assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*?--glass-blur: blur\(13px\) saturate\(195%\) brightness\(1\.05\);/);
+  const hook = ruleBody(/^html\.glass-refraction\[data-interface="glass"\] \.card::before, html\.glass-refraction\[data-interface="glass"\] \.modal-card::before, html\.glass-refraction\[data-interface="glass"\] \.btn-fav-nav::before$/);
+  assert.match(hook, /filter: var\(--glass-filter, none\);/);
+  assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*?html\.glass-refraction\[data-interface="glass"\] \.card::before,[\s\S]*?filter: none;/);
+  assert.match(css, /@media \(max-width: 720px\) \{[\s\S]*?--glass-blur: blur\(4px\)/);
 
   // The optional enhancement module must be an additive script, guarded at call time.
   assert.ok(fs.existsSync('glass-refraction.js'), 'glass-refraction.js should ship with the feature');
   const refractionIndex = source.indexOf('<script src="glass-refraction.js"></script>');
   const appearanceIndex = source.indexOf('<script src="appearance.js"></script>');
   assert.ok(refractionIndex > appearanceIndex, 'the refraction module loads after the appearance controller');
-  assert.match(source, /if \(window\.LiquidGlass && LiquidGlass\.supported\) \{[\s\S]*?LiquidGlass\.configure\(\{ scale: 52, band: 34 \}\);/,
+  assert.match(source, /if \(window\.LiquidGlass && LiquidGlass\.supported\) \{[\s\S]*?LiquidGlass\.configure\(\{ scale: 64, band: 36 \}\);/,
     'the page only configures the module when the browser supports it');
   assert.match(fs.readFileSync('glass-refraction.js', 'utf8'), /window\.LiquidGlass = /,
     'the module must expose window.LiquidGlass');
@@ -391,7 +379,7 @@ test('degrades for reduced motion, reduced transparency and missing backdrop-fil
 });
 
 test('keeps appearance scoped: wallpaper rules are theme-scoped, blur rules are glass-scoped', () => {
-  assert.doesNotMatch(css, /\[data-interface="classic"\]/, 'classic must rely on the absence of overrides');
+  assert.doesNotMatch(css, /html\[data-interface="classic"\](?!\[data-wallpaper="night"\])/, 'legacy classic overrides are limited to night readability');
   for (const rule of cssLeafRules.filter(block => /backdrop-filter\s*:/.test(block.body))) {
     assert.match(rule.selector, /html\[data-interface="glass"\]/,
       `backdrop-filter must never leak into the classic interface: ${rule.selector}`);
@@ -402,18 +390,10 @@ test('keeps appearance scoped: wallpaper rules are theme-scoped, blur rules are 
     assert.match(rule.selector, /html\[data-wallpaper/,
       `decorative background rules must be wallpaper-scoped: ${rule.selector}`);
   }
-  // Night wallpaper lightens page chrome in both interfaces (not glass-only), and must be declared
-  // after the glass chrome rules so equal-specificity rules resolve to the light colours.
-  assert.match(ruleBody(/^html\[data-wallpaper="night"\] \.header h1$/), /color:/);
-  assert.doesNotMatch(ruleBody(/^html\[data-wallpaper="night"\] \.header h1$/), /data-interface/);
-  const glassFooterIndex = css.indexOf('html[data-interface="glass"] .footer {');
-  const nightFooterIndex = css.indexOf('html[data-wallpaper="night"] .footer {');
-  assert.ok(glassFooterIndex > -1 && nightFooterIndex > glassFooterIndex,
-    'night light-text overrides must come after the glass chrome rules (equal specificity, source order wins)');
-  const nightGear = ruleBody(/^html\[data-wallpaper="night"\] \.settings-entry, html\[data-wallpaper="night"\] \.page-jump-btn, html\[data-wallpaper="night"\] \.unfavorited-jump-btn$/);
-  assert.match(nightGear, /color: #dbeafe;/, 'floating controls get a light icon on the night wallpaper');
-  assert.ok(css.indexOf('html[data-wallpaper="night"] .settings-entry') > css.lastIndexOf('html[data-interface="glass"] .settings-entry'),
-    'the night gear colour must win over the glass settings-entry colour');
+  // Glass themes change only wallpaper. Legacy classic night readability remains scoped.
+  assert.match(ruleBody(/^html\[data-interface="classic"\]\[data-wallpaper="night"\] \.header h1$/), /color:/);
+  assert.doesNotMatch(css, /html\[data-interface="glass"\]\[data-wallpaper="night"\] \{/);
+
 });
 
 test('keeps static ids unique and loads appearance assets in a safe order', () => {

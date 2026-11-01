@@ -3,7 +3,7 @@
    ----------------------------------------------------------------------------
    - 传统界面（缺省）不套用任何规则，保证原有视觉与布局不变；
    - 玻璃质感规则全部挂在 html[data-interface="glass"] 下，可随时整段删除；
-   - 玻璃卡片 = backdrop-filter 磨砂 + 多层白色高光 + 发光描边，
+   - 玻璃卡片 = 独立折射层 + 低雾度透明底 + 局部反光（无连续描边），
      背景是缓慢漂浮的高饱和圆润色块（Q 弹感来自带过冲的弹簧缓动）。
    - 所有动效在 prefers-reduced-motion 下停止；不支持 backdrop-filter 时
      自动退化为高不透明度卡片，保证可读性。
@@ -336,37 +336,28 @@ html[data-interface="glass"] {
   --bg: transparent;
   --card-bg: rgba(255, 255, 255, 0.46);
   --text: #1f1430;
-  --text-secondary: #45405e;
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
+  --text-secondary: #2e253e;
+  --primary: #352879;
+  --primary-hover: #29205f;
   --primary-light: rgba(79, 70, 229, 0.12);
   --border: rgba(255, 255, 255, 0.58);
   --radius: 22px;
   --shadow: 0 12px 30px -18px rgba(44, 23, 94, 0.42), 0 2px 8px -5px rgba(44, 23, 94, 0.18);
   --shadow-hover: 0 20px 46px -20px rgba(44, 23, 94, 0.52), 0 5px 14px -7px rgba(44, 23, 94, 0.24);
-  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.18);
-  --glass-blur: blur(16px) saturate(210%) brightness(1.06);
-  --glass-tint-solid: rgba(255, 255, 255, 0.14);
+  --glass-edge: inset 0 3px 8px -6px rgba(255, 255, 255, 0.9),
+    inset 0 -5px 12px -10px rgba(66, 52, 119, 0.2);
+  --glass-blur: blur(2px) saturate(145%) brightness(1.02);
+  --glass-tint-solid: rgba(255, 255, 255, 0.42);
   --glass-tint: linear-gradient(120deg,
-    rgba(255, 255, 255, 0.36) 0%, rgba(255, 255, 255, 0.10) 34%,
-    rgba(255, 255, 255, 0.03) 58%, rgba(255, 255, 255, 0.14) 82%,
-    rgba(255, 255, 255, 0.32) 100%);
+    rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.04) 34%,
+    rgba(255, 255, 255, 0.01) 58%, rgba(255, 255, 255, 0.04) 82%,
+    rgba(255, 255, 255, 0.12) 100%);
   --glass-rim: rgba(255, 255, 255, 0.56);
   --glass-shadow: 0 24px 60px -28px rgba(31, 17, 66, 0.48), 0 6px 18px -10px rgba(31, 17, 66, 0.22);
 }
 html[data-interface="glass"] body {
   background: transparent;
   color: var(--text);
-}
-/* 深空背景更暗：提高玻璃白度，保证卡片里的深色文字仍然清晰 */
-html[data-interface="glass"][data-wallpaper="night"] {
-  --glass-tint-solid: rgba(255, 255, 255, 0.42);
-  --glass-tint: linear-gradient(120deg,
-    rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.34) 40%,
-    rgba(255, 255, 255, 0.26) 64%, rgba(255, 255, 255, 0.42) 100%);
-  --text: #171126;
-  --text-secondary: #463f5c;
 }
 /* 极简背景 + 玻璃质感：底色放在根元素上，body 保持透明，
    否则不透明 body 背景会盖住卡片 ::before 的负 z-index 玻璃层 */
@@ -423,8 +414,7 @@ html[data-wallpaper="night"] {
 html[data-wallpaper="water"] {
   --wallpaper-base: linear-gradient(160deg, #a7e6df 0%, #8fd8d2 42%, #6fc9c4 100%);
   --aurora-a: 255, 255, 255;
-  /* 青绿水面上的传统界面次级文字需要更深的颜色才够 AA 对比度 */
-  --text-secondary: #334155;
+
 }
 
 /* 水波主题用图片层（找不到图片时退回上面的青绿底色） */
@@ -528,7 +518,7 @@ html[data-wallpaper]:not([data-wallpaper="minimal"]) .appearance-noise {
 }
 
 /* ---------------------------------------------------------------------------
-   5. 玻璃表面：半透明磨砂 + 边缘折射/色散
+   5. 玻璃表面：低雾度透明玻璃 + 边缘折射/色散
    --------------------------------------------------------------------------- */
 /* 大表面：元素本身透明，玻璃层放在 ::before（z-index:-1）上，内容永远压在玻璃之上；
    外投影留在元素自身，避免开启折射后被位图滤镜一起推移成重影。
@@ -558,7 +548,8 @@ html[data-interface="glass"] .btn-fav-nav::before {
   pointer-events: none;
   background-color: var(--glass-tint-solid);
   background-image: var(--glass-tint);
-  border: 1px solid var(--glass-rim);
+  border: none;
+  clip-path: inset(0 round var(--radius));
   box-shadow:
     var(--glass-edge),
     inset 0 18px 32px -26px rgba(255, 255, 255, 0.95),
@@ -569,6 +560,7 @@ html[data-interface="glass"] .btn-fav-nav::before {
 html[data-interface="glass"] .card {
   border-radius: var(--radius);
 }
+html[data-interface="glass"] .btn-fav-nav::before { clip-path: inset(0 round 18px); }
 html[data-interface="glass"] .btn-fav-nav {
   border-radius: 18px;
   color: var(--text);
@@ -579,6 +571,7 @@ html[data-interface="glass"] .modal-card {
   box-shadow: 0 30px 80px -30px rgba(31, 17, 66, 0.55), 0 8px 24px -12px rgba(31, 17, 66, 0.3);
 }
 html[data-interface="glass"] .modal-card::before {
+  clip-path: inset(0 round 26px);
   box-shadow:
     var(--glass-edge),
     inset 0 20px 36px -28px rgba(255, 255, 255, 0.95);
@@ -649,7 +642,8 @@ html[data-interface="glass"] ::selection {
   background: rgba(79, 70, 229, 0.22);
 }
 
-/* 边缘色散 + 镜片高光：1px 锥形渐变描边 + 内圈反光 */
+/* Localized reflections have soft falloff: no continuous outline or rainbow ring.
+   The RGB filter below provides color dispersion from the actual background. */
 html[data-interface="glass"] .card::after,
 html[data-interface="glass"] .modal-card::after,
 html[data-interface="glass"] .btn-fav-nav::after {
@@ -657,37 +651,25 @@ html[data-interface="glass"] .btn-fav-nav::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1px;
   pointer-events: none;
-  background: conic-gradient(from 130deg at 50% 50%,
-    rgba(34, 211, 238, 0.55) 0deg,
-    rgba(255, 255, 255, 0.05) 70deg,
-    rgba(236, 72, 153, 0.46) 148deg,
-    rgba(255, 255, 255, 0.05) 220deg,
-    rgba(250, 204, 21, 0.44) 292deg,
-    rgba(34, 211, 238, 0.55) 360deg);
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  opacity: 0.62;
+  background:
+    radial-gradient(ellipse 38% 9% at var(--glass-light-x, 24%) 0%, rgba(255, 255, 255, 0.65), transparent 100%),
+    radial-gradient(ellipse 9% 36% at 0% var(--glass-light-y, 20%), rgba(255, 255, 255, 0.24), transparent 100%),
+    radial-gradient(ellipse 26% 6% at 80% 100%, rgba(255, 255, 255, 0.3), transparent 100%);
+  opacity: 0.65;
 }
 
-/* 液态折射：Chromium 下把玻璃层的磨砂背景轻微弯折成透镜；
-   只在细节丰富的「水波」主题开启，纯渐变色域上位移看不出来、反而会让描边重影 */
-html.glass-refraction[data-interface="glass"][data-wallpaper="water"] {
-  --glass-blur: blur(11px) saturate(200%) brightness(1.05);
-}
-html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .card::before,
-html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .modal-card::before,
-html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .btn-fav-nav::before {
-  filter: url(#cet6-liquid-refract);
+/* Every visible surface uses its own measured rounded displacement map. */
+html.glass-refraction[data-interface="glass"] .card::before,
+html.glass-refraction[data-interface="glass"] .modal-card::before,
+html.glass-refraction[data-interface="glass"] .btn-fav-nav::before {
+  filter: var(--glass-filter, none);
 }
 
 /* 卡片内部的功能性表面：比卡片再亮一点，保证文字可读 */
 html[data-interface="glass"] .word-result {
-  background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid transparent;
   border-radius: 16px;
 }
 html[data-interface="glass"] .word-forms,
@@ -904,16 +886,57 @@ html[data-interface="glass"] .appearance-option-preview.is-glass {
 /* 打开输入下拉/搜索提示的卡片抬到最上层，避免被后一张玻璃卡片盖住 */
 html[data-interface="glass"] .word-search-wrapper:focus-within { z-index: 3; }
 
+/* Borderless content containers, including favorites and saved pages. */
+html[data-interface="glass"] .word-forms,
+html[data-interface="glass"] .mnemonic-block,
+html[data-interface="glass"] .comparison-word,
+html[data-interface="glass"] .comparison-fav,
+html[data-interface="glass"] .page-record-item,
+html[data-interface="glass"] .vf-compact,
+html[data-interface="glass"] .vf-detail,
+html[data-interface="glass"] .comparison-fav.pinned,
+html[data-interface="glass"] .vf-compact.pinned {
+  border-color: transparent;
+  background-image: none;
+  background-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+html[data-interface="glass"] .input-area input:focus,
+html[data-interface="glass"] .study-tool-form input:focus {
+  border-color: var(--primary);
+}
+
+/* A soft reading glow is identical on every glass wallpaper. */
+html[data-interface="glass"] .header,
+html[data-interface="glass"] .footer {
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.65) 40%, transparent 72%);
+  color: var(--text-secondary);
+}
+
+/* Defined light ribbons give the lens real detail to bend even on aurora.
+   Only glass mode adds them; theme colors continue to come from the wallpaper. */
+html[data-interface="glass"][data-wallpaper="aurora"] .appearance-backdrop::after,
+html[data-interface="glass"][data-wallpaper="peach"] .appearance-backdrop::after,
+html[data-interface="glass"][data-wallpaper="night"] .appearance-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: -5%;
+  background: linear-gradient(140deg, rgba(var(--aurora-a), 0.65), rgba(var(--aurora-b), 0.48) 48%, rgba(var(--aurora-c), 0.6));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201440%201000%22%20fill%3D%22none%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22r%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20stop-color%3D%22white%22%20stop-opacity%3D%22.15%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22.65%22%20stop-color%3D%22white%22%20stop-opacity%3D%22.75%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22white%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3Cfilter%20id%3D%22soft%22%3E%3CfeGaussianBlur%20stdDeviation%3D%221.2%22%2F%3E%3C%2Ffilter%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20filter%3D%22url%28%23soft%29%22%3E%0A%20%20%20%20%3Cpath%20d%3D%22M-160%20160C160%2040%20380%20580%20750%20340S1190%2020%201580%20300%22%20stroke%3D%22url%28%23r%29%22%20stroke-width%3D%22110%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M-120%20640C200%20910%20400%20310%20760%20560S1170%20940%201580%20600%22%20stroke%3D%22url%28%23r%29%22%20stroke-width%3D%22170%22%20opacity%3D%22.7%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M-80%20870C290%20630%20530%201040%20900%20820S1290%20550%201540%20780%22%20stroke%3D%22white%22%20stroke-width%3D%223%22%20opacity%3D%22.5%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E%0A") center / cover;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201440%201000%22%20fill%3D%22none%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3ClinearGradient%20id%3D%22r%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%0A%20%20%20%20%20%20%3Cstop%20stop-color%3D%22white%22%20stop-opacity%3D%22.15%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%22.65%22%20stop-color%3D%22white%22%20stop-opacity%3D%22.75%22%2F%3E%0A%20%20%20%20%20%20%3Cstop%20offset%3D%221%22%20stop-color%3D%22white%22%2F%3E%0A%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%3Cfilter%20id%3D%22soft%22%3E%3CfeGaussianBlur%20stdDeviation%3D%221.2%22%2F%3E%3C%2Ffilter%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20filter%3D%22url%28%23soft%29%22%3E%0A%20%20%20%20%3Cpath%20d%3D%22M-160%20160C160%2040%20380%20580%20750%20340S1190%2020%201580%20300%22%20stroke%3D%22url%28%23r%29%22%20stroke-width%3D%22110%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M-120%20640C200%20910%20400%20310%20760%20560S1170%20940%201580%20600%22%20stroke%3D%22url%28%23r%29%22%20stroke-width%3D%22170%22%20opacity%3D%22.7%22%2F%3E%0A%20%20%20%20%3Cpath%20d%3D%22M-80%20870C290%20630%20530%201040%20900%20820S1290%20550%201540%20780%22%20stroke%3D%22white%22%20stroke-width%3D%223%22%20opacity%3D%22.5%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E%0A") center / cover;
+  pointer-events: none;
+}
+
 /* ---------------------------------------------------------------------------
    6. 小屏幕 / 性能 / 无障碍降级
    --------------------------------------------------------------------------- */
 @media (max-width: 720px) {
   html[data-interface="glass"] {
-    --glass-blur: blur(13px) saturate(195%) brightness(1.05);
+    --glass-blur: blur(4px) saturate(145%) brightness(1.02);
   }
-  html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .card::before,
-  html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .modal-card::before,
-  html.glass-refraction[data-interface="glass"][data-wallpaper="water"] .btn-fav-nav::before {
+  html.glass-refraction[data-interface="glass"] .card::before,
+  html.glass-refraction[data-interface="glass"] .modal-card::before,
+  html.glass-refraction[data-interface="glass"] .btn-fav-nav::before {
     filter: none;
   }
   html[data-wallpaper="water"] .appearance-water { animation: none; }
@@ -988,30 +1011,30 @@ html[data-interface="glass"] .word-search-wrapper:focus-within { z-index: 3; }
 
 /* 深空主题的浅色文字覆盖放在最后，确保优先级高于玻璃界面的通用文字色 */
 /* 深空主题下页面上的文字改用浅色（卡片内部仍是浅玻璃 + 深色文字） */
-html[data-wallpaper="night"] .header h1 { color: #eef2ff; }
-html[data-wallpaper="night"] .header p { color: rgba(226, 232, 255, 0.8); }
-html[data-wallpaper="night"] .key-status { color: rgba(226, 232, 255, 0.82); }
-html[data-wallpaper="night"] .key-guide { color: rgba(226, 232, 255, 0.72); }
-html[data-wallpaper="night"] .key-guide summary,
-html[data-wallpaper="night"] .key-guide a { color: #c7d2fe; }
-html[data-wallpaper="night"] .footer { color: rgba(226, 232, 255, 0.72); }
-html[data-wallpaper="night"] .footer-project-link { color: #c7d2fe; }
-html[data-wallpaper="night"] .empty-state { color: rgba(226, 232, 255, 0.75); }
-html[data-wallpaper="night"] .key-area input {
+html[data-interface="classic"][data-wallpaper="night"] .header h1 { color: #eef2ff; }
+html[data-interface="classic"][data-wallpaper="night"] .header p { color: rgba(226, 232, 255, 0.8); }
+html[data-interface="classic"][data-wallpaper="night"] .key-status { color: rgba(226, 232, 255, 0.82); }
+html[data-interface="classic"][data-wallpaper="night"] .key-guide { color: rgba(226, 232, 255, 0.72); }
+html[data-interface="classic"][data-wallpaper="night"] .key-guide summary,
+html[data-interface="classic"][data-wallpaper="night"] .key-guide a { color: #c7d2fe; }
+html[data-interface="classic"][data-wallpaper="night"] .footer { color: rgba(226, 232, 255, 0.72); }
+html[data-interface="classic"][data-wallpaper="night"] .footer-project-link { color: #c7d2fe; }
+html[data-interface="classic"][data-wallpaper="night"] .empty-state { color: rgba(226, 232, 255, 0.75); }
+html[data-interface="classic"][data-wallpaper="night"] .key-area input {
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(255, 255, 255, 0.28);
   color: #eef2ff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
-html[data-wallpaper="night"] .key-area input::placeholder { color: rgba(226, 232, 255, 0.6); }
-html[data-wallpaper="night"] .settings-entry,
-html[data-wallpaper="night"] .page-jump-btn,
-html[data-wallpaper="night"] .unfavorited-jump-btn {
+html[data-interface="classic"][data-wallpaper="night"] .key-area input::placeholder { color: rgba(226, 232, 255, 0.6); }
+html[data-interface="classic"][data-wallpaper="night"] .settings-entry,
+html[data-interface="classic"][data-wallpaper="night"] .page-jump-btn,
+html[data-interface="classic"][data-wallpaper="night"] .unfavorited-jump-btn {
   background-color: rgba(255, 255, 255, 0.16);
   border-color: rgba(255, 255, 255, 0.24);
   color: #dbeafe;
 }
-html[data-wallpaper="night"] .page-jump-btn-primary {
+html[data-interface="classic"][data-wallpaper="night"] .page-jump-btn-primary {
   background: var(--primary);
   color: #ffffff;
 }
