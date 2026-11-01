@@ -135,7 +135,9 @@ const StudyToolsUI = (() => {
         { duration: 160, easing: 'ease-in', fill: 'forwards' }
       );
       animation.startTime = performance.now();
+      if (window.GlassRenderer?.animateFor) GlassRenderer.animateFor(210);
       await animation.finished;
+      if (!wrapper.isConnected) return;
       render();
       // Height needs a gentle start/end and more time for larger differences.
       // Keep its timing independent of the turn so rotation cannot rush the resize.
@@ -149,7 +151,7 @@ const StudyToolsUI = (() => {
         heightAnimation = wrapper.animate([{ height: `${startHeight}px` }, { height: `${endHeight}px` }],timing);
         // The save action follows the moving bottom edge instead of appearing
         // late when a taller incoming face finishes revealing its content.
-        const footer = wrapper.querySelector('.word-search-result > .study-result-actions');
+        const footer = wrapper.querySelector('.word-search-result > .study-result-actions, .vf-detail-footer');
         if (footer) footerAnimation = footer.animate([{translate:`0 ${startHeight-endHeight}px`},{translate:'0 0'}],timing);
       }
       animation = wrapper.animate([{ transform: 'rotateY(-90deg)' }, { transform: 'rotateY(0deg)' }],
@@ -158,6 +160,7 @@ const StudyToolsUI = (() => {
       // Start all opening motions on a fresh shared clock, not that stale frame.
       const openingTime = performance.now();
       [animation,heightAnimation,footerAnimation].forEach(motion => { if (motion) motion.startTime = openingTime; });
+      if (window.GlassRenderer?.animateFor) GlassRenderer.animateFor(Math.max(220,heightAnimation?.effect.getTiming().duration || 0)+50);
       await Promise.all([animation.finished, heightAnimation?.finished, footerAnimation?.finished]);
     } finally {
       animation?.cancel();
@@ -572,6 +575,6 @@ const StudyToolsUI = (() => {
     refreshFavorites();
   }
 
-  return { init, mnemonicBlock, renderStudyCard, refreshFavorites, getComparisons, hasMnemonic, linkWordCard,
+  return { init, mnemonicBlock, mnemonicContent, turnCard, renderStudyCard, refreshFavorites, getComparisons, hasMnemonic, linkWordCard,
     activeTab: () => tab, selectFavoriteTab: selectTab, exportComparisons };
 })();

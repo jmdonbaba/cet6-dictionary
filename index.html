@@ -781,8 +781,8 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
   color: var(--primary);
 }
 </style>
-<link rel="stylesheet" href="study-tools.css?v=9e118ef4d49f">
-<link rel="stylesheet" href="appearance.css?v=316d7bccf6d6">
+<link rel="stylesheet" href="study-tools.css?v=fb6be9c0cb6c">
+<link rel="stylesheet" href="appearance.css?v=b2accc826b29">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -1056,10 +1056,10 @@ try {
 <script src="study-export.js?v=18626f1c6545"></script>
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=e69ab7911425"></script>
-<script src="study-tools-ui.js?v=fec04acb35b7"></script>
+<script src="study-tools-ui.js?v=10b59e5597be"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
-<script src="glass-optics.js?v=9b61f359dd71"></script>
-<script src="glass-renderer.js?v=8bcb899f5674"></script>
+<script src="glass-optics.js?v=016d06b9aa9e"></script>
+<script src="glass-renderer.js?v=d8cb1dcfbbf0"></script>
 <script src="glass-refraction.js?v=a42beb30fada"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
 <script>
@@ -1685,6 +1685,54 @@ function updateAllVocabButtons() {
   });
 }
 
+function favoriteDetailContent(favorite, face = 'definition', busy = false) {
+  const mnemonic = typeof StudyToolsUI !== 'undefined' ? StudyTools.normalizeMnemonic(favorite.mnemonic, favorite.word) : null;
+  const memory = face === 'memory' && mnemonic;
+  const definitions = Array.isArray(favorite.definitions) ? favorite.definitions.filter(value => typeof value === 'string' && value.trim()) : [];
+  if (!definitions.length && typeof favorite.meaning === 'string' && favorite.meaning.trim()) definitions.push(favorite.meaning);
+  return `<div class="vf-face-header"><span>${memory ? '怎么记' : '单词释义'}</span>
+    ${mnemonic ? `<button type="button" class="btn-sm vf-flip" data-act="flipvfav" data-id="${escAttr(favorite.id)}"${busy ? ' disabled' : ''}>${memory ? '单词释义 ↻' : '怎么记 ↻'}</button>` : ''}</div>
+    ${memory ? StudyToolsUI.mnemonicContent(mnemonic) : `
+      ${definitions.map((definition, index) => `<div class="vf-def">${definitions.length > 1 ? `<span class="vf-def-label">${index + 1}.</span> ` : ''}${esc(definition)}</div>`).join('')}
+      ${favorite.forms ? `<div class="vf-forms">${renderForms(favorite.forms)}</div>` : ''}
+      ${favorite.examples?.length ? '<div class="vf-examples-label">例句：</div>' + favorite.examples.map((example, index) => `<div class="vf-sen">${index + 1}. ${esc(typeof example === 'string' ? example : example.en || '')}${typeof example === 'string' || !example.cn ? '' : `<span class="vf-sen-cn">${esc(example.cn)}</span>`}</div>`).join('') : ''}`}
+    <div class="vf-detail-footer"><span>${esc(favorite.createdAt)}</span>
+      <button type="button" class="btn-open-in-card" data-act="openvfavcard" data-id="${escAttr(favorite.id)}">在卡片中打开</button></div>`;
+}
+
+function resetFavoriteFaces() {
+  $favListContainer.querySelectorAll('.vf-detail[data-face="memory"], .vf-detail.is-flipping').forEach(detail => {
+    detail.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
+    detail._flipping = false;
+    detail.dataset.face = 'definition';
+    if (detail._favorite) detail.innerHTML = favoriteDetailContent(detail._favorite);
+  });
+}
+
+async function flipFavoriteDetail(button) {
+  const detail = button.closest('.vf-detail');
+  if (!detail || detail._flipping) return;
+  const favorite = getVFavs().find(item => item.id === button.dataset.id);
+  if (!favorite || !StudyTools.normalizeMnemonic(favorite.mnemonic, favorite.word)) return;
+  const face = detail.dataset.face === 'memory' ? 'definition' : 'memory';
+  const focus = document.activeElement === button;
+  let cancelled = false;
+  detail._flipping = true;detail._favorite = favorite;button.disabled = true;
+  try {
+    await StudyToolsUI.turnCard(detail, () => {
+      detail.dataset.face = face;
+      detail.innerHTML = favoriteDetailContent(favorite, face, true);
+    });
+  } catch (error) {
+    cancelled = error.name === 'AbortError';
+    if (!cancelled) toast('翻转失败，请重试');
+  } finally {
+    detail._flipping = false;
+    const next = detail.querySelector('[data-act="flipvfav"]');
+    if (next) { next.disabled = false; if (focus && !cancelled && detail.closest('.modal-card.active')) next.focus({ preventScroll: true }); }
+  }
+}
+
 function renderVFavs() {
   const favs = getVFavs();
   $btnStudyExport.disabled = !favs.length;
@@ -1713,20 +1761,8 @@ function renderVFavs() {
         </div>
       </div>
     </div>
-    <div class="vf-detail" id="vfDetail${idx}">
-      ${f.mnemonic && typeof StudyToolsUI !== 'undefined' ? StudyToolsUI.mnemonicBlock(f.mnemonic) : ''}
-      <section class="vf-reference-block">
-      ${f.forms ? `<div class="vf-forms" style="margin-top:0">${renderForms(f.forms)}</div>` : ''}
-      ${f.examples && f.examples.length ? `<div style="margin-top:8px;font-weight:600;font-size:13px;color:var(--text-secondary)">例句：</div>` + f.examples.map((ex, ei) => {
-        const en = typeof ex === 'string' ? ex : (ex.en || '');
-        const cn = typeof ex === 'string' ? '' : (ex.cn || '');
-        return `<div class="vf-sen">${ei + 1}. ${esc(en)}${cn ? `<span class="vf-sen-cn">${esc(cn)}</span>` : ''}</div>`;
-      }).join('') : ''}
-      <div class="vf-detail-footer">
-        <span>${esc(f.createdAt)}</span>
-        <button type="button" class="btn-open-in-card" data-act="openvfavcard" data-id="${escAttr(f.id)}">在卡片中打开</button>
-      </div>
-      </section>
+    <div class="vf-detail" id="vfDetail${idx}" data-face="definition">
+      ${favoriteDetailContent(f)}
     </div>
   `).join('');
 
@@ -2134,7 +2170,7 @@ function openModal(modal, skipFocus) {
   schedulePageJumpUpdate();
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
-  if (modal === $modalVocabFav) syncSlider(document.getElementById('favoriteStudyTabs'));
+  if (modal === $modalVocabFav) { resetFavoriteFaces(); syncSlider(document.getElementById('favoriteStudyTabs')); }
   // 弹窗首帧就要带上最终折射，避免“先闪一下、再变一次颜色”。
   if (window.LiquidGlass && typeof LiquidGlass.flush === 'function') LiquidGlass.flush();
   // Focus search input when opening vocab favorites (skip when navigating from "open in favorites")
@@ -2147,6 +2183,7 @@ function openModal(modal, skipFocus) {
   }
 }
 function closeModal() {
+  if ($modalVocabFav.classList.contains('active')) resetFavoriteFaces();
   closeStudyExportMenu();
   $modalOverlay.style.display = 'none';
   schedulePageJumpUpdate();
@@ -2260,6 +2297,7 @@ $modalVocabBody.addEventListener('click', e => {
   const compact = e.target.closest('.vf-compact');
   const btn = e.target.closest('button');
   const { act, id } = (btn && btn.dataset) || {};
+  if (act === 'flipvfav') { flipFavoriteDetail(btn); return; }
   if (act === 'openvfavcard') { openFavoriteInCard(id); return; }
   if (act === 'delvfav') { closeAllMenus(); delVFav(id); return; }
   if (act === 'pinvfav') { closeAllMenus(); pinVFav(id); return; }

@@ -1058,7 +1058,7 @@ html[data-interface="glass"] .card {
 html.glass-gpu[data-interface="glass"] .card { border-width: 0; }
 html[data-interface="glass"] :is(.word-result, .word-forms, .mnemonic-block, .comparison-word,
   .study-example, .word-result .sentences .sen-item, .study-takeaway, .base-form-hint, .word-result .pos,
-  .word-search-result:has(> .study-content), .vf-detail, .vf-reference-block, .comparison-fav) {
+  .word-search-result:has(> .study-content), .vf-detail, .comparison-fav) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;

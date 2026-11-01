@@ -539,6 +539,7 @@
   document.addEventListener('transitionrun', onControlTransition);
   document.addEventListener('transitionend', onControlTransition);
   window.GlassRenderer = {
+    animateFor: function(duration) { if(!active||failed)return;motionUntil=Math.max(motionUntil,performance.now()+Math.max(0,Math.min(1000,Number(duration)||0)));requestRender(); },
     enable: enable, disable: disable, destroy: destroy, render: requestRender, flush: flush,
     setControlIntensity:function(value){controlIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},
     setLayerIntensity: function(value){layerIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},

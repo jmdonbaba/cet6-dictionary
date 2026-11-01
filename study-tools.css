@@ -52,9 +52,9 @@
 .comparison-collocations { font-size: 13px; color: var(--text-secondary); }
 .mnemonic-block { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .mnemonic-block h3 { font-size: 13px; color: var(--primary); margin-bottom: 10px; }
-.vf-detail > .mnemonic-block, .vf-reference-block { margin: 0; padding: 16px; border-radius: 16px; }
-.vf-reference-block { background: #fff; }
-.vf-detail > .mnemonic-block + .vf-reference-block { margin-top: 14px; }
+.vf-face-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; margin-bottom: 12px; color: var(--primary); font-size: 13px; font-weight: 600; }
+.vf-face-header .vf-flip { white-space: nowrap; }
+.vf-examples-label { margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
 .favorite-study-tabs.ws-mode-toggle { display: flex; align-self: stretch; margin-bottom: 18px; }
 #modalVocabFav .modal-body { display: grid; grid-template-rows: auto minmax(0,1fr); min-height: 0; overflow: hidden; }
 #favoriteStudyTabs { grid-row: 1; grid-column: 1; }
