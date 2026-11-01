@@ -3,9 +3,10 @@
 .learning-workspace { position: relative; }
 .dictionary-main { min-width: 0; }
 .study-sidebar { position: absolute; top: 0; bottom: 0; left: -264px; width: 240px; }
-.study-toolbox { position: sticky; top: 24px; padding: 20px 18px; margin: 0; }
+.study-toolbox { position: sticky; top: 24px; margin: 0; }
+.study-tool-pages { display: grid; gap: 16px; }
+.study-tool-form.card { margin: 0; padding: 20px 18px; }
 .mobile-tool-tabs { display: none; }
-.study-tool-form + .study-tool-form { border-top: 1px solid var(--border); margin-top: 22px; padding-top: 22px; }
 .study-tool-form label { display: block; font-size: 14px; font-weight: 650; margin-bottom: 12px; }
 .study-tool-form input, .comparison-search { display: block; min-width: 0; width: 100%; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card-bg); color: var(--text); padding: 11px 10px; font: inherit; font-size: 13px; outline: none; transition: border-color 180ms ease, box-shadow 220ms ease; }
 .study-tool-form input:focus, .comparison-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.08); }
@@ -51,6 +52,9 @@
 .comparison-collocations { font-size: 13px; color: var(--text-secondary); }
 .mnemonic-block { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .mnemonic-block h3 { font-size: 13px; color: var(--primary); margin-bottom: 10px; }
+.vf-detail > .mnemonic-block, .vf-reference-block { margin: 0; padding: 16px; border-radius: 16px; }
+.vf-reference-block { background: #fff; }
+.vf-detail > .mnemonic-block + .vf-reference-block { margin-top: 14px; }
 .favorite-study-tabs.ws-mode-toggle { display: flex; align-self: stretch; margin-bottom: 18px; }
 #modalVocabFav .modal-body { display: grid; grid-template-rows: auto minmax(0,1fr); min-height: 0; overflow: hidden; }
 #favoriteStudyTabs { grid-row: 1; grid-column: 1; }
@@ -82,21 +86,18 @@
   .container { max-width: 860px; }
   .header { margin-left: 0; }
   .study-sidebar { position: static; width: auto; margin-bottom: 16px; }
-  .study-toolbox { position: static; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 24px; padding: 20px; }
-  .study-tool-pages { display: contents; }
-  .study-tool-form + .study-tool-form { border-top: 0; border-left: 1px solid var(--border); margin: 0; padding: 0 0 0 24px; }
+  .study-toolbox { position: static; }
+  .study-tool-pages { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 600px) {
-  .study-toolbox { display: block; padding: 18px; }
   .mobile-tool-tabs { position: relative; display: flex; isolation: isolate; border-radius: 999px; background: #f1f5f9; padding: 3px; margin-bottom: 16px; }
   .mobile-tool-tabs::before { content: ''; position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); background: #fff; border-radius: 999px; box-shadow: var(--shadow); z-index: -1; transition: translate 320ms var(--motion-spring); }
   .mobile-tool-tabs[data-active="comparison"]::before { translate: 100% 0; }
   .mobile-tool-tabs button { flex: 1; min-height: 38px; padding: 8px; border: 0; border-radius: 999px; background: transparent; color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
   .mobile-tool-tabs button[aria-selected="true"] { color: var(--primary); font-weight: 600; }
-  .study-tool-pages { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .study-tool-pages { display: flex; gap: 0; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
   .study-tool-pages::-webkit-scrollbar { display: none; }
-  .study-tool-form { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; padding: 3px; }
-  .study-tool-form + .study-tool-form { border: 0; padding: 3px; margin: 0; }
+  .study-tool-form.card { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; padding: 18px; }
   .study-tool-form label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
   .study-tool-form input { font-size: 16px; }
   .study-tool-form .btn-primary { min-height: 42px; }

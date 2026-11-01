@@ -374,10 +374,8 @@
     blurModalBackdrop(element,sx,sy);
     drawSurface(element,false,1,sx,sy,rects,shapes);
     if(layerIntensity){
-      copyComposite();
-      element.querySelectorAll(':is('+GlassOptics.modalLayers+', '+GlassOptics.layers+'):not([hidden], [hidden] *)').forEach(function(layer){
-        drawSurface(layer,false,layerIntensity,sx,sy,rects,shapes);
-      });
+      var selector=GlassOptics.modalLayers+', '+GlassOptics.layers;
+      drawLayerGroups(element.querySelectorAll(':is('+selector+'):not([hidden], [hidden] *)'),selector,sx,sy,rects,shapes);
     }
     if(buttonIntensity||controlIntensity){
       copyComposite();
@@ -439,19 +437,24 @@
   // masks keep refracted content inside its real rounded material boundaries.
   function drawLayers(sx,sy,rects,shapes) {
     layerCount=0;if(!layerIntensity)return;
+    var elements=Array.from(document.querySelectorAll(GlassOptics.layers)).filter(function(element){return !element.closest('.modal-card');});
+    gl.enable(gl.SCISSOR_TEST);
+    layerCount=drawLayerGroups(elements,GlassOptics.layers,sx,sy,rects,shapes);
+    gl.disable(gl.SCISSOR_TEST);
+  }
+  function drawLayerGroups(elements,selector,sx,sy,rects,shapes) {
+    var count=0;
     var groups=[];
-    document.querySelectorAll(GlassOptics.layers).forEach(function(element){
-      if(element.closest('.modal-card'))return;
-      var depth=0,parent=element.parentElement?.closest(GlassOptics.layers);
-      while(parent&&depth<3){depth++;parent=parent.parentElement?.closest(GlassOptics.layers);}
+    elements.forEach(function(element){
+      var depth=0,parent=element.parentElement?.closest(selector);
+      while(parent&&depth<3){depth++;parent=parent.parentElement?.closest(selector);}
       (groups[depth]||(groups[depth]=[])).push(element);
     });
-    gl.enable(gl.SCISSOR_TEST);
     groups.forEach(function(group){
       if(!group)return;copyComposite();
-      group.forEach(function(element){if(drawSurface(element,false,layerIntensity,sx,sy,rects,shapes))layerCount++;});
+      group.forEach(function(element){if(drawSurface(element,false,layerIntensity,sx,sy,rects,shapes))count++;});
     });
-    gl.disable(gl.SCISSOR_TEST);
+    return count;
   }
   function drawButtons(sx,sy,rects,shapes) {
     buttonCount=0;controlCount=0;if(!buttonIntensity&&!controlIntensity)return;

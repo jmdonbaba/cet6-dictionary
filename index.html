@@ -556,7 +556,7 @@ body {
 .vf-detail .vf-phonetic { font-size: 13px; color: var(--text-secondary); margin: 4px 0; }
 .vf-detail .vf-sen { font-size: 13px; color: var(--primary-hover); margin: 3px 0 3px 8px; }
 .vf-detail .vf-sen-cn { color: var(--text-secondary); margin-left: 4px; }
-.vf-detail .vf-forms { font-size: 12px; color: var(--text-secondary); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.vf-detail .vf-forms { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
 .vf-detail-footer {
   display: flex; align-items: center; justify-content: space-between;
   flex-wrap: wrap; gap: 8px; margin-top: 12px;
@@ -781,8 +781,8 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
   color: var(--primary);
 }
 </style>
-<link rel="stylesheet" href="study-tools.css?v=7febb8b8daa3">
-<link rel="stylesheet" href="appearance.css?v=41d20f124f63">
+<link rel="stylesheet" href="study-tools.css?v=9e118ef4d49f">
+<link rel="stylesheet" href="appearance.css?v=316d7bccf6d6">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -840,18 +840,18 @@ try {
 
   <div class="learning-workspace">
     <aside class="study-sidebar" aria-label="学习工具">
-      <div class="study-toolbox card">
+      <div class="study-toolbox">
         <div class="mobile-tool-tabs" id="mobileToolTabs" role="tablist" aria-label="学习功能" data-active="mnemonic">
           <button type="button" id="mnemonicToolTab" role="tab" aria-selected="true" aria-controls="mnemonicForm" data-tool-tab="mnemonic">怎么记</button>
           <button type="button" id="comparisonToolTab" role="tab" aria-selected="false" aria-controls="comparisonForm" tabindex="-1" data-tool-tab="comparison">词语对比</button>
         </div>
         <div class="study-tool-pages" id="studyToolPages">
-        <form id="mnemonicForm" class="study-tool-form">
+        <form id="mnemonicForm" class="study-tool-form card">
           <label for="mnemonicInput">怎么记</label>
           <input id="mnemonicInput" name="word" placeholder="输入想记住的单词" autocomplete="off" required maxlength="100">
           <button class="btn-primary" type="submit">生成记法 <span aria-hidden="true">↗</span></button>
         </form>
-        <form id="comparisonForm" class="study-tool-form">
+        <form id="comparisonForm" class="study-tool-form card">
           <label for="compareLeft">词语对比</label>
           <div class="study-pair-inputs"><input id="compareLeft" name="left" placeholder="单词 A" aria-label="对比的第一个单词" autocomplete="off" required maxlength="100"><span>和</span><input id="compareRight" name="right" placeholder="单词 B" aria-label="对比的第二个单词" autocomplete="off" required maxlength="100"></div>
           <button class="btn-primary" type="submit">看看区别 <span aria-hidden="true">↗</span></button>
@@ -1058,8 +1058,8 @@ try {
 <script src="study-tools.js?v=e69ab7911425"></script>
 <script src="study-tools-ui.js?v=fec04acb35b7"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
-<script src="glass-optics.js?v=016d06b9aa9e"></script>
-<script src="glass-renderer.js?v=15af37da7e7c"></script>
+<script src="glass-optics.js?v=9b61f359dd71"></script>
+<script src="glass-renderer.js?v=8bcb899f5674"></script>
 <script src="glass-refraction.js?v=a42beb30fada"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
 <script>
@@ -1715,6 +1715,7 @@ function renderVFavs() {
     </div>
     <div class="vf-detail" id="vfDetail${idx}">
       ${f.mnemonic && typeof StudyToolsUI !== 'undefined' ? StudyToolsUI.mnemonicBlock(f.mnemonic) : ''}
+      <section class="vf-reference-block">
       ${f.forms ? `<div class="vf-forms" style="margin-top:0">${renderForms(f.forms)}</div>` : ''}
       ${f.examples && f.examples.length ? `<div style="margin-top:8px;font-weight:600;font-size:13px;color:var(--text-secondary)">例句：</div>` + f.examples.map((ex, ei) => {
         const en = typeof ex === 'string' ? ex : (ex.en || '');
@@ -1725,6 +1726,7 @@ function renderVFavs() {
         <span>${esc(f.createdAt)}</span>
         <button type="button" class="btn-open-in-card" data-act="openvfavcard" data-id="${escAttr(f.id)}">在卡片中打开</button>
       </div>
+      </section>
     </div>
   `).join('');
 

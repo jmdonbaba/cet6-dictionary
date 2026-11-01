@@ -629,6 +629,7 @@ html[data-interface="glass"] .modal-card .vf-detail {
   border: 1px solid transparent;
   margin: 0 4px 10px;
   background-color: transparent;
+  padding: 14px;
 }
 html[data-interface="glass"] .modal-card .fav-search input {
   border-radius: 999px;
@@ -1057,7 +1058,7 @@ html[data-interface="glass"] .card {
 html.glass-gpu[data-interface="glass"] .card { border-width: 0; }
 html[data-interface="glass"] :is(.word-result, .word-forms, .mnemonic-block, .comparison-word,
   .study-example, .word-result .sentences .sen-item, .study-takeaway, .base-form-hint, .word-result .pos,
-  .word-search-result:has(> .study-content), .vf-detail, .comparison-fav) {
+  .word-search-result:has(> .study-content), .vf-detail, .vf-reference-block, .comparison-fav) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
