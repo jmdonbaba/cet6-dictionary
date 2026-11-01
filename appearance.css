@@ -303,7 +303,7 @@ button.settings-entry:active {
   border-color: rgba(255, 255, 255, 0.16);
 }
 .theme-swatch.is-water {
-  background-image: url("assets/water-caustics.webp");
+  background-image: url("assets/water-caustics.webp?v=76af31542084");
   background-size: cover;
   background-position: center;
   background-color: #8fd8d2;
@@ -420,7 +420,7 @@ html[data-wallpaper="water"] .appearance-water {
   background-image:
     linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.1) 42%,
       rgba(255, 255, 255, 0.2) 72%, rgba(255, 255, 255, 0.32) 100%),
-    url("assets/water-caustics.webp");
+    url("assets/water-caustics.webp?v=76af31542084");
   background-size: cover, cover;
   background-position: center, center;
   will-change: transform;
@@ -1225,6 +1225,9 @@ html[data-interface="glass"] .glass-jelly::after {
 /* 深空主题下页面上的文字改用浅色（卡片内部仍是浅玻璃 + 深色文字） */
 html[data-interface="classic"][data-wallpaper="night"] .header h1 { color: #eef2ff; }
 html[data-interface="classic"][data-wallpaper="night"] .header p { color: rgba(226, 232, 255, 0.8); }
+html[data-interface="classic"][data-wallpaper="water"] {
+  --text-secondary: #334155;
+}
 html[data-interface="classic"][data-wallpaper="night"] .key-status { color: rgba(226, 232, 255, 0.82); }
 html[data-interface="classic"][data-wallpaper="night"] .key-guide { color: rgba(226, 232, 255, 0.72); }
 html[data-interface="classic"][data-wallpaper="night"] .key-guide summary,
@@ -1249,155 +1252,4 @@ html[data-interface="classic"][data-wallpaper="night"] .unfavorited-jump-btn {
 html[data-interface="classic"][data-wallpaper="night"] .page-jump-btn-primary {
   background: var(--primary);
   color: #ffffff;
-}
-
-/* ---------------------------------------------------------------------------
-   7. 水波颜色条：hue 混合层 + 设置面板滑块
-   ---------------------------------------------------------------------------
-   只有“水波”主题显示颜色条；拖动时实时改写 --water-hue，
-   由一个全屏 hue 混合层给水面（以及玻璃界面的 WebGL 壁纸画布）重新上色，
-   水面纹理的明暗细节保持不变。拖回默认 174° 即恢复原色。
-   --------------------------------------------------------------------------- */
-:root {
-  --water-hue: 174;
-  --water-tint-opacity: 0;
-}
-html:not([data-wallpaper="water"]) .appearance-water-tint { display: none; }
-html[data-wallpaper="water"] .appearance-water-tint {
-  display: block;
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: hsl(var(--water-hue), 100%, 50%);
-  mix-blend-mode: hue;
-  opacity: var(--water-tint-opacity);
-  transition: opacity 220ms ease;
-}
-/* 主题选项里的小预览也跟着颜色条变化 */
-.theme-swatch.is-water::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: hsl(var(--water-hue), 100%, 50%);
-  mix-blend-mode: hue;
-  opacity: var(--water-tint-opacity);
-}
-
-.water-tint-control {
-  margin-top: 14px;
-  padding: 12px 14px;
-  border: 1.5px solid var(--border);
-  border-radius: 14px;
-  background: var(--card-bg);
-}
-.water-tint-control[hidden] { display: none; }
-.water-tint-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.water-tint-label {
-  font-size: 13px;
-  font-weight: 650;
-  color: var(--text);
-}
-.water-tint-value {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.water-tint-chip {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: hsl(var(--water-hue), 100%, 55%);
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 3px rgba(15, 23, 42, 0.22);
-}
-.water-tint-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  display: block;
-  width: 100%;
-  height: 22px;
-  margin: 10px 0 2px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.water-tint-slider:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 3px;
-  border-radius: 999px;
-}
-.water-tint-slider::-webkit-slider-runnable-track {
-  height: 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  background: linear-gradient(90deg,
-    hsl(0, 90%, 62%) 0%, hsl(40, 95%, 60%) 11%, hsl(70, 90%, 55%) 22%,
-    hsl(140, 70%, 48%) 33%, hsl(174, 75%, 48%) 40%, hsl(200, 90%, 58%) 50%,
-    hsl(240, 80%, 62%) 62%, hsl(280, 75%, 62%) 74%, hsl(320, 85%, 62%) 86%,
-    hsl(360, 90%, 62%) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
-}
-.water-tint-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  margin-top: -7px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 2px solid hsl(var(--water-hue), 85%, 45%);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28);
-  cursor: grab;
-}
-.water-tint-slider:active::-webkit-slider-thumb { cursor: grabbing; scale: 0.96; }
-.water-tint-slider::-moz-range-track {
-  height: 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  background: linear-gradient(90deg,
-    hsl(0, 90%, 62%) 0%, hsl(40, 95%, 60%) 11%, hsl(70, 90%, 55%) 22%,
-    hsl(140, 70%, 48%) 33%, hsl(174, 75%, 48%) 40%, hsl(200, 90%, 58%) 50%,
-    hsl(240, 80%, 62%) 62%, hsl(280, 75%, 62%) 74%, hsl(320, 85%, 62%) 86%,
-    hsl(360, 90%, 62%) 100%);
-}
-.water-tint-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 2px solid hsl(var(--water-hue), 85%, 45%);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28);
-}
-.water-tint-hint {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  line-height: 1.6;
-}
-html[data-interface="glass"] .water-tint-control {
-  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.14));
-  border-color: rgba(255, 255, 255, 0.52);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-html[data-interface="glass"] .water-tint-label { color: var(--text); }
-html[data-interface="glass"] .water-tint-value,
-html[data-interface="glass"] .water-tint-hint { color: var(--text-secondary); }
-@media (max-width: 520px) {
-  .water-tint-control { padding: 10px 12px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  html[data-wallpaper="water"] .appearance-water-tint { transition: none; }
-  .water-tint-slider:active::-webkit-slider-thumb { scale: none; }
 }

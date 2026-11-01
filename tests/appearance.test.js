@@ -195,10 +195,7 @@ test('appearance.js exposes the full interface + theme API and remembers themes 
   assert.match(script, /function writeStoredTheme\(style, theme\) \{[\s\S]*?localStorage\.setItem\(themeKey\(style\), theme\);/);
   assert.match(script, /root\.setAttribute\('data-wallpaper', currentTheme\);/,
     'the theme must be exposed through html[data-wallpaper]');
-  assert.match(script, /var color = THEME_COLORS\[currentTheme\] \|\| '#f8fafc';/);
-  assert.match(script, /color = 'hsl\(' \+ currentWaterHue \+ ', 38%, 72%\)';/,
-    'a custom water hue is reflected in the mobile theme-color');
-  assert.match(script, /meta\.setAttribute\('content', color\);/);
+  assert.match(script, /meta\.setAttribute\('content', THEME_COLORS\[currentTheme\] \|\| '#f8fafc'\);/);
 
   // Switching interface applies that interface's remembered theme.
   assert.match(script, /function paint\(style, themeOverride\) \{[\s\S]*?root\.setAttribute\('data-interface', currentStyle\);[\s\S]*?applyTheme\([^;]*readStoredTheme\(currentStyle\)/);
@@ -227,8 +224,8 @@ test('settings, storage events and focus handling stay in sync for both control 
   assert.match(script, /applyThemeOption\(radio\.value, \{ announce: true \}\)/);
   assert.match(script, /applyStyle\(radio\.value, \{ announce: true \}\)/);
 
-  // Cross-tab sync reacts to the interface key, any theme key, the water hue and a full site-data wipe (key === null).
-  assert.match(script, /if \(event\.key !== null && event\.key !== STORAGE_KEY && event\.key !== WATER_HUE_KEY &&\s*event\.key\.indexOf\(THEME_PREFIX\) !== 0\) return;/);
+  // Cross-tab sync reacts to the interface key, any theme key and a full site-data wipe (key === null).
+  assert.match(script, /if \(event\.key !== null && event\.key !== STORAGE_KEY && event\.key\.indexOf\(THEME_PREFIX\) !== 0\) return;/);
   assert.match(script, /window\.addEventListener\('storage', function \(event\) \{[\s\S]*?paint\(readStoredStyle\(\)\);/);
 
   // Opening focuses the checked interface radio; closing (MutationObserver on the overlay style) restores the gear.
@@ -283,10 +280,10 @@ test('background layer is wallpaper-driven and contains the aurora, water and no
   assert.doesNotMatch(css, /html\[data-interface="glass"\]\[data-wallpaper="night"\] \{/);
 
   // Water theme uses the caustics image layer and hides the aurora blobs; other themes hide the water layer.
-  assert.match(css, /html\[data-wallpaper="water"\] \.appearance-water \{[\s\S]*?url\("assets\/water-caustics\.webp"\)[\s\S]*?animation: glass-water-drift 80s ease-in-out infinite alternate;/);
+  assert.match(css, /html\[data-wallpaper="water"\] \.appearance-water \{[\s\S]*?url\("assets\/water-caustics\.webp(?:\?v=[a-f0-9]+)?"\)[\s\S]*?animation: glass-water-drift 80s ease-in-out infinite alternate;/);
   assert.match(css, /html\[data-wallpaper="water"\] \.appearance-backdrop \.appearance-aurora \{ display: none; \}/);
   assert.match(css, /html\[data-wallpaper\]:not\(\[data-wallpaper="water"\]\) \.appearance-water \{ display: none; \}/);
-  assert.match(css, /\.theme-swatch\.is-water \{\s*background-image: url\("assets\/water-caustics\.webp"\);/,
+  assert.match(css, /\.theme-swatch\.is-water \{\s*background-image: url\("assets\/water-caustics\.webp(?:\?v=[a-f0-9]+)?"\);/,
     'the water theme swatch should preview the caustics texture');
   assert.match(css, /@keyframes glass-aurora-drift \{/);
   assert.match(css, /@keyframes glass-water-drift \{/);
@@ -401,7 +398,9 @@ test('degrades for reduced motion, reduced transparency and missing backdrop-fil
 });
 
 test('keeps appearance scoped: wallpaper rules are theme-scoped, blur rules are glass-scoped', () => {
-  assert.doesNotMatch(css, /html\[data-interface="classic"\](?!\[data-wallpaper="night"\])/, 'legacy classic overrides are limited to night readability');
+  assert.doesNotMatch(css, /html\[data-interface="classic"\](?!\[data-wallpaper="(?:night|water)"\])/, 'legacy classic overrides are limited to night/water readability');
+  assert.match(ruleBody(/^html\[data-interface="classic"\]\[data-wallpaper="water"\]$/), /--text-secondary: #334155;/,
+    'classic + water keeps secondary copy readable on the bright caustics');
   for (const rule of cssLeafRules.filter(block => /backdrop-filter\s*:/.test(block.body))) {
     assert.match(rule.selector, /html(?:\.glass-(?:gpu|refraction))?\[data-interface="glass"\]/,
       `backdrop-filter must never leak into the classic interface: ${rule.selector}`);

@@ -781,7 +781,7 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
 }
 </style>
 <link rel="stylesheet" href="study-tools.css?v=536a2258f0b5">
-<link rel="stylesheet" href="appearance.css?v=343d4aa4276f">
+<link rel="stylesheet" href="appearance.css?v=cb3b27356ced">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -796,14 +796,6 @@ try {
   var savedThemeColor = document.querySelector('meta[name="theme-color"]');
   var wallpaperColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
   if (savedThemeColor) savedThemeColor.setAttribute('content', wallpaperColors[savedTheme] || '#f8fafc');
-  // 水波颜色条：首帧前把色相变量设好，避免水波先闪一下默认青绿再变色。
-  var savedWaterHue = parseInt(localStorage.getItem('cet6_water_hue'), 10);
-  if (!isFinite(savedWaterHue)) savedWaterHue = 174;
-  savedWaterHue = ((savedWaterHue % 360) + 360) % 360;
-  document.documentElement.style.setProperty('--water-hue', String(savedWaterHue));
-  document.documentElement.style.setProperty('--water-tint-opacity', savedWaterHue === 174 ? '0' : '0.92');
-  document.documentElement.dataset.waterHue = String(savedWaterHue);
-  document.documentElement.dataset.waterTint = savedWaterHue === 174 ? 'off' : 'on';
 } catch (error) {
   document.documentElement.dataset.interface = 'classic';
   document.documentElement.dataset.wallpaper = 'minimal';
@@ -818,7 +810,6 @@ try {
   <span class="appearance-aurora aurora-rose"></span>
   <span class="appearance-water"></span>
   <span class="appearance-noise"></span>
-  <span class="appearance-water-tint" aria-hidden="true"></span>
 </div>
 <button class="settings-entry" id="btnOpenSettings" type="button" aria-label="打开设置" aria-haspopup="dialog" title="设置">
   <svg class="settings-entry-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -1055,18 +1046,6 @@ try {
             <span class="appearance-option-mark" aria-hidden="true"></span>
           </label>
         </div>
-        <div class="water-tint-control" id="waterTintControl" hidden>
-          <div class="water-tint-head">
-            <label class="water-tint-label" for="waterHueSlider">水波颜色</label>
-            <span class="water-tint-value">
-              <span class="water-tint-chip" id="waterHueChip" aria-hidden="true"></span>
-              <output class="water-tint-text" id="waterHueValue" for="waterHueSlider">青绿 174°</output>
-            </span>
-          </div>
-          <input class="water-tint-slider" id="waterHueSlider" type="range" min="0" max="359" step="1" value="174"
-                 aria-label="水波颜色（色相）" aria-valuetext="青绿 174°" aria-describedby="waterHueHint">
-          <p class="water-tint-hint" id="waterHueHint">左右拖动调整水波背景的颜色，只影响“水波”主题；拖回 174° 即恢复原来的青绿色。</p>
-        </div>
       </section>
     </div>
   </div>
@@ -1076,9 +1055,9 @@ try {
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=e69ab7911425"></script>
 <script src="study-tools-ui.js?v=05ff90d3d8d3"></script>
-<script src="appearance.js?v=740d99430315"></script>
+<script src="appearance.js?v=f89c8f514267"></script>
 <script src="glass-optics.js?v=c4a6448d2335"></script>
-<script src="glass-renderer.js?v=0626ad6fff04"></script>
+<script src="glass-renderer.js?v=8ffd5e4def62"></script>
 <script src="glass-refraction.js?v=4b9e3d9f6ac5"></script>
 <script src="glass-interaction.js?v=a134a404071f"></script>
 <script>

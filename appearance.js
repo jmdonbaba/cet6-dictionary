@@ -32,12 +32,9 @@
     night: '#0b1026',
     water: '#8fd8d2'
   };
-  var WATER_HUE_KEY = 'cet6_water_hue';
-  var DEFAULT_WATER_HUE = 174;
   var root = document.documentElement;
   var currentStyle = CLASSIC;
   var currentTheme = DEFAULT_THEMES[CLASSIC];
-  var currentWaterHue = DEFAULT_WATER_HUE;
 
   function normalize(style) {
     return STYLES.indexOf(style) === -1 ? CLASSIC : style;
@@ -89,86 +86,6 @@
     }
   }
 
-  function normalizeWaterHue(value) {
-    var hue = parseInt(value, 10);
-    if (!isFinite(hue)) return DEFAULT_WATER_HUE;
-    return ((hue % 360) + 360) % 360;
-  }
-
-  function readStoredWaterHue() {
-    try {
-      var raw = window.localStorage.getItem(WATER_HUE_KEY);
-      return raw === null || raw === '' ? DEFAULT_WATER_HUE : normalizeWaterHue(raw);
-    } catch (error) {
-      return DEFAULT_WATER_HUE;
-    }
-  }
-
-  function writeStoredWaterHue(hue) {
-    try {
-      window.localStorage.setItem(WATER_HUE_KEY, String(hue));
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function waterColorName(hue) {
-    if (hue < 15) return '玫红';
-    if (hue < 45) return '橙';
-    if (hue < 70) return '黄';
-    if (hue < 150) return '绿';
-    if (hue < 195) return '青绿';
-    if (hue < 225) return '青蓝';
-    if (hue < 255) return '蓝';
-    if (hue < 290) return '紫';
-    if (hue < 330) return '品红';
-    return '玫红';
-  }
-
-  function waterHueText(hue) {
-    return waterColorName(hue) + ' ' + hue + '°';
-  }
-
-  function updateThemeColor() {
-    var meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) return;
-    var color = THEME_COLORS[currentTheme] || '#f8fafc';
-    if (currentTheme === 'water' && currentWaterHue !== DEFAULT_WATER_HUE) {
-      color = 'hsl(' + currentWaterHue + ', 38%, 72%)';
-    }
-    meta.setAttribute('content', color);
-  }
-
-  function syncWaterHueControls() {
-    var slider = document.getElementById('waterHueSlider');
-    var output = document.getElementById('waterHueValue');
-    var chip = document.getElementById('waterHueChip');
-    var control = document.getElementById('waterTintControl');
-    var label = waterHueText(currentWaterHue);
-    if (slider) {
-      if (Number(slider.value) !== currentWaterHue) slider.value = String(currentWaterHue);
-      slider.setAttribute('aria-valuetext', label);
-    }
-    if (output) output.textContent = label;
-    if (chip) chip.style.background = 'hsl(' + currentWaterHue + ', 100%, 55%)';
-    if (control) control.hidden = currentTheme !== 'water';
-  }
-
-  function applyWaterHue(value, options) {
-    var settings = options || {};
-    var hue = normalizeWaterHue(value);
-    currentWaterHue = hue;
-    root.style.setProperty('--water-hue', String(hue));
-    root.style.setProperty('--water-tint-opacity', hue === DEFAULT_WATER_HUE ? '0' : '0.92');
-    root.dataset.waterHue = String(hue);
-    root.dataset.waterTint = hue === DEFAULT_WATER_HUE ? 'off' : 'on';
-    updateThemeColor();
-    syncWaterHueControls();
-    if (!settings.silent) writeStoredWaterHue(hue);
-    return currentWaterHue;
-  }
-
   function radioInputs(name) {
     return Array.prototype.slice.call(document.querySelectorAll('input[name="' + name + '"]'));
   }
@@ -186,13 +103,17 @@
       var option = radio.closest ? radio.closest('.theme-option') : null;
       if (option) option.classList.toggle('is-selected', selected);
     });
-    syncWaterHueControls();
+  }
+
+  function updateThemeColor() {
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEME_COLORS[currentTheme] || '#f8fafc');
   }
 
   function dispatchChange() {
     try {
       document.dispatchEvent(new CustomEvent('appearancechange', {
-        detail: { style: currentStyle, theme: currentTheme, waterHue: currentWaterHue }
+        detail: { style: currentStyle, theme: currentTheme }
       }));
     } catch (error) {
       /* CustomEvent 不可用时静默忽略，界面本身已经生效 */
@@ -260,23 +181,7 @@
       }
     }
     dispatchChange();
-    // 切到水波后把新出现的颜色条滚进视野，避免它藏在设置面板折叠线下面。
-    if (next === 'water') revealWaterHueControl();
     return currentTheme;
-  }
-
-  function revealWaterHueControl() {
-    var modal = document.getElementById('modalSettings');
-    var control = document.getElementById('waterTintControl');
-    if (!modal || !control || !modal.classList.contains('active') || control.hidden) return;
-    window.setTimeout(function () {
-      try {
-        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        control.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
-      } catch (error) {
-        /* scrollIntoView 不可用时保持原滚动位置 */
-      }
-    }, 80);
   }
 
   function getStyle() {
@@ -343,34 +248,16 @@
       });
     });
 
-    // 水波颜色条：拖动实时上色，松手/键盘确认时才写入本地存储。
-    var hueSlider = document.getElementById('waterHueSlider');
-    if (hueSlider) {
-      hueSlider.addEventListener('input', function () {
-        applyWaterHue(hueSlider.value, { silent: true });
-      });
-      hueSlider.addEventListener('change', function () {
-        applyWaterHue(hueSlider.value);
-      });
-    }
-
     syncControls();
 
-    // 同一浏览器的另一个标签页切换界面/主题/水波颜色，或站点数据被清空时保持同步。
+    // 同一浏览器的另一个标签页切换界面/主题，或站点数据被清空时保持同步。
     window.addEventListener('storage', function (event) {
-      if (event.key !== null && event.key !== STORAGE_KEY && event.key !== WATER_HUE_KEY &&
-          event.key.indexOf(THEME_PREFIX) !== 0) return;
-      if (event.key === WATER_HUE_KEY) {
-        applyWaterHue(readStoredWaterHue(), { silent: true });
-        return;
-      }
+      if (event.key !== null && event.key !== STORAGE_KEY && event.key.indexOf(THEME_PREFIX) !== 0) return;
       paint(readStoredStyle());
-      if (event.key === null) applyWaterHue(readStoredWaterHue(), { silent: true });
     });
   }
 
   // 首帧前内联脚本已经设过一次；这里补齐选中态与监听器。
-  applyWaterHue(readStoredWaterHue(), { silent: true });
   paint(readStoredStyle());
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initSettings);
@@ -381,8 +268,6 @@
   window.Appearance = Object.freeze({
     KEY: STORAGE_KEY,
     THEME_PREFIX: THEME_PREFIX,
-    WATER_HUE_KEY: WATER_HUE_KEY,
-    DEFAULT_WATER_HUE: DEFAULT_WATER_HUE,
     STYLES: STYLES.slice(),
     THEMES: THEMES.slice(),
     THEME_LABELS: Object.freeze(Object.assign({}, THEME_LABELS)),
@@ -391,9 +276,6 @@
     set: applyStyle,
     getTheme: getTheme,
     setTheme: applyThemeOption,
-    getWaterHue: function () { return currentWaterHue; },
-    setWaterHue: applyWaterHue,
-    waterHueText: waterHueText,
     openSettings: openSettings
   });
 })();

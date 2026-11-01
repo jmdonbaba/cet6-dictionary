@@ -61,15 +61,15 @@ CANDIDATE_DIR = ROOT / ".gstack" / "water"
 PALETTE_L = np.array([0.00, 0.12, 0.25, 0.40, 0.55, 0.70, 0.84, 0.93, 1.00], dtype=np.float64)
 PALETTE_RGB = np.array(
     [
-        [64, 134, 144],    # #408690 背光深青（少量，增加层次）
-        [80, 156, 164],    # #509ca4
-        [98, 178, 184],    # #62b2b8
-        [120, 198, 202],   # #78c6ca
-        [146, 214, 216],   # #92d6d8
-        [175, 229, 230],   # #afe5e6
-        [207, 241, 241],   # #cff1f1
-        [231, 249, 248],   # #e7f9f8  接近用户给的 #e8fbf7
-        [247, 253, 252],   # 近白高光
+        [42, 102, 148],    # #2a6694 背光深蓝（少量，增加层次）
+        [56, 124, 174],    # #387cae
+        [74, 148, 198],    # #4a94c6
+        [98, 172, 214],    # #62acd6
+        [128, 196, 230],   # #80c4e6
+        [162, 219, 241],   # #a2dbf1
+        [200, 238, 250],   # #c8eefa
+        [228, 249, 254],   # #e4f9fe  接近参考图的高光
+        [246, 253, 255],   # 近白高光
     ],
     dtype=np.float64,
 )
@@ -164,6 +164,52 @@ PRESETS: dict[str, dict] = {
         soft_blur=3.20,
         final_blur=0.60,
     ),
+    # C. 蓝调清澈：偏钴蓝/湖蓝的水色，焦散清晰锐利，用作当前默认壁纸
+    "blue": dict(
+        swell_wl=(300.0, 1100.0),
+        medium_wl=(170.0, 600.0),
+        medium_sigma=0.24,
+        medium_strength=1.58,
+        medium_weight=1.00,
+        fine_wl=(32.0, 120.0),
+        fine_sigma=0.19,
+        fine_strength=1.08,
+        fine_weight=0.40,
+        micro_wl=(10.0, 36.0),
+        micro_sigma=0.20,
+        micro_strength=0.72,
+        micro_weight=0.03,
+        ridge_power=2.60,
+        ridge_blur=0.70,
+        glow=0.06,
+        crest_weight=0.50,
+        crest_sigma=0.50,
+        crest_power=2.05,
+        caustic_gain=0.55,
+        base=0.190,
+        ambient=0.065,
+        tone=0.060,
+        bottom_light=0.035,
+        haze=0.015,
+        grain=0.0024,
+        saturation=1.08,
+        sun=(0.64, 0.16, 0.025),
+        light_dir=(0.82, -0.57),
+        sheen=0.045,
+        sheen_scale=11.0,
+        ripple=0.026,
+        ripple_dir=(0.7, 0.7),
+        focus_base=0.28,
+        focus_range=1.15,
+        depth_base=0.07,
+        depth_gain=0.46,
+        depth_focus=0.07,
+        soft_blur=1.60,
+        final_blur=0.20,
+        sharpen=1.3,
+        sharpen_percent=110,
+        sharpen_threshold=1,
+    ),
     # C. 阳光午后：亮纹更亮更聚、下部牛奶感更强、整体更暖更雾
     "sunlit": dict(
         swell_wl=(360.0, 1400.0),
@@ -208,7 +254,7 @@ PRESETS: dict[str, dict] = {
         final_blur=1.10,
     ),
 }
-DEFAULT_PRESET = "soft"
+DEFAULT_PRESET = "blue"
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +619,15 @@ def generate(
     final_blur = params.get("final_blur", 0.0)
     if final_blur > 0:
         image = image.filter(ImageFilter.GaussianBlur(final_blur))
+
+    # 清晰度：轻微 USM 让焦散亮边更利落（只增强边缘，不改变水体明暗结构）
+    sharpen = params.get("sharpen", 0.0)
+    if sharpen > 0:
+        image = image.filter(ImageFilter.UnsharpMask(
+            radius=sharpen,
+            percent=int(params.get("sharpen_percent", 80)),
+            threshold=int(params.get("sharpen_threshold", 2)),
+        ))
 
     # 最终轻微颗粒（照片感 + 进一步 dither）
     final = np.asarray(image, dtype=np.float32) / 255.0
