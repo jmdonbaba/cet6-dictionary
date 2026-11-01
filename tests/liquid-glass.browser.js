@@ -109,7 +109,7 @@ const ROOT = path.resolve(__dirname, '..');
     }
     await page.locator('#btnOpenSettings').click();
     await page.waitForTimeout(350);
-    assert.ok(await page.locator('#modalSettings').evaluate(c => getComputedStyle(c, '::before').filter !== 'none'),
+    assert.ok(await page.locator('#modalSettings').evaluate(c => !!c.querySelector('.glass-modal-canvas') || getComputedStyle(c, '::before').filter !== 'none'),
       'opening a modal participates in calibrated glass rendering');
     await page.keyboard.press('Escape');
     await page.setViewportSize({ width: 390, height: 844 });

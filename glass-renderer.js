@@ -7,6 +7,7 @@
   'use strict';
   var root = document.documentElement;
   var canvas, gl, program, texture, buttonTexture, source, buffer;
+  var modalElement = null, modalCanvas = null;
   var active = false, failed = false, frame = 0, intensity = 1, lensScale = 1, lensBand = 63;
   var originX=0,originY=0,pixelRatio=0,layerCount=0,layerIntensity=1;
   var width = 0, height = 0, theme = '', draws = 0, lenses = 0, buttonCount = 0, buttonIntensity = 1;
@@ -222,11 +223,11 @@
   function draw(now) {
     frame = 0;
     if (!active || document.hidden) return;
-    if (root.dataset.interface !== 'glass' || innerWidth <= 720) { root.classList.remove('glass-gpu'); return; }
+    if (root.dataset.interface !== 'glass' || innerWidth <= 720) { clearModal();root.classList.remove('glass-gpu'); return; }
     try {
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
       var box=canvas.getBoundingClientRect();
-      if(!box.width||!box.height){root.classList.remove('glass-gpu');return;}
+      if(!box.width||!box.height){clearModal();root.classList.remove('glass-gpu');return;}
       originX=box.left;originY=box.top;
       if (width !== box.width || height !== box.height || pixelRatio !== (devicePixelRatio||1) || theme !== root.dataset.wallpaper) {
         width=box.width;height=box.height;pixelRatio=devicePixelRatio||1;theme=root.dataset.wallpaper;
@@ -272,9 +273,9 @@
       gl.drawArrays(gl.TRIANGLES,0,3);
       drawLayers(sx,sy,rects,shapes);
       drawButtons(sx, sy, rects, shapes);
+      drawModal(sx,sy,rects,shapes);
       draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
-      if (document.querySelector('.modal-card.active')) motionUntil = 0;
       if (performance.now() < motionUntil) requestRender();
       if (waterAnimating) requestRender();
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
@@ -284,6 +285,46 @@
     gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,buttonTexture);
     gl.copyTexSubImage2D(gl.TEXTURE_2D,0,0,0,0,0,canvas.width,canvas.height);
     gl.activeTexture(gl.TEXTURE0);
+  }
+  function clearModal() {
+    if(modalCanvas)modalCanvas.remove();
+    if(modalElement)modalElement.classList.remove('glass-modal-gpu');
+    modalCanvas=modalElement=null;
+  }
+  function drawModal(sx,sy,rects,shapes) {
+    var element=document.querySelector('.modal-card.active');
+    if(!element||!element.getBoundingClientRect().width){clearModal();return;}
+    if(element!==modalElement){
+      clearModal();modalElement=element;
+      modalCanvas=document.createElement('canvas');
+      modalCanvas.className='glass-modal-canvas';modalCanvas.setAttribute('aria-hidden','true');
+      element.prepend(modalCanvas);element.classList.add('glass-modal-gpu');
+    }
+    // Reuse the card shader and its already-composited backdrop. Copy only this
+    // plate above the dimmed overlay; page text never enters its optical layer.
+    // This is one shared GL context, with no DOM capture or per-control canvas.
+    copyComposite();gl.enable(gl.SCISSOR_TEST);
+    drawSurface(element,false,1,sx,sy,rects,shapes);
+    if(layerIntensity){
+      copyComposite();
+      element.querySelectorAll(GlassOptics.modalLayers+', '+GlassOptics.layers).forEach(function(layer){
+        drawSurface(layer,false,layerIntensity,sx,sy,rects,shapes);
+      });
+    }
+    if(buttonIntensity||controlIntensity){
+      copyComposite();
+      element.querySelectorAll('button, '+GlassOptics.controls).forEach(function(button){
+        if(button.matches('input, .ws-mode-toggle button'))return;
+        var strength=button.matches(GlassOptics.controls)?controlIntensity:buttonIntensity;
+        if(strength)drawSurface(button,true,strength,sx,sy,rects,shapes);
+      });
+    }
+    gl.disable(gl.SCISSOR_TEST);
+    var r=element.getBoundingClientRect(),w=Math.max(1,Math.round(r.width*sx)),h=Math.max(1,Math.round(r.height*sy));
+    if(modalCanvas.width!==w)modalCanvas.width=w;
+    if(modalCanvas.height!==h)modalCanvas.height=h;
+    var ctx=modalCanvas.getContext('2d');ctx.clearRect(0,0,w,h);
+    ctx.drawImage(canvas,(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy,0,0,w,h);
   }
   function materialRadius(element,r) {
     var radius=getComputedStyle(element).borderTopLeftRadius;
@@ -295,12 +336,13 @@
   function setParents(element,sx,sy) {
     var rectangles=new Float32Array(16),radii=new Float32Array(4),count=0;
     var popup=element.closest('.more-menu,.study-export-menu,.ws-search-dropdown,.fav-search-dropdown');
-    var parent=popup || element.parentElement?.closest('.card, '+GlassOptics.layers);
+    var parents=element.closest('.modal-card')?'.modal-card, .modal-body, '+GlassOptics.modalLayers+', '+GlassOptics.layers:'.card, '+GlassOptics.layers;
+    var parent=popup || element.parentElement?.closest(parents);
     while(parent&&count<4){
       var r=parent.getBoundingClientRect();
       rectangles.set([(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy],count*4);
       radii[count]=materialRadius(parent,r)*sx;count++;
-      parent=popup?null:parent.parentElement?.closest('.card, '+GlassOptics.layers);
+      parent=popup?null:parent.parentElement?.closest(parents);
     }
     gl.uniform1i(locations.parentCount,count);
     gl.uniform4fv(locations['parentRects[0]'],rectangles);gl.uniform1fv(locations['parentRadii[0]'],radii);
@@ -371,13 +413,18 @@
   }
 
   function onControlTransition(event) {
-    if (!active || !event.target.matches('button, '+GlassOptics.controls) ||
-        ['scale','transform','translate','left','width'].indexOf(event.propertyName) < 0 || event.target.closest('.modal-card')) return;
+    if (!active || !event.target.matches('button, '+GlassOptics.controls+', '+GlassOptics.modalLayers) ||
+        ['scale','transform','translate','left','width'].indexOf(event.propertyName) < 0) return;
     motionUntil = event.type === 'transitionrun' ? performance.now() + 450 : 0;
     requestRender();
   }
 
   function requestRender() { if (active && !frame) frame = requestAnimationFrame(draw); }
+  function flush() {
+    if(!active||failed)return false;
+    if(frame)cancelAnimationFrame(frame);frame=0;
+    draw(performance.now());return !failed;
+  }
   function enable(options) {
     if (!init()) return false;
     active = true;
@@ -389,6 +436,7 @@
     requestRender(); return true;
   }
   function disable() {
+    clearModal();
     active = false;
     if (frame) cancelAnimationFrame(frame); frame = 0;
     waterAnimating = false;
@@ -397,7 +445,7 @@
   }
   function destroy() {
     disable();
-    window.removeEventListener('scroll', requestRender);
+    document.removeEventListener('scroll', requestRender, true);
     window.removeEventListener('resize', requestRender);
     document.removeEventListener('visibilitychange', requestRender);
     document.removeEventListener('focusin', requestRender);
@@ -409,7 +457,7 @@
     if (canvas) canvas.remove();
     canvas = gl = source = null;
   }
-  window.addEventListener('scroll', requestRender, { passive: true });
+  document.addEventListener('scroll', requestRender, { passive: true, capture: true });
   window.addEventListener('resize', requestRender, { passive: true });
   document.addEventListener('visibilitychange', requestRender);
   document.addEventListener('focusin', requestRender);
@@ -418,7 +466,7 @@
   document.addEventListener('transitionrun', onControlTransition);
   document.addEventListener('transitionend', onControlTransition);
   window.GlassRenderer = {
-    enable: enable, disable: disable, destroy: destroy, render: requestRender,
+    enable: enable, disable: disable, destroy: destroy, render: requestRender, flush: flush,
     setControlIntensity:function(value){controlIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},
     setLayerIntensity: function(value){layerIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},
     setButtonIntensity: function (value) { buttonIntensity = Math.max(0,Math.min(2,Number(value)||0)); requestRender(); },

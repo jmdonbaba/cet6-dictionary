@@ -18,6 +18,7 @@
     // A complete result is one plate above the outer card. Its forms, examples
     // and memory sections share that field instead of bending it independently.
     layers:'.word-result, .word-search-result:has(> .study-content), .vf-detail, .comparison-fav',
+    modalLayers:'.appearance-option, .theme-option, .vf-compact, .page-record-item, .comparison-fav',
     controls:'.ws-mode-slider, .input-area input, .study-tool-form input, .fav-search input, .key-area input, .comparison-search',
     glsl:'float edgeProfile(float u){u=clamp(u,0.,1.);float v=1.-u*u*u*(u*(u*6.-15.)+10.);return v*v; } vec2 edgeOffset(vec2 p,vec2 h,float b){return sign(p)*vec2(edgeProfile((h.x-abs(p.x))/b),edgeProfile((h.y-abs(p.y))/b));}'
   };

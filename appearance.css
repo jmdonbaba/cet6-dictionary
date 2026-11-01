@@ -584,29 +584,20 @@ html[data-interface="glass"] .modal-card::before {
     inset 0 20px 36px -28px rgba(255, 255, 255, 0.95);
 }
 html[data-interface="glass"] .modal-header {
-  border-bottom-color: rgba(255, 255, 255, 0.5);
+  border-bottom-color: transparent;
 }
 html[data-interface="glass"] .modal-overlay {
   background: rgba(10, 16, 28, 0.24);
   backdrop-filter: blur(10px) saturate(108%);
   -webkit-backdrop-filter: blur(10px) saturate(108%);
 }
-/* 弹窗做成真正透出背景的折射玻璃：更低的白底、更厚的模糊，再用一层被
-   原生位移滤器扭曲的高光表现边缘折射；正文仍在未扭曲层上，保持可读。 */
+/* 弹窗与卡片使用同样的低雾度材质；GPU 背景板放在遮罩之上，
+   原生折射保留给窄屏和不支持 GPU 的浏览器。文字始终独立于折射层。 */
 html[data-interface="glass"] .modal-card::before {
-  background-color: rgba(255, 255, 255, 0.32);
-  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.14) 52%, rgba(255, 255, 255, 0.22));
-  backdrop-filter: blur(14px) saturate(145%) brightness(1.02);
-  -webkit-backdrop-filter: blur(14px) saturate(145%) brightness(1.02);
-}
-html[data-interface="glass"] .modal-card::after {
-  background:
-    radial-gradient(ellipse 46% 9% at 18% 0%, rgba(255, 255, 255, 0.8), transparent 72%),
-    radial-gradient(ellipse 10% 42% at 0% 22%, rgba(255, 255, 255, 0.32), transparent 72%),
-    radial-gradient(ellipse 30% 9% at 84% 100%, rgba(255, 255, 255, 0.4), transparent 76%),
-    linear-gradient(125deg, rgba(255, 255, 255, 0.26), transparent 46%, rgba(176, 204, 255, 0.2));
-  filter: var(--glass-filter, none);
-  opacity: 0.8;
+  background-color: rgba(255, 255, 255, 0.26);
+  background-image: var(--glass-tint);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 /* 弹窗打开时不再播放透明度/位移入场动画：动画中的半透明画面会让
    背景折射先浅后深，看起来“闪一下再变色”。滤镜在 openModal 里已同步就位。 */
@@ -616,28 +607,28 @@ html[data-interface="glass"] .modal-card.active {
 /* 弹窗内部的选项/列表也使用玻璃材质，让背景透上来而不是一块块白底。 */
 html[data-interface="glass"] .appearance-option,
 html[data-interface="glass"] .theme-option {
-  background-color: rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  background-color: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 html[data-interface="glass"] .appearance-option.is-selected,
 html[data-interface="glass"] .theme-option.is-selected {
-  background-color: rgba(255, 255, 255, 0.26);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 html[data-interface="glass"] .modal-card .vf-compact {
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid transparent;
+  border-bottom: 1px solid transparent;
   margin: 6px 4px;
   padding: 12px 14px;
-  background-color: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 10px 24px -22px rgba(18, 20, 40, 0.45);
+  background-color: transparent;
+  box-shadow: none;
 }
 html[data-interface="glass"] .modal-card .vf-detail {
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid transparent;
   margin: 0 4px 10px;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: transparent;
 }
 html[data-interface="glass"] .modal-card .fav-search input {
   border-radius: 999px;
@@ -646,11 +637,11 @@ html[data-interface="glass"] .modal-card .fav-search input {
 }
 html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf-detail,
   .comparison-fav, .fav-search, .study-export-menu, .more-menu, .fav-search-dropdown) {
-  background-color: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 8px 22px -18px rgba(31, 17, 66, 0.45);
-  backdrop-filter: blur(14px) saturate(135%);
-  -webkit-backdrop-filter: blur(14px) saturate(135%);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 /* 所有搜索框聚焦都不画描边；用更亮的磨砂玻璃 + 内高光提示焦点，不再做位移折射（避免接缝）。 */
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
@@ -1033,11 +1024,34 @@ html.glass-gpu[data-interface="glass"] .glass-wallpaper-canvas {
   pointer-events: none;
 }
 html.glass-gpu[data-interface="glass"] .card::before,
-html.glass-gpu[data-interface="glass"] .btn-fav-nav::before {
+html.glass-gpu[data-interface="glass"] .btn-fav-nav::before,
+html.glass-gpu[data-interface="glass"] .modal-card.glass-modal-gpu::before {
   filter: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   background-color: rgba(255, 255, 255, 0.26);
+}
+.glass-modal-canvas { display: none; }
+html.glass-gpu[data-interface="glass"] .modal-card.glass-modal-gpu {
+  isolation: isolate;
+  border-width: 0;
+}
+html.glass-gpu[data-interface="glass"] .glass-modal-canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  z-index: -2;
+  pointer-events: none;
+}
+/* The modal's shared canvas owns these lenses too; avoid a second SVG pass. */
+html.glass-gpu[data-interface="glass"] .glass-modal-gpu :is(.glass-layer-optics, .glass-control-optics, button.glass-button-optics)::before {
+  content: none;
+}
+html.glass-gpu[data-interface="glass"] .glass-modal-gpu .glass-input-optics {
+  display: none;
 }
 /* Large moving lenses are expensive to re-rasterize; buttons keep their spring. */
 html[data-interface="glass"] .card {
@@ -1072,36 +1086,12 @@ html.glass-refraction[data-interface="glass"] .glass-layer-optics::before {
   filter: var(--glass-filter, none);
 }
 
-/* Modal inner rows refract their own blurred backdrop: blur first (readability),
-   then displace/disperse, so text stays on an undistorted layer above the optics. */
+/* Inner modal plates refract the clear modal beneath them; no extra white fog. */
 html.glass-refraction[data-interface="glass"] .modal-card :is(.appearance-option, .theme-option,
   .vf-compact, .page-record-item, .comparison-fav).glass-layer-optics::before {
-  backdrop-filter: blur(12px) saturate(145%);
-  -webkit-backdrop-filter: blur(12px) saturate(145%);
+  backdrop-filter: blur(.3px);
+  -webkit-backdrop-filter: blur(.3px);
   filter: var(--glass-filter, none);
-}
-/* 模糊后的背景之上再叠一层被位移扭曲的高光，读出“透明折射”的边缘光学，
-   文字仍在最上层，保持清晰。 */
-html.glass-refraction[data-interface="glass"] .modal-card :is(.appearance-option, .theme-option,
-  .vf-compact, .page-record-item, .comparison-fav).glass-layer-optics::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 78% 18% at 14% 0%, rgba(255, 255, 255, 0.85), transparent 72%),
-    radial-gradient(ellipse 16% 62% at 0% 36%, rgba(255, 255, 255, 0.32), transparent 72%),
-    radial-gradient(ellipse 34% 14% at 86% 100%, rgba(255, 255, 255, 0.3), transparent 76%),
-    linear-gradient(140deg, rgba(255, 255, 255, 0.22), transparent 48%, rgba(170, 200, 255, 0.18));
-  filter: var(--glass-filter, none);
-  opacity: 0.8;
-}
-/* 内部更透一些，让被模糊/折射的弹窗背景真正透上来 */
-html[data-interface="glass"] .appearance-option,
-html[data-interface="glass"] .theme-option {
-  background-color: rgba(255, 255, 255, 0.10);
 }
 
 /* Shared button material, including dynamically generated actions and menu items.
@@ -1350,6 +1340,23 @@ html[data-interface="glass"] .glass-jelly::after {
     background: rgba(30, 17, 58, 0.55);
     backdrop-filter: none;
   }
+}
+
+/* Keep glass geometry, controls and accessibility intact during fast scrolling.
+   Transparent glyphs avoid repainting readable text that is moving too fast
+   to follow; do not hide the elements or their refractive backgrounds. */
+html[data-interface="glass"].glass-fast-scroll #wordSearchModules .word-search-wrapper,
+html[data-interface="glass"].glass-fast-scroll #wordSearchModules .word-search-wrapper * {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
+  text-decoration-color: transparent !important;
+  caret-color: transparent !important;
+}
+html[data-interface="glass"].glass-fast-scroll #wordSearchModules .word-search-wrapper input::placeholder {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  text-shadow: none !important;
 }
 
 /* 深空主题的浅色文字覆盖放在最后，确保优先级高于玻璃界面的通用文字色 */

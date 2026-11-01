@@ -18,10 +18,10 @@
     var button = target.closest('button');
     if (button && button.disabled) return null;
     if(button&&button.closest('.ws-mode-toggle'))return button.closest('.ws-mode-toggle').querySelector('.ws-mode-slider');
-    return button || target.closest('.card, .modal-card, '+GlassOptics.layers+', '+GlassOptics.controls);
+    return button || target.closest('.card, .modal-card, '+GlassOptics.layers+', '+GlassOptics.controls+', '+GlassOptics.modalLayers);
   }
   function render() {
-    if (window.GlassRenderer && !document.querySelector('.modal-card.active')) GlassRenderer.render();
+    if (window.GlassRenderer && (!document.querySelector('.modal-card.active') || document.querySelector('.modal-card.active.glass-modal-gpu'))) GlassRenderer.render();
     if (window.LiquidGlass && LiquidGlass.interact) LiquidGlass.interact(hover,pulse);
   }
   function request() { if (!frame) frame = requestAnimationFrame(tick); }

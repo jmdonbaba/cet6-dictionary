@@ -30,24 +30,21 @@ test('modals get their final refraction before the first paint without an entry 
   assert.match(appearance, /LiquidGlass\.flush\(\)/);
 });
 
-test('modal inner rows share the frosted glass material', () => {
-  assert.match(css, /html\[data-interface="glass"\] \.appearance-option,\s*html\[data-interface="glass"\] \.theme-option \{[\s\S]*?background-color: rgba\(255, 255, 255, 0\.14\);[\s\S]*?backdrop-filter: blur\(16px\) saturate\(140%\);/);
-  assert.match(css, /html\[data-interface="glass"\] \.modal-card :is\(\.page-record-item, \.vf-compact, \.vf-detail,[\s\S]*?backdrop-filter: blur\(14px\) saturate\(135%\);/);
+test('modal inner rows use clear glass without stacked white fog', () => {
+  assert.match(css, /html\[data-interface="glass"\] \.appearance-option,\s*html\[data-interface="glass"\] \.theme-option \{[\s\S]*?background-color: transparent;[\s\S]*?backdrop-filter: none;/);
+  assert.match(css, /html\[data-interface="glass"\] \.modal-card :is\(\.page-record-item, \.vf-compact, \.vf-detail,[\s\S]*?background: transparent;[\s\S]*?backdrop-filter: none;/);
 });
 
-test('modal inner rows get their own blurred-backdrop refraction', () => {
-  assert.match(refraction, /MODAL_INNER = '\.appearance-option, \.theme-option/);
+test('native modal inner rows keep a clear refractive backdrop', () => {
+  assert.match(refraction, /MODAL_INNER = GlassOptics\.modalLayers/);
   const nativeLine = refraction.split('\n').find(line => line.includes('var nativeSelector'));
   assert.ok(nativeLine && nativeLine.includes('MODAL_INNER'), 'modal inner rows join the native surface selector');
   assert.match(refraction, /var inner=element\.matches\(MODAL_INNER\);/);
-  assert.match(css, /\.modal-card :is\(\.appearance-option, \.theme-option,[\s\S]*?\.glass-layer-optics::before \{[\s\S]*?backdrop-filter: blur\(12px\) saturate\(145%\);[\s\S]*?filter: var\(--glass-filter, none\);/);
-  assert.match(css, /\.modal-card :is\(\.appearance-option, \.theme-option,[\s\S]*?\.glass-layer-optics::after \{[\s\S]*?filter: var\(--glass-filter, none\);/);
+  assert.match(css, /\.modal-card :is\(\.appearance-option, \.theme-option,[\s\S]*?\.glass-layer-optics::before \{[\s\S]*?backdrop-filter: blur\(\.3px\);[\s\S]*?filter: var\(--glass-filter, none\);/);
 });
 
 test('modal card itself is transparent refractive glass, not a flat white sheet', () => {
-  assert.match(css, /html\[data-interface="glass"\] \.modal-card::before \{[\s\S]*?background-color: rgba\(255, 255, 255, 0\.32\);[\s\S]*?backdrop-filter: blur\(14px\) saturate\(145%\) brightness\(1\.02\);/);
-  const after = css.match(/html\[data-interface="glass"\] \.modal-card::after \{[\s\S]*?\n\}/);
-  assert.ok(after, 'modal refractive highlight layer must exist');
-  assert.match(after[0], /radial-gradient/);
-  assert.match(after[0], /filter: var\(--glass-filter, none\);/);
+  assert.match(css, /html\[data-interface="glass"\] \.modal-card::before \{[\s\S]*?background-color: rgba\(255, 255, 255, 0\.26\);[\s\S]*?background-image: var\(--glass-tint\);/);
+  assert.match(renderer, /drawSurface\(element,false,1,sx,sy,rects,shapes\)/, 'modal uses the card shader');
+  assert.match(renderer, /ctx\.drawImage\(canvas,/, 'the actual refracted wallpaper is presented above the overlay');
 });

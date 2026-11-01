@@ -110,23 +110,21 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
 
     const settings = await openModal('#btnOpenSettings', '#modalSettings');
     assert.equal(settings.immediate.active, true);
-    assert.match(settings.immediate.filter, /url\("?#?cet6-liquid-refract/, 'modal filter must exist in the same task as the open');
+    assert.equal(settings.immediate.filter, 'none', 'the card renderer supplies real refraction without a second SVG pass');
     assert.equal(settings.immediate.animation, 'none', 'glass modals must not animate opacity over their refraction');
-    assert.match(settings.immediate.backdrop, /blur\(14px\) saturate\(1\.45\)/,
-      'modal glass blurs the background before refracting it');
-    assert.match(settings.modalAfter.filter, /cet6-liquid-refract-surface/,
-      'modal highlight layer is displaced by the native refraction filter');
-    assert.match(settings.styles.innerBackdrop, /blur\(16px\) saturate\(1\.4\)/);
-    assert.match(settings.styles.innerBackground, /rgba\(255, 255, 255, 0\.1\)/);
+    assert.equal(settings.immediate.backdrop, 'none', 'modal glass stays as clear as page cards');
+    assert.equal(settings.modalAfter.filter, 'none', 'highlights are not a fake refractive backdrop');
+    assert.equal(settings.styles.innerBackdrop, 'none');
+    assert.equal(settings.styles.innerBackground, 'rgba(0, 0, 0, 0)');
     assert.ok(settings.stable, 'settings modal must keep the same filter and run no animations after painting');
     const innerOptics = settings.innerOptics;
 
     const vocab = await openModal('#btnOpenVocabFav', '#modalVocabFav');
-    assert.match(vocab.immediate.filter, /url\("?#?cet6-liquid-refract/);
+    assert.equal(vocab.immediate.filter, 'none');
     assert.equal(vocab.immediate.animation, 'none');
 
     const restore = await openModal('#btnRestorePage', '#modalRestorePage');
-    assert.match(restore.immediate.filter, /url\("?#?cet6-liquid-refract/);
+    assert.equal(restore.immediate.filter, 'none');
     assert.equal(restore.immediate.animation, 'none');
 
     assert.deepEqual(errors, []);

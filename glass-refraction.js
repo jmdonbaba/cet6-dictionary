@@ -547,6 +547,7 @@
     clearTimeout(surfaceTimer);
     surfaceTimer = 0;
     syncSurfaces();
+    if(gpuActive() && typeof GlassRenderer.flush === 'function')GlassRenderer.flush();
     return true;
   }
 
@@ -632,7 +633,7 @@
   // and corner radius; using the largest card's map on every card stretches edges.
   // Modal content sits above the blurred overlay; give the inner rows their own
   // refracted layer so the panel reads as transparent glass instead of flat frost.
-  var MODAL_INNER = '.appearance-option, .theme-option, .vf-compact, .page-record-item, .comparison-fav';
+  var MODAL_INNER = GlassOptics.modalLayers;
   var surfaces = new Map();
   var mapCache = new Map();
   var surfaceSerial = 0;

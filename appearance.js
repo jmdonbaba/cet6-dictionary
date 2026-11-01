@@ -6,7 +6,8 @@
      cet6_theme_glass（默认 water），可选 minimal/water/aurora/peach/night；
    - <head> 里的内联预加载脚本会在首帧前把 html[data-interface] 与
      html[data-wallpaper] 设好，避免闪烁；
-   - 本文件负责：应用界面与主题、同步设置面板选中态、处理切换与跨标签页同步。
+   - 本文件负责：应用界面与主题、同步设置面板选中态、处理切换与跨标签页同步、
+     高速滚动时暂时隐藏玻璃卡片文字。
    ========================================================================== */
 (function () {
   'use strict';
@@ -258,8 +259,48 @@
     });
   }
 
+  function watchScrollText() {
+    var lastY = window.scrollY, lastTime = performance.now();
+    var hidden = false, slowSince = null, restoreTimer = 0;
+
+    function showText() {
+      clearTimeout(restoreTimer); restoreTimer = 0;
+      hidden = false; slowSince = null;
+      root.classList.remove('glass-fast-scroll');
+      lastY = window.scrollY; lastTime = performance.now();
+    }
+
+    function onScroll() {
+      if (currentStyle !== GLASS || document.hidden) { showText(); return; }
+      var now = performance.now(), y = window.scrollY;
+      var speed = Math.abs(y - lastY) * 1000 / Math.max(16, now - lastTime);
+      lastY = y; lastTime = now;
+      // Different thresholds plus a short slow period prevent text flickering
+      // around the boundary. Observe native scrolling; never drive its motion.
+      if (speed > Math.max(1200, window.innerHeight * 2.5)) {
+        hidden = true; slowSince = null;
+        root.classList.add('glass-fast-scroll');
+      } else if (hidden && speed < Math.max(500, window.innerHeight)) {
+        if (slowSince === null) slowSince = now;
+        if (now - slowSince >= 90) showText();
+      } else {
+        slowSince = null;
+      }
+      clearTimeout(restoreTimer);
+      // Also restore when a gesture ends without another scroll event.
+      if (hidden) restoreTimer = window.setTimeout(showText, 120);
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scrollend', showText);
+    window.addEventListener('resize', showText);
+    document.addEventListener('visibilitychange', showText);
+    document.addEventListener('appearancechange', showText);
+  }
+
   // 首帧前内联脚本已经设过一次；这里补齐选中态与监听器。
   paint(readStoredStyle());
+  watchScrollText();
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initSettings);
   } else {
