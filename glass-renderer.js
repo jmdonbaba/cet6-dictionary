@@ -14,7 +14,7 @@
   var water = null, waterLoading = false;
   var locations = {};
   var motionUntil = 0;
-  var scrollMotion=null,controlCount=0,controlIntensity=1;
+  var controlCount=0,controlIntensity=1;
   var MAX_LENSES = 16;
   var vertex = 'attribute vec2 position; void main(){ gl_Position=vec4(position,0.,1.); }';
   var fragment = [
@@ -205,12 +205,11 @@
   function draw(now) {
     frame = 0;
     if (!active || document.hidden) return;
-    if (root.dataset.interface !== 'glass' || innerWidth <= 720) { cancelScroll();root.classList.remove('glass-gpu'); return; }
+    if (root.dataset.interface !== 'glass' || innerWidth <= 720) { root.classList.remove('glass-gpu'); return; }
     try {
-      if(scrollMotion)advanceScroll(now||performance.now());
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
       var box=canvas.getBoundingClientRect();
-      if(!box.width||!box.height){cancelScroll();root.classList.remove('glass-gpu');return;}
+      if(!box.width||!box.height){root.classList.remove('glass-gpu');return;}
       originX=box.left;originY=box.top;
       if (width !== box.width || height !== box.height || pixelRatio !== (devicePixelRatio||1) || theme !== root.dataset.wallpaper) {
         width=box.width;height=box.height;pixelRatio=devicePixelRatio||1;theme=root.dataset.wallpaper;
@@ -256,7 +255,7 @@
       draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
       if (document.querySelector('.modal-card.active')) motionUntil = 0;
-      if (scrollMotion || performance.now() < motionUntil) requestRender();
+      if (performance.now() < motionUntil) requestRender();
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
   }
 
@@ -355,29 +354,6 @@
   }
 
   function requestRender() { if (active && !frame) frame = requestAnimationFrame(draw); }
-  // Scroll and paint together: compositor-only smooth scrolling can move DOM
-  // cards ahead of this fixed canvas. Bound each step to overlapping viewports.
-  function scrollToPosition(top) {
-    if(!active||failed||root.dataset.interface!=='glass'||innerWidth<=720||matchMedia('(prefers-reduced-motion: reduce)').matches||matchMedia('(prefers-reduced-transparency: reduce)').matches)return false;
-    var from=window.scrollY,target=Math.max(0,Math.min(top,document.documentElement.scrollHeight-innerHeight));
-    scrollMotion={from:from,target:target,expected:from,start:0,previous:0,duration:Math.min(1600,Math.max(450,Math.sqrt(Math.abs(target-from))*12))};
-    requestRender();return true;
-  }
-  function advanceScroll(now) {
-    var m=scrollMotion;if(Math.abs(window.scrollY-m.expected)>2){scrollMotion=null;return;}
-    var reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if(reducedMotion||matchMedia('(prefers-reduced-transparency: reduce)').matches){window.scrollTo({top:m.target,behavior:reducedMotion?'instant':'smooth'});scrollMotion=null;return;}
-    if(!m.start)m.start=now;
-    var dt=m.previous?Math.min(1/30,(now-m.previous)/1000):1/60;m.previous=now;
-    var t=Math.min(1,(now-m.start)/m.duration),ease=t*t*(3-2*t);
-    var target=Math.min(m.target,Math.max(0,document.documentElement.scrollHeight-innerHeight));
-    var desired=m.from+(target-m.from)*ease,limit=innerHeight*18*dt;
-    var next=m.expected+Math.max(-limit,Math.min(limit,desired-m.expected));
-    window.scrollTo({top:next,behavior:'instant'});m.expected=window.scrollY;
-    if(t===1&&Math.abs(m.expected-target)<1)scrollMotion=null;
-  }
-  function cancelScroll(){scrollMotion=null;}
-  function onScrollKey(event){if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].indexOf(event.key)>=0)cancelScroll();}
   function enable(options) {
     if (!init()) return false;
     active = true;
@@ -389,7 +365,6 @@
     requestRender(); return true;
   }
   function disable() {
-    cancelScroll();
     active = false;
     if (frame) cancelAnimationFrame(frame); frame = 0;
     root.classList.remove('glass-gpu');
@@ -403,27 +378,22 @@
     document.removeEventListener('animationstart',onMaterialAnimation);document.removeEventListener('animationend',onMaterialAnimation);
     document.removeEventListener('transitionrun', onControlTransition);
     document.removeEventListener('transitionend', onControlTransition);
-    window.removeEventListener('wheel',cancelScroll);window.removeEventListener('touchstart',cancelScroll);
-    window.removeEventListener('pointerdown',cancelScroll);window.removeEventListener('keydown',onScrollKey);
     if (gl) { gl.deleteTexture(texture); gl.deleteTexture(buttonTexture); gl.deleteProgram(program); gl.deleteBuffer(buffer); }
     if (canvas) canvas.remove();
     canvas = gl = source = null;
   }
   window.addEventListener('scroll', requestRender, { passive: true });
   window.addEventListener('resize', requestRender, { passive: true });
-  window.addEventListener('wheel',cancelScroll,{passive:true});window.addEventListener('touchstart',cancelScroll,{passive:true});
-  window.addEventListener('pointerdown',cancelScroll,{passive:true});window.addEventListener('keydown',onScrollKey);
   document.addEventListener('visibilitychange', requestRender);
   document.addEventListener('animationstart',onMaterialAnimation);document.addEventListener('animationend',onMaterialAnimation);
   document.addEventListener('transitionrun', onControlTransition);
   document.addEventListener('transitionend', onControlTransition);
   window.GlassRenderer = {
     enable: enable, disable: disable, destroy: destroy, render: requestRender,
-    scrollTo:scrollToPosition,
     setControlIntensity:function(value){controlIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},
     setLayerIntensity: function(value){layerIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},
     setButtonIntensity: function (value) { buttonIntensity = Math.max(0,Math.min(2,Number(value)||0)); requestRender(); },
     setIntensity: function (value) { intensity = value; requestRender(); },
-    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses:lenses+layerCount+buttonCount+controlCount,layers:layerCount,controls:controlCount,scrolling:!!scrollMotion,originX:originX,originY:originY,buttons: buttonCount, width: width, height: height }; }
+    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses:lenses+layerCount+buttonCount+controlCount,layers:layerCount,controls:controlCount,originX:originX,originY:originY,buttons: buttonCount, width: width, height: height }; }
   };
 })();

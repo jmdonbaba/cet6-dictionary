@@ -1057,7 +1057,7 @@ try {
 <script src="study-tools-ui.js?v=05ff90d3d8d3"></script>
 <script src="appearance.js?v=f89c8f514267"></script>
 <script src="glass-optics.js?v=c4a6448d2335"></script>
-<script src="glass-renderer.js?v=8ffd5e4def62"></script>
+<script src="glass-renderer.js?v=9fed646cdc88"></script>
 <script src="glass-refraction.js?v=4b9e3d9f6ac5"></script>
 <script src="glass-interaction.js?v=a134a404071f"></script>
 <script>
@@ -1139,7 +1139,6 @@ function schedulePageJumpUpdate() {
 
 function jumpToPageEdge(edge) {
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!reducedMotion && window.GlassRenderer && GlassRenderer.scrollTo(edge === 'top' ? 0 : document.documentElement.scrollHeight)) return;
   window.scrollTo({
     top: edge === 'top' ? 0 : document.documentElement.scrollHeight,
     behavior: reducedMotion ? 'auto' : 'smooth'
