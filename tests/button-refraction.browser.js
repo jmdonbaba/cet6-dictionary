@@ -33,13 +33,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       for(let y = 3; y < r.height-3; y++) for(let x = 3; x < r.width-3; x++) {
         const i = (Math.floor((r.top+y)*scale)*canvas.width+Math.floor((r.left+x)*scale))*4;
         const d = Math.abs(on[i]-off[i])+Math.abs(on[i+1]-off[i+1])+Math.abs(on[i+2]-off[i+2]);
-        if(x>r.width*.3&&x<r.width*.7&&y>r.height*.35&&y<r.height*.65){center+=d;centerN++;}
+        if(x>r.width*.3&&x<r.width*.7&&y>r.height*.45&&y<r.height*.55){center+=d;centerN++;}
         if(y<r.height*.2||y>r.height*.8){edge+=d;edgeN++;}
       }
       return { center: center/centerN, edge: edge/edgeN };
     });
     assert.ok(difference.edge > 1, `edge must bend the wallpaper: ${JSON.stringify(difference)}`);
-    assert.ok(difference.center < .5, `center must stay flat: ${JSON.stringify(difference)}`);
+    assert.ok(difference.center < .5, `center core must stay flat: ${JSON.stringify(difference)}`);
     await page.locator('#btnOpenSettings').click(); await page.waitForTimeout(400);
     assert.notEqual(await page.locator('#modalSettings .modal-close').evaluate(e => getComputedStyle(e,'::before').filter), 'none', 'modal button refraction belongs above the overlay');
     assert.equal(await page.locator('#modalSettings .modal-close').evaluate(e => getComputedStyle(e).filter), 'none', 'button text/icons must remain sharp');

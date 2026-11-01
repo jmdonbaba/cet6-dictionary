@@ -278,16 +278,6 @@
     return createSvg();
   }
 
-  // 圆角矩形有符号距离场（px 空间，负值 = 在矩形内部）。
-  function roundedRectSdf(px, py, halfWidth, halfHeight, radius) {
-    var r = Math.min(radius, halfWidth, halfHeight);
-    var qx = Math.abs(px) - (halfWidth - r);
-    var qy = Math.abs(py) - (halfHeight - r);
-    var ox = Math.max(qx, 0);
-    var oy = Math.max(qy, 0);
-    return Math.min(Math.max(qx, qy), 0) + Math.sqrt(ox * ox + oy * oy) - r;
-  }
-
   function toByte(value) {
     var rounded = Math.round(value);
     return rounded < 0 ? 0 : rounded > 255 ? 255 : rounded;
@@ -306,9 +296,8 @@
    * 位移图覆盖整个滤镜区域（含 filterPadding 外扩），但只有元素 bbox 内才有
    * 位移值，外扩区域保持中性 —— 这样 box-shadow 既不会被区域裁掉，也不会被位移。
    */
-  function buildMapDataUrl(reference, cornerRadius, button) {
+  function buildMapDataUrl(reference) {
     reference = reference || state.reference;
-    cornerRadius = cornerRadius === undefined ? config.radius : cornerRadius;
     var size = Math.round(clamp(config.mapSize, 128, 1024));
     var canvas = document.createElement('canvas');
     canvas.width = size;
@@ -318,14 +307,12 @@
 
     var halfWidth = Math.max(1, reference.width / 2);
     var halfHeight = Math.max(1, reference.height / 2);
-    var radius = clamp(cornerRadius, 0, Math.min(halfWidth, halfHeight));
-    var band = Math.max(2, Math.min(config.band, Math.min(halfWidth, halfHeight) * (button ? 0.55 : 0.85)));
+    var band = GlassOptics.extent(Math.min(reference.width,reference.height),config.band);
     var padding = clamp(Number(config.filterPadding) || 0, 0, 0.25);
     var regionScale = 1 + padding * 2;
     var image = ctx.createImageData(size, size);
     var data = image.data;
     var amplitude = 127; // 编码幅度：127 → 最大约 ±0.5（feDisplacementMap 再乘 scale）
-    var epsilon = Math.max(1, band * 0.25);
 
     for (var y = 0; y < size; y += 1) {
       // 位移图铺满「滤镜区域」：先换算到元素 bbox 坐标系（px），bbox 外保持中性。
@@ -340,39 +327,11 @@
           data[index + 3] = 255;
           continue;
         }
-        var sdf = roundedRectSdf(px, py, halfWidth, halfHeight, radius);
-        var distance = -sdf; // 到元素边界（圆角矩形）的内部距离
-        var profile;
-        if (distance <= 0) {
-          profile = 1; // 圆角外侧的框角像素（最终会被 border-radius 裁掉）
-        } else if (distance >= band) {
-          data[index] = 128;
-          data[index + 1] = 128;
-          data[index + 2] = 0;
-          data[index + 3] = 255;
-          continue;
-        } else {
-          var t = distance / band;
-          var remaining = 1 - t;
-          profile = remaining * remaining; // 边缘最强，向内平滑归零
-        }
-
-        // 数值梯度 → 内向单位法线
-        var gx = roundedRectSdf(px + epsilon, py, halfWidth, halfHeight, radius) -
-          roundedRectSdf(px - epsilon, py, halfWidth, halfHeight, radius);
-        var gy = roundedRectSdf(px, py + epsilon, halfWidth, halfHeight, radius) -
-          roundedRectSdf(px, py - epsilon, halfWidth, halfHeight, radius);
-        var length = Math.sqrt(gx * gx + gy * gy);
-        var nx = 0;
-        var ny = 0;
-        if (length > 1e-6) {
-          nx = -gx / length;
-          ny = -gy / length;
-        }
-
-        data[index] = toByte(128 + amplitude * profile * nx);
-        data[index + 1] = toByte(128 + amplitude * profile * ny);
-        data[index + 2] = toByte(profile * 20);
+        // Separable smooth coordinates preserve corner orientation as well as
+        // straight-edge order; normalized SDF normals can cross a small corner's center.
+        data[index] = toByte(128 - amplitude * GlassOptics.offset(px,halfWidth,band));
+        data[index + 1] = toByte(128 - amplitude * GlassOptics.offset(py,halfHeight,band));
+        data[index + 2] = 0;
         data[index + 3] = 255;
       }
     }
@@ -461,7 +420,7 @@
       state.svg.querySelectorAll('feDisplacementMap').forEach(function (node) {
         if (node.hasAttribute('data-interactive')) return;
         var localScale = scale;
-        surfaces.forEach(function (entry) { if (entry.filter.contains(node)) localScale = Math.min(scale, entry.maxScale * state.intensity); });
+        surfaces.forEach(function (entry) { if (entry.filter.contains(node)) localScale = Math.min(entry.maxScale * scale / 64, entry.limitScale); });
         var nextScale = String(localScale);
         if (node.getAttribute('scale') !== nextScale) node.setAttribute('scale', nextScale);
       });
@@ -710,7 +669,7 @@
       if (entry && entry.key === key) return;
       var map = mapCache.get(key);
       if (!map) {
-        map = buildMapDataUrl({ width: width, height: height }, radius, button);
+        map = buildMapDataUrl({ width: width, height: height });
         if (!map) return;
         if (mapCache.size >= 24) mapCache.delete(mapCache.keys().next().value);
         mapCache.set(key, map);
@@ -724,7 +683,9 @@
         if (resizeObserver) resizeObserver.observe(element);
       }
       entry.key = key;
-      entry.maxScale = Math.min(config.band * 1.65, Math.min(width, height) * (button ? 0.52 : 0.65));
+      var gradedBand=GlassOptics.extent(Math.min(width,height),config.band);
+      entry.maxScale=2*GlassOptics.amplitude(gradedBand,Math.min(width,height),button,1);
+      entry.limitScale=gradedBand;
       if (button) {
         element.classList.add('glass-button-optics');
         element.style.setProperty('--glass-button-radius', Math.min(radius, width / 2, height / 2) + 'px');
@@ -750,6 +711,7 @@
 
   var interactions = new Map();
   var pressureMap = '';
+  var pressureShades = {};
   function clearInteraction() {
     interactions.forEach(function (effect) { effect.nodes.forEach(function (node) { node.remove(); }); });
     interactions.clear();
@@ -760,10 +722,23 @@
     var ctx=canvas.getContext('2d'), image=ctx.createImageData(64,64);
     for(var y=0;y<64;y++)for(var x=0;x<64;x++){
       var dx=(x-31.5)/31.5,dy=(y-31.5)/31.5;
-      var weight=Math.exp(-3*(dx*dx+dy*dy))*Math.max(0,1-Math.pow(Math.max(Math.abs(dx),Math.abs(dy)),4));
+      var weight=Math.exp(-3*(dx*dx+dy*dy))*GlassOptics.profile(Math.max(Math.abs(dx),Math.abs(dy)));
       var i=(y*64+x)*4;image.data[i]=Math.round(128+126*dx*weight);image.data[i+1]=Math.round(128+126*dy*weight);image.data[i+2]=128;image.data[i+3]=255;
     }
     ctx.putImageData(image,0,0);pressureMap=canvas.toDataURL('image/png');return pressureMap;
+  }
+  function pressureShade(sign) {
+    if(pressureShades[sign])return pressureShades[sign];
+    var canvas=document.createElement('canvas');canvas.width=canvas.height=96;
+    var ctx=canvas.getContext('2d'),image=ctx.createImageData(96,96);
+    for(var y=0;y<96;y++)for(var x=0;x<96;x++){
+      var dx=(x-47.5)/47.5,dy=(y-47.5)/47.5;
+      var shade=((dx+dy)*.7071*.55-.025)*Math.exp(-2*(dx*dx+dy*dy))*GlassOptics.profile(Math.max(Math.abs(dx),Math.abs(dy)))*sign;
+      var i=(y*96+x)*4,light=shade>0;
+      image.data[i]=light?255:12;image.data[i+1]=light?255:10;image.data[i+2]=light?255:22;
+      image.data[i+3]=Math.round(Math.min(light?.22:.28,Math.abs(shade))*255);
+    }
+    ctx.putImageData(image,0,0);pressureShades[sign]=canvas.toDataURL('image/png');return pressureShades[sign];
   }
   function interactionNode(name, attributes) {
     var node=document.createElementNS(NS,name);
@@ -785,9 +760,13 @@
         var image=interactionNode('feImage',{href:pressureTexture(),preserveAspectRatio:'none',result:'pressure_patch'});
         var merge=interactionNode('feMerge',{result:'pressure_field'});
         merge.appendChild(interactionNode('feMergeNode',{in:'pressure_neutral'}));merge.appendChild(interactionNode('feMergeNode',{in:'pressure_patch'}));
-        var warp=interactionNode('feDisplacementMap',{in:'native_edge_glass',in2:'pressure_field',xChannelSelector:'R',yChannelSelector:'G',scale:0,'data-interactive':''});
-        var nodes=[flood,image,merge,warp];nodes.forEach(function(node){entry.filter.appendChild(node);});
-        effect={filter:entry.filter,nodes:nodes,image:image,warp:warp};interactions.set(element,effect);
+        var warp=interactionNode('feDisplacementMap',{in:'native_edge_glass',in2:'pressure_field',xChannelSelector:'R',yChannelSelector:'G',scale:0,result:'pressure_warped_glass','data-interactive':''});
+        var lighting=interactionNode('feImage',{href:pressureShade(1),preserveAspectRatio:'none',result:'pressure_shade'});
+        var opacity=interactionNode('feComponentTransfer',{in:'pressure_shade',result:'pressure_lighting'});
+        var alpha=interactionNode('feFuncA',{type:'linear',slope:0});opacity.appendChild(alpha);
+        var composite=interactionNode('feComposite',{in:'pressure_lighting',in2:'pressure_warped_glass',operator:'over'});
+        var nodes=[flood,image,merge,warp,lighting,opacity,composite];nodes.forEach(function(node){entry.filter.appendChild(node);});
+        effect={filter:entry.filter,nodes:nodes,image:image,warp:warp,lighting:lighting,alpha:alpha,sign:1};interactions.set(element,effect);
       }
       var r=element.getBoundingClientRect();if(!r.width||!r.height)return;
       var h=hover.element===element?hover.level:0,p=pulse.element===element?pulse.level:0;
@@ -797,6 +776,10 @@
       effect.image.setAttribute('y',((point.y-r.top-radius)/r.height*100)+'%');
       effect.image.setAttribute('width',(radius*2/r.width*100)+'%');effect.image.setAttribute('height',(radius*2/r.height*100)+'%');
       effect.warp.setAttribute('scale',String((h*16+p*20)*state.intensity*config.scale/64));
+      ['x','y','width','height'].forEach(function (attribute) {effect.lighting.setAttribute(attribute,effect.image.getAttribute(attribute));});
+      var depth=(h+p)*state.intensity*config.scale/64,sign=depth<0?-1:1;
+      if(sign!==effect.sign){effect.lighting.setAttribute('href',pressureShade(sign));effect.sign=sign;}
+      effect.alpha.setAttribute('slope',String(Math.min(1.4,Math.abs(depth))));
     });
   }
 

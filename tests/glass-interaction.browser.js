@@ -31,6 +31,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const hovered = await pixels();
     const difference = (a,b) => a.reduce((n,v,i) => n+(i%4===3?0:Math.abs(v-b[i])),0)/(a.length*.75);
     assert.ok(difference(before,hovered) > .2, 'hover must change real local background refraction');
+    await page.evaluate(()=>Appearance.setTheme('minimal'));await page.waitForTimeout(300);
+    const flatBefore=await pixels();
+    await page.locator('.interaction-fixture').dispatchEvent('pointermove',{clientX:600,clientY:430,pointerType:'mouse',bubbles:true});
+    await page.waitForTimeout(450);const flatAfter=await pixels();
+    function shadeDelta(a,b,lo,hi){
+      const size=Math.round(Math.sqrt(a.length/4));let value=0,n=0;
+      for(let y=Math.floor(size*lo);y<size*hi;y++)for(let x=Math.floor(size*lo);x<size*hi;x++){
+        const i=(y*size+x)*4;value+=(b[i]+b[i+1]+b[i+2]-a[i]-a[i+1]-a[i+2])/3;n++;
+      }return value/n;
+    }
+    assert.ok(shadeDelta(flatBefore,flatAfter,.18,.38)<-1,'concave upper-left wall must darken even on a plain wallpaper');
+    assert.ok(shadeDelta(flatBefore,flatAfter,.62,.82)>.2,'concave lower-right wall must catch reflected light');
+    await page.evaluate(()=>Appearance.setTheme('aurora'));await page.waitForTimeout(200);
+    await page.locator('.interaction-fixture').dispatchEvent('pointermove',{clientX:600,clientY:430,pointerType:'mouse',bubbles:true});
+    await page.waitForTimeout(350);
     const box = await page.locator('.interaction-fixture').boundingBox();
     const [compressed,rebound] = await page.evaluate(async () => {
       const capture = () => new Promise(resolve => {
