@@ -621,10 +621,33 @@
     return !!(window.GlassRenderer && GlassRenderer.getState().active);
   }
 
+  function removeInputBackground(entry) {
+    if(!entry.background)return;
+    var host=entry.background.parentElement;entry.background.remove();entry.background=null;
+    if(host&&!host.querySelector(':scope > .glass-input-optics'))host.classList.remove('glass-input-host','glass-input-positioned');
+  }
+  function positionInputBackground(entry,element,style) {
+    var host=element.parentElement;
+    if(entry.background&&entry.background.parentElement!==host)removeInputBackground(entry);
+    if(!entry.background){
+      host.classList.add('glass-input-host');
+      if(getComputedStyle(host).position==='static')host.classList.add('glass-input-positioned');
+      entry.background=document.createElement('span');entry.background.className='glass-input-optics';entry.background.setAttribute('aria-hidden','true');host.appendChild(entry.background);
+    }
+    var r=element.getBoundingClientRect(),p=host.getBoundingClientRect();
+    var sx=p.width/(host.offsetWidth||p.width),sy=p.height/(host.offsetHeight||p.height);
+    var css='left:'+((r.left-p.left)/sx-host.clientLeft+host.scrollLeft)+'px;top:'+((r.top-p.top)/sy-host.clientTop+host.scrollTop)+'px;width:'+(r.width/sx)+'px;height:'+(r.height/sy)+'px;border-radius:'+style.borderRadius+';clip-path:inset(0 round '+style.borderRadius+');filter:url(#'+entry.filter.id+');';
+    if(entry.background._glassStyle!==css){
+      // Retain the requested string; browser CSS serialization inserts spaces.
+      entry.background.style.cssText=css;entry.background._glassStyle=css;
+    }
+  }
+
   function clearSurfaces() {
     surfaces.forEach(function (entry, element) {
+      removeInputBackground(entry);
       element.style.removeProperty('--glass-filter');
-      element.classList.remove('glass-button-optics', 'glass-button-positioned', 'glass-layer-optics', 'glass-layer-positioned');
+      element.classList.remove('glass-button-optics', 'glass-button-positioned', 'glass-layer-optics', 'glass-layer-positioned','glass-control-optics');
       element.style.removeProperty('--glass-button-radius');
       element.style.removeProperty('--glass-light-x');
       element.style.removeProperty('--glass-light-y');
@@ -651,10 +674,12 @@
     var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
     // Modals sit above a blurred overlay: their background must be captured there,
     // not in the wallpaper canvas beneath the overlay.
-    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button, .modal-card.active :is('+GlassOptics.layers+')' : config.surfaceSelector+', button, '+GlassOptics.layers;
+    var nativeSelector = gpu ? '.modal-card.active, .modal-card.active button, .modal-card.active :is('+GlassOptics.layers+', '+GlassOptics.controls+')' : config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls;
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
-      var button = element.matches('button:not(.btn-fav-nav)');
+      if(element.matches('.ws-mode-toggle button'))return;
+      var input=element.matches('input'),control=element.matches(GlassOptics.controls);
+      var button = element.matches('button:not(.btn-fav-nav)')||control;
       var layer=element.matches(GlassOptics.layers);
       var minimum = button||layer ? 8 : 32;
       var rect = element.getBoundingClientRect();
@@ -667,7 +692,7 @@
       var radius = parseFloat(style.borderTopLeftRadius) || config.radius;
       var key = [width, height, radius, config.band, config.mapSize, config.filterPadding, button].join(':');
       var entry = surfaces.get(element);
-      if (entry && entry.key === key) return;
+      if (entry && entry.key === key) {if(input)positionInputBackground(entry,element,style);return;}
       var map = mapCache.get(key);
       if (!map) {
         map = buildMapDataUrl({ width: width, height: height });
@@ -686,9 +711,11 @@
       entry.key = key;
       var gradedBand=GlassOptics.extent(Math.min(width,height),config.band);
       entry.maxScale=2*GlassOptics.amplitude(gradedBand,Math.min(width,height),button,1);
-      entry.limitScale=gradedBand;
+      entry.limitScale=gradedBand*.8;
       if(layer){element.classList.add('glass-layer-optics');if(style.position==='static')element.classList.add('glass-layer-positioned');}
-      if (button) {
+      if(input)positionInputBackground(entry,element,style);
+      else if(control)element.classList.add('glass-control-optics');
+      if (button&&!input) {
         element.classList.add('glass-button-optics');
         element.style.setProperty('--glass-button-radius', Math.min(radius, width / 2, height / 2) + 'px');
         if (style.position === 'static') element.classList.add('glass-button-positioned');
@@ -700,8 +727,9 @@
     });
     surfaces.forEach(function (entry, element) {
       if (!visible.has(element)) {
+        removeInputBackground(entry);
         element.style.removeProperty('--glass-filter');
-        element.classList.remove('glass-button-optics', 'glass-button-positioned', 'glass-layer-optics', 'glass-layer-positioned');
+        element.classList.remove('glass-button-optics', 'glass-button-positioned', 'glass-layer-optics', 'glass-layer-positioned','glass-control-optics');
         element.style.removeProperty('--glass-button-radius');
         if (resizeObserver) resizeObserver.unobserve(element);
         entry.filter.remove();

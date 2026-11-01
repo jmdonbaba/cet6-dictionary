@@ -17,7 +17,8 @@
     if (!target || !target.closest || !target.isConnected) return null;
     var button = target.closest('button');
     if (button && button.disabled) return null;
-    return button || target.closest('.card, .modal-card, '+GlassOptics.layers);
+    if(button&&button.closest('.ws-mode-toggle'))return button.closest('.ws-mode-toggle').querySelector('.ws-mode-slider');
+    return button || target.closest('.card, .modal-card, '+GlassOptics.layers+', '+GlassOptics.controls);
   }
   function render() {
     if (window.GlassRenderer && !document.querySelector('.modal-card.active')) GlassRenderer.render();
@@ -94,7 +95,7 @@
   function read(element) {
     if (hover.element!==element && pulse.element!==element) return {hover:[0,0,1,0],pulse:[0,0,1,0]};
     var r=element.getBoundingClientRect();
-    var radius=element.matches('button') ? Math.min(42,Math.max(14,Math.min(r.width,r.height)*.8)) : 78;
+    var radius=element.matches('button, '+GlassOptics.controls) ? Math.min(42,Math.max(14,Math.min(r.width,r.height)*.8)) : 78;
     return {
       hover:hover.element===element ? [hover.x,hover.y,radius,hover.level] : [0,0,1,0],
       pulse:pulse.element===element ? [pulse.x,pulse.y,radius*1.2,pulse.level] : [0,0,1,0]

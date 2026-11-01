@@ -425,7 +425,9 @@ body {
 }
 .modal-close {
   background: none; border: none; font-size: 24px;
-  cursor: pointer; color: var(--text-secondary); padding: 0 4px;
+  cursor: pointer; color: var(--text-secondary); padding: 0;
+  width: 32px; height: 32px; flex: 0 0 32px;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 @media (hover: hover) {
   .modal-close:hover { color: var(--danger); }
@@ -779,7 +781,7 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
 }
 </style>
 <link rel="stylesheet" href="study-tools.css?v=536a2258f0b5">
-<link rel="stylesheet" href="appearance.css?v=bb2f437af53e">
+<link rel="stylesheet" href="appearance.css?v=769044c9bd6f">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -1057,10 +1059,10 @@ try {
 <script src="study-tools.js?v=e69ab7911425"></script>
 <script src="study-tools-ui.js?v=05ff90d3d8d3"></script>
 <script src="appearance.js?v=3628733d0ef0"></script>
-<script src="glass-optics.js?v=c95d6071d2c9"></script>
-<script src="glass-renderer.js?v=20755ce99503"></script>
-<script src="glass-refraction.js?v=75ad17c6c7c5"></script>
-<script src="glass-interaction.js?v=42bbdef4c5f4"></script>
+<script src="glass-optics.js?v=c4a6448d2335"></script>
+<script src="glass-renderer.js?v=0626ad6fff04"></script>
+<script src="glass-refraction.js?v=4b9e3d9f6ac5"></script>
+<script src="glass-interaction.js?v=a134a404071f"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
 // 每张可见卡片独立校准折射带，文字不参与滤镜。
@@ -1140,6 +1142,7 @@ function schedulePageJumpUpdate() {
 
 function jumpToPageEdge(edge) {
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reducedMotion && window.GlassRenderer && GlassRenderer.scrollTo(edge === 'top' ? 0 : document.documentElement.scrollHeight)) return;
   window.scrollTo({
     top: edge === 'top' ? 0 : document.documentElement.scrollHeight,
     behavior: reducedMotion ? 'auto' : 'smooth'

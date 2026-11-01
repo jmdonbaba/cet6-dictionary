@@ -4,6 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const file = path.resolve(__dirname, '../glass-optics.js');
 
+test('rim curvature rises sharply while the interior settles continuously', () => {
+  const optics=require(file);
+  assert.ok(optics.profile(.1)>.97,'the outer rim retains a strong bend');
+  assert.ok(optics.profile(.5)<.3,'the same plate quickly flattens toward the interior');
+  assert.ok(optics.profile(.8)<.005,'the central region has no secondary lens band');
+});
+
 test('graded refraction has smooth endpoints and never folds wallpaper sampling', () => {
   assert.ok(fs.existsSync(file), 'a shared graded optics model must replace the narrow edge band');
   const optics = require(file);

@@ -967,15 +967,17 @@ html[data-interface="glass"] .card {
   html[data-interface="glass"] .card:hover { translate: none; }
 }
 
-/* Inner hierarchy comes from successive clear lenses, never stacked white fills. */
+/* One clear result plate sits over each outer card; its sections share the lens. */
 html.glass-gpu[data-interface="glass"] .card { border-width: 0; }
 html[data-interface="glass"] :is(.word-result, .word-forms, .mnemonic-block, .comparison-word,
-  .study-example, .word-result .sentences .sen-item, .study-takeaway, .base-form-hint, .word-result .pos) {
+  .study-example, .word-result .sentences .sen-item, .study-takeaway, .base-form-hint, .word-result .pos,
+  .word-search-result:has(> .study-content), .vf-detail, .comparison-fav) {
   background: transparent;
   border-color: transparent;
   box-shadow: none;
 }
 html[data-interface="glass"] :is(.study-example, .word-result .sen-item) { border-radius: 10px; }
+html[data-interface="glass"] .word-search-result:has(> .study-content) { border-radius: 16px; }
 html.glass-refraction[data-interface="glass"] .glass-layer-optics { isolation: isolate; }
 html.glass-refraction[data-interface="glass"] .glass-layer-positioned { position: relative; }
 html.glass-refraction[data-interface="glass"] .glass-layer-optics::before {
@@ -995,12 +997,11 @@ html.glass-refraction[data-interface="glass"] .glass-layer-optics::before {
    hover colors. Custom properties keep semantic states in one place. The glass
    already rendered behind a control remains visible; no new blur/filter passes. */
 html[data-interface="glass"] button {
-  --glass-button-fill: rgba(255, 255, 255, 0.09);
+  --glass-button-fill: transparent;
   --glass-button-sheen: linear-gradient(155deg,
-    rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0.2));
-  --glass-button-shadow: inset 0 3px 6px -4px rgba(255, 255, 255, 0.95),
-    inset 0 -3px 5px -4px rgba(66, 52, 119, 0.26),
-    0 5px 12px -8px rgba(31, 17, 66, 0.32);
+    rgba(255, 255, 255, 0.16), transparent 46%, rgba(255, 255, 255, 0.045));
+  --glass-button-shadow: inset 0 2px 4px -3px rgba(255, 255, 255, 0.5),
+    0 4px 10px -8px rgba(31, 17, 66, 0.24);
   --glass-button-ink: var(--text);
   background-color: var(--glass-button-fill) !important;
   background-image: var(--glass-button-sheen) !important;
@@ -1012,17 +1013,17 @@ html[data-interface="glass"] button {
 }
 html[data-interface="glass"] button.btn-primary,
 html[data-interface="glass"] button.page-jump-btn-primary {
-  --glass-button-fill: rgba(106, 92, 242, 0.09);
+  --glass-button-fill: rgba(106, 92, 242, 0.03);
   --glass-button-ink: var(--primary);
   font-weight: 650;
 }
 html[data-interface="glass"] button.btn-favorite.favorited {
-  --glass-button-fill: rgba(245, 158, 11, 0.16);
+  --glass-button-fill: rgba(245, 158, 11, 0.07);
   --glass-button-ink: #854509;
 }
 html[data-interface="glass"] button.danger,
 html[data-interface="glass"] button.page-record-delete {
-  --glass-button-fill: rgba(239, 68, 68, 0.08);
+  --glass-button-fill: rgba(239, 68, 68, 0.03);
   --glass-button-ink: #ad2638;
 }
 html[data-interface="glass"] .modal-close,
@@ -1034,7 +1035,7 @@ html[data-interface="glass"] .more-btn {
 @media (hover: hover) {
   html[data-interface="glass"] button:not(:disabled):hover {
     --glass-button-sheen: linear-gradient(155deg,
-      rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0.14) 46%, rgba(255, 255, 255, 0.3));
+      rgba(255, 255, 255, 0.22), transparent 46%, rgba(255, 255, 255, 0.065));
   }
 }
 html[data-interface="glass"] button:focus-visible {
@@ -1054,16 +1055,41 @@ html[data-interface="glass"] .mobile-tool-tabs button {
   --glass-button-shadow: none;
   --glass-button-ink: var(--text-secondary);
 }
-html[data-interface="glass"] .ws-mode-toggle button.active,
 html[data-interface="glass"] button[role="tab"][aria-selected="true"] {
   --glass-button-ink: var(--primary);
+}
+html[data-interface="glass"] .ws-mode-toggle button:is(.active, :hover, .drag-hover) {
+  --glass-button-ink: var(--text-secondary);
+  --glass-button-sheen: none;
 }
 html[data-interface="glass"] .ws-mode-slider,
 html[data-interface="glass"] .favorite-study-tabs::before,
 html[data-interface="glass"] .mobile-tool-tabs::before {
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.18));
-  box-shadow: inset 0 2px 5px -3px rgba(255, 255, 255, 0.95),
-    0 3px 9px -5px rgba(44, 23, 94, 0.32);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.16), transparent 46%, rgba(255,255,255,.045));
+  box-shadow: inset 0 2px 4px -3px rgba(255, 255, 255, 0.5);
+}
+html[data-interface="glass"] :is(.input-area input, .study-tool-form input, .fav-search input, .key-area input, .comparison-search) {
+  background-color: transparent;
+  background-image: linear-gradient(155deg, rgba(255,255,255,.12), transparent 45%, rgba(255,255,255,.025));
+  border-color: transparent;
+  box-shadow: inset 0 1px 2px -1px rgba(255,255,255,.4);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-interface="glass"] .ws-mode-toggle { background: transparent; border-color: transparent; box-shadow: none; }
+html[data-interface="glass"] .glass-input-host { isolation: isolate; }
+html[data-interface="glass"] .glass-input-positioned { position: relative; }
+html[data-interface="glass"] .glass-input-optics {
+  position: absolute; z-index: -1; pointer-events: none;
+  backdrop-filter: blur(.3px); -webkit-backdrop-filter: blur(.3px);
+}
+html.glass-refraction[data-interface="glass"] .glass-control-optics { isolation: isolate; }
+html.glass-refraction[data-interface="glass"] .glass-control-optics::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  border-radius: inherit; pointer-events: none;
+  backdrop-filter: blur(.3px); -webkit-backdrop-filter: blur(.3px);
+  filter: var(--glass-filter, none);
+  clip-path: inset(0 round var(--glass-button-radius, 999px));
 }
 
 /* Above a modal overlay (or without GPU), only the decorative pseudo-element
@@ -1142,6 +1168,16 @@ html[data-interface="glass"] .glass-jelly::after {
 }
 
 @media (prefers-reduced-transparency: reduce) {
+  html[data-interface="glass"] .glass-input-optics {
+    filter: none !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  html.glass-refraction[data-interface="glass"] .glass-control-optics::before {
+    filter: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
   html[data-interface="glass"] button { --glass-button-fill: rgba(255, 255, 255, 0.94) !important; }
   html.glass-gpu[data-interface="glass"] .appearance-backdrop { display: none; }
   html.glass-refraction[data-interface="glass"] .card::before,

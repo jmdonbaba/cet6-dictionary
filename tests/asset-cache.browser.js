@@ -42,7 +42,7 @@ const root = path.resolve(__dirname, '..');
     await page.waitForTimeout(500);
     assert.equal(await page.locator('.word-result').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','new deployment must bypass the still-fresh old stylesheet');
     assert.equal(await page.locator('html').getAttribute('data-cached-glass'),'new','new deployment must bypass the still-fresh old renderer');
-    assert.ok(await page.evaluate(()=>GlassRenderer.getState().layers>=3),'new transparent layers and renderer work together');
+    assert.equal(await page.evaluate(()=>GlassRenderer.getState().layers),1,'new transparent inner plate and renderer work together');
     assert.ok(requests.some(r=>r.deployed&&r.name==='appearance.css'&&r.query.startsWith('?v=')));
     assert.deepEqual(errors,[]);
     console.log('PASS: a new deployment replaces cached CSS and renderer without clearing browser data');
