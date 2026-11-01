@@ -510,7 +510,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     assert.notEqual(glassStyles.glassContent, 'none');
     assert.notEqual(glassStyles.ringContent, 'none', 'the edge dispersion ring is rendered');
     assert.match(glassStyles.ringMask, /add/);
-    assert.match(glassStyles.smallBackdrop, /blur\(2px\)/, 'small control surfaces keep a direct frosted layer');
+    assert.equal(glassStyles.smallBackdrop, 'none', 'buttons reuse the glass behind them without additional backdrop passes');
 
     // Water wallpaper: caustics layer + optional liquid refraction on supported Chromium.
     await page.evaluate(() => window.Appearance.setTheme('water'));

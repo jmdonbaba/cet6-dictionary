@@ -967,6 +967,82 @@ html[data-interface="glass"] .card {
   html[data-interface="glass"] .card:hover { translate: none; }
 }
 
+/* Shared button material, including dynamically generated actions and menu items.
+   These properties deliberately own the material over older component/inline
+   hover colors. Custom properties keep semantic states in one place. The glass
+   already rendered behind a control remains visible; no new blur/filter passes. */
+html[data-interface="glass"] button {
+  --glass-button-fill: rgba(255, 255, 255, 0.16);
+  --glass-button-sheen: linear-gradient(155deg,
+    rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.06) 46%, rgba(255, 255, 255, 0.2));
+  --glass-button-shadow: inset 0 3px 6px -4px rgba(255, 255, 255, 0.95),
+    inset 0 -3px 5px -4px rgba(66, 52, 119, 0.26),
+    0 5px 12px -8px rgba(31, 17, 66, 0.32);
+  --glass-button-ink: var(--text);
+  background-color: var(--glass-button-fill) !important;
+  background-image: var(--glass-button-sheen) !important;
+  border-color: transparent !important;
+  box-shadow: var(--glass-button-shadow) !important;
+  color: var(--glass-button-ink) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html[data-interface="glass"] button.btn-primary,
+html[data-interface="glass"] button.page-jump-btn-primary {
+  --glass-button-fill: rgba(106, 92, 242, 0.16);
+  --glass-button-ink: var(--primary);
+  font-weight: 650;
+}
+html[data-interface="glass"] button.btn-favorite.favorited {
+  --glass-button-fill: rgba(245, 158, 11, 0.16);
+  --glass-button-ink: #854509;
+}
+html[data-interface="glass"] button.danger,
+html[data-interface="glass"] button.page-record-delete {
+  --glass-button-fill: rgba(239, 68, 68, 0.08);
+  --glass-button-ink: #ad2638;
+}
+html[data-interface="glass"] .modal-close,
+html[data-interface="glass"] .fav-search-clear,
+html[data-interface="glass"] .page-record-delete,
+html[data-interface="glass"] .more-btn {
+  border-radius: 10px;
+}
+@media (hover: hover) {
+  html[data-interface="glass"] button:not(:disabled):hover {
+    --glass-button-sheen: linear-gradient(155deg,
+      rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.14) 46%, rgba(255, 255, 255, 0.3));
+  }
+}
+html[data-interface="glass"] button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+html[data-interface="glass"] button:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+}
+/* A single clear lens moves beneath the labels; tabs have no stacked panels. */
+html[data-interface="glass"] .ws-mode-toggle button,
+html[data-interface="glass"] .favorite-study-tabs button,
+html[data-interface="glass"] .mobile-tool-tabs button {
+  --glass-button-fill: transparent;
+  --glass-button-sheen: none;
+  --glass-button-shadow: none;
+  --glass-button-ink: var(--text-secondary);
+}
+html[data-interface="glass"] .ws-mode-toggle button.active,
+html[data-interface="glass"] button[role="tab"][aria-selected="true"] {
+  --glass-button-ink: var(--primary);
+}
+html[data-interface="glass"] .ws-mode-slider,
+html[data-interface="glass"] .favorite-study-tabs::before,
+html[data-interface="glass"] .mobile-tool-tabs::before {
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.18));
+  box-shadow: inset 0 2px 5px -3px rgba(255, 255, 255, 0.95),
+    0 3px 9px -5px rgba(44, 23, 94, 0.32);
+}
+
 /* ---------------------------------------------------------------------------
    6. 小屏幕 / 性能 / 无障碍降级
    --------------------------------------------------------------------------- */
@@ -1001,6 +1077,7 @@ html[data-interface="glass"] .card {
 }
 
 @media (prefers-reduced-transparency: reduce) {
+  html[data-interface="glass"] button { --glass-button-fill: rgba(255, 255, 255, 0.94) !important; }
   html.glass-gpu[data-interface="glass"] .appearance-backdrop { display: none; }
   html.glass-refraction[data-interface="glass"] .card::before,
   html.glass-refraction[data-interface="glass"] .modal-card::before,
