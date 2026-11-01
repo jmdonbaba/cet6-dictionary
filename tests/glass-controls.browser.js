@@ -28,7 +28,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const inputBefore=await inputCanvas();
   await page.evaluate(()=>GlassRenderer.setControlIntensity(0));const inputAfter=await inputCanvas();
   const inputDiff=inputBefore.reduce((sum,v,i)=>sum+(i%4===3?0:Math.abs(v-inputAfter[i])),0)/(inputAfter.length*.75);
-  assert.ok(inputDiff<.05,'text inputs no longer use a displacement lens (avoids the seam), observed '+inputDiff);
+  assert.ok(inputDiff>.05,'text input background has its own optical plate, observed '+inputDiff);
   await page.evaluate(()=>GlassRenderer.setControlIntensity(1));
   await page.locator('#btnOpenVocabFav').click();await page.waitForTimeout(350);
   const close=await page.locator('#modalVocabFav .modal-close').boundingBox();assert.ok(Math.abs(close.width-close.height)<.1,'favorite close target is square');await page.keyboard.press('Escape');
@@ -43,6 +43,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await cdp.send('Emulation.setEmulatedMedia',{features:[]});
   await page.evaluate(()=>LiquidGlass.disable({persist:false}));assert.equal(await page.locator('.glass-input-optics').count(),0);
   assert.equal(await page.locator('.glass-input-host').count(),0,'disabling releases input host styles');
-  assert.deepEqual(errors,[]);console.log('PASS: transparent buttons/inputs, sliding capsule, CSS-glass text inputs without lens seam, native modal input refraction, square close');
+  assert.deepEqual(errors,[]);console.log('PASS: transparent buttons/inputs, sliding capsule, separate input optical plates with sharp text, native modal refraction, square close');
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});

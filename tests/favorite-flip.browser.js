@@ -30,11 +30,14 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.locator('[data-vfavid="plain"]').click();
   assert.equal(await page.locator('#vfDetail1 [data-act="flipvfav"]').count(),0,'no mnemonic means no flip button');
   assert.equal(await page.locator('#vfDetail1 .vf-def').textContent(),'简单的','malformed legacy definitions fall back to meaning');
-  await flip.click();await page.waitForTimeout(50);
-  await page.evaluate(()=>{closeModal();openModal(document.getElementById('modalVocabFav'),true)});
-  await page.waitForTimeout(600);
-  assert.equal(await detail.getAttribute('data-face'),'definition','reopening starts with definitions even if a flip was interrupted');
-  assert.equal(await page.locator('.vf-detail.is-flipping,.vf-detail.is-resizing').count(),0);
+  for (const delay of [50, 250]) {
+   await flip.click();await page.waitForTimeout(delay);
+   await page.evaluate(()=>{closeModal();openModal(document.getElementById('modalVocabFav'),true)});
+   await page.waitForTimeout(600);
+   assert.equal(await detail.getAttribute('data-face'),'definition','reopening starts with definitions even if a flip was interrupted');
+   assert.equal(await page.locator('.vf-detail.is-flipping,.vf-detail.is-resizing').count(),0);
+   assert.equal(await page.locator('#modalVocabFav').evaluate(el=>el.getAnimations().length),0,'closing cancels the popup height motion too');
+  }
   assert.equal(await page.evaluate(()=>localStorage.getItem('cet6_vocab_favorites')),stored,'viewing either face never writes favorites');
   assert.equal(requests,0,'saved memory is reused without an API request');
   assert.deepEqual(errors,[]);

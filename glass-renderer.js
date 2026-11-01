@@ -379,6 +379,10 @@
     }
     if(buttonIntensity||controlIntensity){
       copyComposite();
+      if(controlIntensity)element.querySelectorAll(GlassOptics.inputs).forEach(function(input){
+        drawSurface(input,true,controlIntensity*GlassOptics.inputStrength(input,performance.now()),sx,sy,rects,shapes);
+      });
+      copyComposite();
       element.querySelectorAll(':is(button, '+GlassOptics.controls+'):not([hidden], [hidden] *)').forEach(function(button){
         if(button.matches('input, .ws-mode-toggle button'))return;
         var strength=button.matches(GlassOptics.controls)?controlIntensity:buttonIntensity;
@@ -459,6 +463,11 @@
   function drawButtons(sx,sy,rects,shapes) {
     buttonCount=0;controlCount=0;if(!buttonIntensity&&!controlIntensity)return;
     copyComposite();gl.enable(gl.SCISSOR_TEST);
+    if(controlIntensity)document.querySelectorAll(GlassOptics.inputs).forEach(function(input){
+      if(!input.closest('.modal-card')&&drawSurface(input,true,controlIntensity*GlassOptics.inputStrength(input,performance.now()),sx,sy,rects,shapes))controlCount++;
+    });
+    // Clear buttons inside a search box sample its completed input plate.
+    copyComposite();
     document.querySelectorAll('button, '+GlassOptics.controls).forEach(function(button){
       if(button.closest('.modal-card')||button.matches('.ws-mode-toggle button')||button.matches('input'))return;
       var control=button.matches(GlassOptics.controls),strength=control?controlIntensity:buttonIntensity;
@@ -521,8 +530,8 @@
     document.removeEventListener('scroll', requestRender, true);
     window.removeEventListener('resize', requestRender);
     document.removeEventListener('visibilitychange', requestRender);
-    document.removeEventListener('focusin', requestRender);
-    document.removeEventListener('focusout', requestRender);
+    document.removeEventListener('focusin', onInputFocus);
+    document.removeEventListener('focusout', onInputFocus);
     document.removeEventListener('animationstart',onMaterialAnimation);document.removeEventListener('animationend',onMaterialAnimation);
     document.removeEventListener('transitionrun', onControlTransition);
     document.removeEventListener('transitionend', onControlTransition);
@@ -533,8 +542,16 @@
   document.addEventListener('scroll', requestRender, { passive: true, capture: true });
   window.addEventListener('resize', requestRender, { passive: true });
   document.addEventListener('visibilitychange', requestRender);
-  document.addEventListener('focusin', requestRender);
-  document.addEventListener('focusout', requestRender);
+  function onInputFocus(event) {
+    if(root.dataset.interface==='glass'&&event.target.matches(GlassOptics.inputs)){
+      var now=performance.now();
+      GlassOptics.setFocus(event.target,event.type==='focusin',now,!motionAllowed());
+      if(motionAllowed())motionUntil=Math.max(motionUntil,now+GlassOptics.focusDuration+30);
+    }
+    requestRender();
+  }
+  document.addEventListener('focusin', onInputFocus);
+  document.addEventListener('focusout', onInputFocus);
   document.addEventListener('animationstart',onMaterialAnimation);document.addEventListener('animationend',onMaterialAnimation);
   document.addEventListener('transitionrun', onControlTransition);
   document.addEventListener('transitionend', onControlTransition);

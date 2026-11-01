@@ -4,6 +4,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const file = path.resolve(__dirname, '../glass-optics.js');
 
+test('whole-input focus eases continuously and can reverse before it settles', () => {
+  const optics=require(file),input={};
+  optics.setFocus(input,true,0,false);
+  assert.equal(optics.focusLevel(input,0),0);
+  assert.equal(optics.focusLevel(input,120),.5);
+  assert.equal(optics.focusLevel(input,240),1);
+  optics.setFocus(input,false,120,false);
+  assert.equal(optics.focusLevel(input,120),.5);
+  optics.setFocus(input,false,200,false);
+  assert.equal(optics.focusLevel(input,240),.25);
+  assert.equal(optics.focusLevel(input,360),0);
+  optics.setFocus(input,true,400,true);
+  assert.equal(optics.focusLevel(input,400),1,'reduced motion switches directly');
+});
+
 test('rim curvature rises sharply while the interior settles continuously', () => {
   const optics=require(file);
   assert.ok(optics.profile(.1)>.97,'the outer rim retains a strong bend');

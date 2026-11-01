@@ -782,7 +782,7 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
 }
 </style>
 <link rel="stylesheet" href="study-tools.css?v=fb6be9c0cb6c">
-<link rel="stylesheet" href="appearance.css?v=b2accc826b29">
+<link rel="stylesheet" href="appearance.css?v=3660ba2d2b36">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -1056,11 +1056,11 @@ try {
 <script src="study-export.js?v=18626f1c6545"></script>
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=e69ab7911425"></script>
-<script src="study-tools-ui.js?v=10b59e5597be"></script>
+<script src="study-tools-ui.js?v=373a5d9e8888"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
-<script src="glass-optics.js?v=016d06b9aa9e"></script>
-<script src="glass-renderer.js?v=d8cb1dcfbbf0"></script>
-<script src="glass-refraction.js?v=a42beb30fada"></script>
+<script src="glass-optics.js?v=bc849e7d8343"></script>
+<script src="glass-renderer.js?v=edd49b106d87"></script>
+<script src="glass-refraction.js?v=1fc52a2c97fa"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
@@ -1711,7 +1711,7 @@ function resetFavoriteFaces() {
 
 async function flipFavoriteDetail(button) {
   const detail = button.closest('.vf-detail');
-  if (!detail || detail._flipping) return;
+  if (!detail || detail._flipping || detail.closest('.modal-card')?.querySelector('.vf-detail.is-flipping')) return;
   const favorite = getVFavs().find(item => item.id === button.dataset.id);
   if (!favorite || !StudyTools.normalizeMnemonic(favorite.mnemonic, favorite.word)) return;
   const face = detail.dataset.face === 'memory' ? 'definition' : 'memory';
@@ -1734,6 +1734,9 @@ async function flipFavoriteDetail(button) {
 }
 
 function renderVFavs() {
+  // Cancel a turn before replacing its detail node, including the popup resize
+  // owned by that turn. Its finally block releases the popup's natural height.
+  resetFavoriteFaces();
   const favs = getVFavs();
   $btnStudyExport.disabled = !favs.length;
   if (!favs.length) closeStudyExportMenu();

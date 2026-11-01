@@ -644,18 +644,14 @@ html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-/* 所有搜索框聚焦都不画描边；用更亮的磨砂玻璃 + 内高光提示焦点，不再做位移折射（避免接缝）。 */
+/* The complete input plate strengthens its refraction on focus. Its tint and
+   sharp DOM text stay unchanged; the renderer owns the optical transition. */
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
   .study-tool-form input, .key-area input, .comparison-search):focus,
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
   .study-tool-form input, .key-area input, .comparison-search):focus-visible {
   border-color: transparent !important;
   outline: none !important;
-  background-color: rgba(255, 255, 255, 0.16) !important;
-  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.08)) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62), inset 0 -1px 0 rgba(255, 255, 255, 0.18) !important;
-  backdrop-filter: blur(8px) saturate(150%);
-  -webkit-backdrop-filter: blur(8px) saturate(150%);
 }
 html[data-interface="glass"] .word-search-wrapper:focus-within {
   box-shadow: var(--glass-shadow);
@@ -877,14 +873,6 @@ html[data-interface="glass"] .word-search-btn {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   color: var(--text-secondary);
 }
-html[data-interface="glass"] .key-area input:focus,
-html[data-interface="glass"] .input-area input:focus,
-html[data-interface="glass"] .fav-search input:focus,
-html[data-interface="glass"] .study-tool-form input:focus,
-html[data-interface="glass"] .comparison-search:focus {
-  border-color: rgba(129, 140, 248, 0.9);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 0 0 3px rgba(79, 70, 229, 0.16);
-}
 html[data-interface="glass"] .input-area input::placeholder,
 html[data-interface="glass"] .key-area input::placeholder,
 html[data-interface="glass"] .fav-search input::placeholder,
@@ -971,10 +959,6 @@ html[data-interface="glass"] .vf-compact.pinned {
   background-image: none;
   background-color: rgba(255, 255, 255, 0.12);
   box-shadow: none;
-}
-html[data-interface="glass"] .input-area input:focus,
-html[data-interface="glass"] .study-tool-form input:focus {
-  border-color: var(--primary);
 }
 
 /* Defined light ribbons give the lens real detail to bend even on aurora.
@@ -1176,12 +1160,6 @@ html[data-interface="glass"] :is(.input-area input, .study-tool-form input, .fav
 html[data-interface="glass"] .ws-mode-toggle { background: transparent; border-color: transparent; box-shadow: none; }
 /* Main-card inputs stay clear. Only the floating suggestions frost their own
    backdrop, so suggestions never mix visually with the words underneath. */
-html[data-interface="glass"] .word-search-wrapper .word-search-input:is(:focus, :focus-visible) {
-  background-color: rgba(255, 255, 255, 0.08) !important;
-  background-image: linear-gradient(155deg, rgba(255,255,255,.2), transparent 46%, rgba(255,255,255,.05)) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
 html[data-interface="glass"] :is(.fav-search-dropdown, .ws-search-dropdown),
 html[data-interface="glass"] .modal-card .fav-search-dropdown {
   background: rgba(238, 246, 255, 0.3);

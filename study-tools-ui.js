@@ -127,45 +127,54 @@ const StudyToolsUI = (() => {
     wrapper.classList.add('is-flipping');
     // A flat turn keeps the card's vertical edges still; a perspective turn would
     // balloon a card this wide while it rotates.
-    const startHeight = wrapper.offsetHeight;
-    let animation, heightAnimation, footerAnimation;
+    const modal = wrapper.closest('.modal-card');
+    const startHeight = parseFloat(getComputedStyle(wrapper).height);
+    const startModalHeight = modal ? parseFloat(getComputedStyle(modal).height) : 0;
+    let animation, heightAnimation, footerAnimation, modalAnimation;
     try {
       animation = wrapper.animate(
         [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(90deg)' }],
-        { duration: 160, easing: 'ease-in', fill: 'forwards' }
+        { duration: 160, easing: 'ease-in', fill: 'both' }
       );
       animation.startTime = performance.now();
       if (window.GlassRenderer?.animateFor) GlassRenderer.animateFor(210);
       await animation.finished;
       if (!wrapper.isConnected) return;
       render();
-      // Height needs a gentle start/end and more time for larger differences.
-      // Keep its timing independent of the turn so rotation cannot rush the resize.
-      const endHeight = wrapper.offsetHeight;
+      const endHeight = parseFloat(getComputedStyle(wrapper).height);
+      const endModalHeight = modal ? parseFloat(getComputedStyle(modal).height) : 0;
       const resize = Math.abs(endHeight - startHeight) > 1;
+      // One clock and easing keep the new face edge-on during the fastest resize.
+      // Larger height differences get more time, including the opening turn.
+      const timing = { duration: resize ? Math.min(420, Math.max(260, Math.sqrt(Math.abs(endHeight-startHeight))*18)) : 220,
+        easing: resize ? 'cubic-bezier(.4,0,.2,1)' : 'cubic-bezier(.2,.7,.3,1)', fill: 'both' };
       if (resize) wrapper.classList.add('is-resizing');
       animation.cancel();
       if (resize) {
-        const timing = { duration: Math.min(380, Math.max(240, Math.sqrt(Math.abs(endHeight-startHeight))*16)),
-          easing: 'cubic-bezier(.4,0,.2,1)', fill: 'both' };
         heightAnimation = wrapper.animate([{ height: `${startHeight}px` }, { height: `${endHeight}px` }],timing);
+        // Natural popup sizing hits its max-height midway through a turn. Animate
+        // the clamped endpoints directly so its centered position never jerks.
+        if (modal && Math.abs(endModalHeight-startModalHeight) > 1) {
+          modalAnimation = modal.animate([{ height: `${startModalHeight}px` }, { height: `${endModalHeight}px` }],timing);
+        }
         // The save action follows the moving bottom edge instead of appearing
         // late when a taller incoming face finishes revealing its content.
         const footer = wrapper.querySelector('.word-search-result > .study-result-actions, .vf-detail-footer');
         if (footer) footerAnimation = footer.animate([{translate:`0 ${startHeight-endHeight}px`},{translate:'0 0'}],timing);
       }
       animation = wrapper.animate([{ transform: 'rotateY(-90deg)' }, { transform: 'rotateY(0deg)' }],
-        { duration: 220, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'forwards' });
+        timing);
       // Rendering/measuring the new face may consume part of the previous frame.
       // Start all opening motions on a fresh shared clock, not that stale frame.
       const openingTime = performance.now();
-      [animation,heightAnimation,footerAnimation].forEach(motion => { if (motion) motion.startTime = openingTime; });
-      if (window.GlassRenderer?.animateFor) GlassRenderer.animateFor(Math.max(220,heightAnimation?.effect.getTiming().duration || 0)+50);
-      await Promise.all([animation.finished, heightAnimation?.finished, footerAnimation?.finished]);
+      [animation,heightAnimation,footerAnimation,modalAnimation].forEach(motion => { if (motion) motion.startTime = openingTime; });
+      if (window.GlassRenderer?.animateFor) GlassRenderer.animateFor(timing.duration+50);
+      await Promise.all([animation.finished, heightAnimation?.finished, footerAnimation?.finished, modalAnimation?.finished]);
     } finally {
       animation?.cancel();
       heightAnimation?.cancel();
       footerAnimation?.cancel();
+      modalAnimation?.cancel();
       wrapper.classList.remove('is-flipping', 'is-resizing');
     }
   }

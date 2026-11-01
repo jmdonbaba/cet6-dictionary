@@ -420,7 +420,7 @@
       state.svg.querySelectorAll('feDisplacementMap').forEach(function (node) {
         if (node.hasAttribute('data-interactive')) return;
         var localScale = scale;
-        surfaces.forEach(function (entry) { if (entry.filter.contains(node)) localScale = Math.min(entry.maxScale * scale / 64, entry.limitScale); });
+        surfaces.forEach(function (entry, element) { if (entry.filter.contains(node)) localScale = Math.min(entry.maxScale * scale / 64 * (element.matches(GlassOptics.inputs)?GlassOptics.inputStrength(element,performance.now()):1), entry.limitScale); });
         var nextScale = String(localScale);
         if (node.getAttribute('scale') !== nextScale) node.setAttribute('scale', nextScale);
       });
@@ -465,6 +465,7 @@
   }
 
   function disable(options) {
+    cancelAnimationFrame(focusFrame);focusFrame=0;
     clearInteraction();
     var settings = normalizeOptions(options);
     if (root()) {
@@ -553,7 +554,21 @@
 
   function onFocusSurfaces(event) {
     if (!state.enabled) return;
+    if(event.target.matches(GlassOptics.inputs)){
+      var now=performance.now();
+      GlassOptics.setFocus(event.target,event.type==='focusin',now,prefersReducedMotion());
+      if(!gpuActive()){
+        focusUntil=now+(prefersReducedMotion()?0:GlassOptics.focusDuration);
+        if(!focusFrame)focusFrame=requestAnimationFrame(updateInputFocus);
+      }
+    }
     if (event && event.target && event.target.matches && event.target.matches('input, '+GlassOptics.controls)) scheduleSurfaces();
+  }
+  function updateInputFocus() {
+    focusFrame=0;
+    if(!state.enabled||gpuActive())return;
+    applyScale();
+    if(performance.now()<focusUntil)focusFrame=requestAnimationFrame(updateInputFocus);
   }
 
   function toggle(options) {
@@ -638,6 +653,7 @@
   var mapCache = new Map();
   var surfaceSerial = 0;
   var surfaceTimer = 0;
+  var focusFrame = 0, focusUntil = 0;
   var resizeObserver = null;
   var mutationObserver = null;
   function gpuActive() {
@@ -689,17 +705,19 @@
   }
 
   function syncSurfaces() {
-    if (!state.enabled || !state.svg || root().dataset.interface !== 'glass' || window.innerWidth <= 720) {
+    if (!state.enabled || !state.svg || root().dataset.interface !== 'glass') {
       if (window.GlassRenderer) GlassRenderer.disable();
       clearSurfaces();
       return;
     }
-    var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
+    var mobile=window.innerWidth<=720;
+    if(mobile&&window.GlassRenderer)GlassRenderer.disable();
+    var gpu = !mobile&&window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
     // The shared canvas owns modal optics, including inner rows and controls.
     // Building SVG maps for those same surfaces causes a pause on tab changes.
     if(gpu){clearSurfaces();return;}
     // Calibrate individual maps only for the native fallback.
-    var nativeSelector = config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls+', '+MODAL_INNER;
+    var nativeSelector = mobile?GlassOptics.inputs:config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls+', '+MODAL_INNER;
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
       if(element.matches('.ws-mode-toggle button'))return;
@@ -739,8 +757,7 @@
       entry.maxScale=2*GlassOptics.amplitude(gradedBand,Math.min(width,height),button,1);
       entry.limitScale=gradedBand*.8;
       if(inner){entry.maxScale*=2.2;entry.limitScale*=2;}
-      // Focused inputs get a stronger lens in the native path as well.
-      if(element===document.activeElement&&(input||control)){entry.maxScale*=1.6;entry.limitScale*=1.4;}
+      // Focus changes only displacement strength; cached maps keep their geometry.
       if(layer){element.classList.add('glass-layer-optics');if(style.position==='static')element.classList.add('glass-layer-positioned');}
       if(input)positionInputBackground(entry,element,style);
       else if(control)element.classList.add('glass-control-optics');
