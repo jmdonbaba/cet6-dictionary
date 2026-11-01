@@ -538,6 +538,18 @@
     return changed;
   }
 
+  // Modal opening runs inside the same task as the class flip: refreshing the
+  // native filters synchronously means the browser's first paint already uses
+  // the final displacement/dispersion, so the panel no longer flashes/colour
+  // shifts a frame after becoming visible.
+  function flush() {
+    if (!state.svg) return false;
+    clearTimeout(surfaceTimer);
+    surfaceTimer = 0;
+    syncSurfaces();
+    return true;
+  }
+
   function toggle(options) {
     return isEnabled() ? disable(options) : enable(options);
   }
@@ -889,6 +901,7 @@
     setIntensity: setIntensity,
     configure: configure,
     refresh: refresh,
+    flush: flush,
     getState: getState,
     destroy: destroy
   });

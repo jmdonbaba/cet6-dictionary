@@ -591,6 +591,42 @@ html[data-interface="glass"] .modal-overlay {
   backdrop-filter: blur(7px) saturate(120%);
   -webkit-backdrop-filter: blur(7px) saturate(120%);
 }
+/* 弹窗打开时不再播放透明度/位移入场动画：动画中的半透明画面会让
+   背景折射先浅后深，看起来“闪一下再变色”。滤镜在 openModal 里已同步就位。 */
+html[data-interface="glass"] .modal-card.active {
+  animation: none;
+}
+/* 弹窗内部的选项/列表也使用玻璃材质，让背景透上来而不是一块块白底。 */
+html[data-interface="glass"] .appearance-option,
+html[data-interface="glass"] .theme-option {
+  background-color: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+html[data-interface="glass"] .appearance-option.is-selected,
+html[data-interface="glass"] .theme-option.is-selected {
+  background-color: rgba(255, 255, 255, 0.26);
+}
+html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf-detail,
+  .comparison-fav, .fav-search, .study-export-menu, .more-menu, .fav-search-dropdown) {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 8px 22px -18px rgba(31, 17, 66, 0.45);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+/* 搜索框聚焦不画描边：由 GPU 控件透镜在聚焦时加强整体折射来提示焦点。 */
+html[data-interface="glass"] .input-area input:focus,
+html[data-interface="glass"] .input-area input:focus-visible,
+html[data-interface="glass"] .word-search-input:focus,
+html[data-interface="glass"] .word-search-input:focus-visible {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+html[data-interface="glass"] .word-search-wrapper:focus-within {
+  box-shadow: var(--glass-shadow);
+}
 
 /* 小表面：直接磨砂，不再单独分层 */
 html[data-interface="glass"] .page-actions .btn-sm,

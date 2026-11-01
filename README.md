@@ -38,6 +38,7 @@
 - 界面外观（`appearance.css` / `appearance.js`）：界面（`cet6_interface_style`）与背景主题（`cet6_theme_classic` / `cet6_theme_glass`）双维度设置；玻璃质感用低雾度 `backdrop-filter` + SVG 背景折射 + 局部反光实现，不引入 React 或第三方运行时依赖；极光、蜜桃和深空增加共用光带轮廓（`assets/glass-ribbons.svg`，同一 SVG 内嵌为 CSS mask，支持直接打开本地 HTML）；水波背景由 `tools/generate-water-caustics.py` 程序生成的原创图 `assets/water-caustics.webp` 提供，不依赖第三方素材
 - 液态折射（`glass-renderer.js` / `glass-refraction.js`）：支持的桌面 Chromium 优先用一张共享 WebGL 画布，一次绘制主题壁纸和最多 16 个可见卡片透镜，中心放大与边缘 RGB 色散共用同一个着色器；只在滚动、尺寸、主题或内容变化时重绘；水波主题例外，由时间 uniform 驱动逐帧流动，其他主题空闲时不循环绘制。折射采样来自壁纸，不捕获或扭曲 DOM 文字。弹窗位于模糊遮罩上方，保留弹窗自身的原生背景捕获和单次 SVG 位移，避免把遮罩下方的透镜错误用于弹窗。
 - 兼容与性能：无 WebGL 或显卡上下文丢失时自动退回单次 SVG 位移；位移图从 512² 降到 256²，避免重复写入未变化的滤镜参数。小屏（≤720px）、低性能设备及不支持的浏览器使用透明磨砂降级；支持减少动态效果与减少透明度偏好。各主题共用同一套材质/折射逻辑。
+- **弹窗与输入框光学**：设置/词汇收藏/恢复页面等弹窗在 `openModal` 里同步刷新原生折射滤镜（`LiquidGlass.flush()`），首帧就带最终色散，不再先闪一下再变色；弹窗内部选项、收藏/页面记录列表也改成半透明磨砂玻璃。搜索框等输入框聚焦时不再画边框，改为由 GPU 卡片透镜加深整块玻璃的折射（着色器按聚焦卡片单独增强），焦点提示更“玻璃”而不是描边。
 - **水波动画**：玻璃界面下的水波由壁纸着色器逐帧流动（`glass-renderer.js`，两层基于时间的 UV 扰动 + 微光闪烁），帧率跟随显示器刷新率（本机 144Hz 实测约 144fps，60Hz 屏幕即 60fps）；传统界面则用一层 `mix-blend-mode: soft-light` 的 CSS 漂移图层（纯合成，不触发布局）。系统开启“减少动态效果”或页面隐藏时水波冻结，其他主题保持完全静止、空闲不重绘。
 - 本地纹理：在线页面直接复用 `assets/water-caustics.webp`；直接打开本地 HTML 时，按需加载同一图片的内嵌版本 `assets/water-caustics-data.js`，避免 WebGL 跨源限制，不增加普通页面的阻塞加载。修改水波图片后运行 `python tools/generate-water-texture.py` 重新生成；脚本会同时刷新 `appearance.css` / `glass-renderer.js` 中对水波资产的引用哈希，避免浏览器继续用旧图。
 
@@ -68,6 +69,8 @@
 - `node tests/asset-cache.browser.js`：用真实 HTTP 缓存模拟旧版访问后上线新版，验证缓存仍有效时也能加载新样式、新折射脚本与透明分层，不清除本地收藏或页面数据。
 - 安装 Playwright 后，运行 `node tests/study-tools.browser.js` 验证双面翻转与恢复、收藏/取消收藏、原位查词、查询/存储失败重试、备份与讲义导出、页面恢复、手机真实触摸滑动及 320–1920px 居中布局。使用隔离浏览器和模拟 API，不读取日常浏览器数据、不消耗真实 API 配额；支持 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE`。
 - 安装 Playwright 后，运行 `node tests/liquid-glass.browser.js` 验证默认主题实际折射像素差、不同尺寸/动态卡片的透镜更新、主题只替换背景、无卡片描边、清晰文字、手机降级和资源释放，截图输出到 `.gstack/liquid-glass/`；支持 `PLAYWRIGHT_MODULE` 和 `EDGE_EXECUTABLE`。
+- `node --test tests/modal-glass.test.js`：校验输入框聚焦去边框与折射增强、弹窗首帧滤镜同步、无入场动画、弹窗内部玻璃材质。
+- 安装 Playwright 后，运行 `node tests/modal-glass.browser.js`：真实验证聚焦搜索框无描边且卡片折射可见增强、三种弹窗打开同帧已有折射、稳定后滤镜与动画状态不变；截图输出到 `.gstack/modal-glass/`。
 - `node --test tests/water-motion.test.js`：校验水波着色器时间驱动、仅水波主题进入逐帧循环、传统界面 CSS 流动层及减少动态效果冻结规则。
 - 安装 Playwright 后，运行 `node tests/water-motion.browser.js`：验证玻璃水波实际在动（帧率、帧间像素差、GPU 绘制持续增长）、其他主题立即回到空闲、减少动态效果冻结两套界面，截图输出到 `.gstack/water-motion/`。
 - `node --test tests/glass-optics.test.js`：验证渐变曲线两端平滑、不同尺寸/强度下采样单调、圆角二维采样不倒转；GPU 与原生位移共用 `glass-optics.js` 的曲线策略。

@@ -209,6 +209,7 @@
         card.classList.remove('active');
       });
       modal.classList.add('active');
+      if (window.LiquidGlass && typeof LiquidGlass.flush === 'function') LiquidGlass.flush();
     }
     // 打开后把焦点交还给当前选中的界面选项，键盘用户可以直接用方向键切换。
     var selected = radioInputs('appearanceStyle').filter(function (radio) { return radio.checked; })[0];

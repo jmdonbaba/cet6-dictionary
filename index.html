@@ -781,7 +781,7 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
 }
 </style>
 <link rel="stylesheet" href="study-tools.css?v=536a2258f0b5">
-<link rel="stylesheet" href="appearance.css?v=6fc09e597d5a">
+<link rel="stylesheet" href="appearance.css?v=10276a663e67">
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -1055,10 +1055,10 @@ try {
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=e69ab7911425"></script>
 <script src="study-tools-ui.js?v=05ff90d3d8d3"></script>
-<script src="appearance.js?v=f89c8f514267"></script>
+<script src="appearance.js?v=282b62a9c95f"></script>
 <script src="glass-optics.js?v=c4a6448d2335"></script>
-<script src="glass-renderer.js?v=8709c726f73d"></script>
-<script src="glass-refraction.js?v=4b9e3d9f6ac5"></script>
+<script src="glass-renderer.js?v=5ada1be37a03"></script>
+<script src="glass-refraction.js?v=8fd0029e2209"></script>
 <script src="glass-interaction.js?v=a134a404071f"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
@@ -2130,6 +2130,8 @@ function openModal(modal, skipFocus) {
   schedulePageJumpUpdate();
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
+  // 弹窗首帧就要带上最终折射，避免“先闪一下、再变一次颜色”。
+  if (window.LiquidGlass && typeof LiquidGlass.flush === 'function') LiquidGlass.flush();
   // Focus search input when opening vocab favorites (skip when navigating from "open in favorites")
   if (modal === $modalVocabFav && !skipFocus && !window.matchMedia('(max-width: 500px)').matches) {
     setTimeout(function () {
