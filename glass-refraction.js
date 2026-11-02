@@ -465,6 +465,7 @@
   }
 
   function disable(options) {
+    if(window.finishGlassStartup)window.finishGlassStartup();
     cancelAnimationFrame(focusFrame);focusFrame=0;
     clearInteraction();
     var settings = normalizeOptions(options);
@@ -716,6 +717,8 @@
     // The shared canvas owns modal optics, including inner rows and controls.
     // Building SVG maps for those same surfaces causes a pause on tab changes.
     if(gpu){clearSurfaces();return;}
+    // Calibrate visible fallback surfaces in this same task, before first paint.
+    if(window.finishGlassStartup)window.finishGlassStartup();
     // Calibrate individual maps only for the native fallback.
     var nativeSelector = mobile?GlassOptics.inputs:config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls+', '+MODAL_INNER;
     var visible = new Set();
@@ -783,6 +786,7 @@
       }
     });
     applyScale();
+    if(window.finishGlassStartup)window.finishGlassStartup();
   }
 
   var interactions = new Map();
@@ -894,7 +898,7 @@
   }
 
   function autoInit() {
-    if (!supported) return;
+    if (!supported) {if(window.finishGlassStartup)window.finishGlassStartup();return;}
     window.addEventListener('resize', onResize);
     document.addEventListener('appearancechange', onAppearanceChange);
     window.addEventListener('storage', onStorage);
@@ -917,6 +921,7 @@
     document.addEventListener('focusout', onFocusSurfaces);
 
     applyAutoPolicy();
+    if(!state.enabled&&window.finishGlassStartup)window.finishGlassStartup();
   }
 
   window.LiquidGlass = Object.freeze({

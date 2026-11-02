@@ -171,8 +171,8 @@ test('preload script applies interface, wallpaper and theme-color before the fir
   assert.match(code, /catch \(error\) \{[\s\S]*?dataset\.interface = 'classic';[\s\S]*?dataset\.wallpaper = 'minimal';/,
     'blocked localStorage must fall back to classic/minimal');
 
-  assert.ok(head.indexOf('appearance.css') < head.indexOf('cet6_interface_style'),
-    'the preload must run after the stylesheet link so the attributes land before first paint');
+  assert.ok(head.indexOf('appearance.css') > head.indexOf('cet6_interface_style'),
+    'stored appearance must be set before a slow stylesheet can block parsing');
   assert.ok(source.indexOf('cet6_interface_style') < source.indexOf('<body>'));
   assert.match(head, /<meta name="theme-color" content="#f8fafc">/,
     'the static theme-color meta must exist for the preload to rewrite');

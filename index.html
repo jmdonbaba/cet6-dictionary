@@ -781,8 +781,10 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
   color: var(--primary);
 }
 </style>
-<link rel="stylesheet" href="study-tools.css?v=fb6be9c0cb6c">
-<link rel="stylesheet" href="appearance.css?v=3660ba2d2b36">
+<style>
+html.glass-starting { background: var(--wallpaper-base, var(--bg)); }
+html.glass-starting body { visibility: hidden; }
+</style>
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -794,6 +796,22 @@ try {
   }
   document.documentElement.dataset.interface = savedInterface;
   document.documentElement.dataset.wallpaper = savedTheme;
+  if (savedInterface === 'glass') {
+    document.documentElement.classList.add('glass-starting');
+    window.finishGlassStartup = function () {
+      document.documentElement.classList.remove('glass-starting');
+      clearTimeout(window.glassStartupTimeout);
+      window.finishGlassStartup = null;
+    };
+    // Also recover when graphics, scripts or images are unavailable.
+    window.glassStartupTimeout = setTimeout(window.finishGlassStartup, 2500);
+    if (savedTheme === 'water') {
+      var waterPreload = document.createElement('link');
+      waterPreload.rel = 'preload'; waterPreload.as = 'image';
+      waterPreload.href = 'assets/water-caustics.webp?v=8922591c3548';
+      document.head.appendChild(waterPreload);
+    }
+  }
   var savedThemeColor = document.querySelector('meta[name="theme-color"]');
   var wallpaperColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
   if (savedThemeColor) savedThemeColor.setAttribute('content', wallpaperColors[savedTheme] || '#f8fafc');
@@ -802,6 +820,8 @@ try {
   document.documentElement.dataset.wallpaper = 'minimal';
 }
 </script>
+<link rel="stylesheet" href="study-tools.css?v=fb6be9c0cb6c">
+<link rel="stylesheet" href="appearance.css?v=3660ba2d2b36">
 </head>
 <body>
 <div class="appearance-backdrop" id="appearanceBackdrop" aria-hidden="true">
@@ -1059,8 +1079,8 @@ try {
 <script src="study-tools-ui.js?v=373a5d9e8888"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
 <script src="glass-optics.js?v=242c18884651"></script>
-<script src="glass-renderer.js?v=ae2474cb6c47"></script>
-<script src="glass-refraction.js?v=cc010beb8485"></script>
+<script src="glass-renderer.js?v=6c0737e70f82"></script>
+<script src="glass-refraction.js?v=61fe71b1a8fa"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），

@@ -53,11 +53,14 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const state=await page.evaluate(()=>{
    GlassRenderer.flush();const source=document.querySelector('.glass-wallpaper-canvas'),gl=source.getContext('webgl');
    const viewport=Array.from(gl.getParameter(gl.VIEWPORT)),error=gl.getError();
+   const modal=document.querySelector('.modal-card.active'),plate=modal.querySelector('.glass-modal-canvas');
+   const heightDrift=Math.abs(modal.getBoundingClientRect().height-plate.getBoundingClientRect().height);
    closeModal();LiquidGlass.flush();
-   return {viewport,size:[source.width,source.height],error,resources:window.modalBlurResources,canvases:document.querySelectorAll('.glass-modal-canvas').length};
+   return {heightDrift,viewport,size:[source.width,source.height],error,resources:window.modalBlurResources,canvases:document.querySelectorAll('.glass-modal-canvas').length};
   });
   assert.deepEqual(state.viewport,[0,0,...state.size],'blur restores the display viewport after resizing and zoom');
   assert.equal(state.error,0);
+  assert.ok(state.heightDrift<1,'popup backing canvas follows CSS zoom without being scaled twice: '+state.heightDrift);
   assert.ok(state.resources.created>0&&state.resources.created===state.resources.deleted,'closing releases all temporary blur textures');
   assert.equal(state.canvases,0);
   console.log('PASS: modal samples blurred wallpaper before refraction, sharp text and visible bending',JSON.stringify(result));

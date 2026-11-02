@@ -26,6 +26,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
           const detail = document.querySelector('.vf-detail'), modal = document.getElementById('modalVocabFav');
           const from = { height: detail.offsetHeight, modal: modal.offsetHeight, face: detail.dataset.face };
           const samples = [];
+          const canvas=modal.querySelector('.glass-modal-canvas');let allocations=0;
+          if(canvas){const descriptor=Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype,'height');Object.defineProperty(canvas,'height',{configurable:true,get(){return descriptor.get.call(this)},set(value){allocations++;descriptor.set.call(this,value)}})}
           detail.querySelector('.vf-flip').click();
           await new Promise(resolve => {
             function sample() {
@@ -36,9 +38,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             }
             requestAnimationFrame(sample);
           });
-          return { from, to: { height: detail.offsetHeight, modal: modal.offsetHeight }, samples };
+          if(canvas)delete canvas.height;
+          return { from, to: { height: detail.offsetHeight, modal: modal.offsetHeight }, samples, allocations };
         });
         const label = `${iface}/${width}/${direction}`;
+        assert.ok(motion.allocations<=2,`${label}: reuse popup backing storage during a turn instead of allocating every frame: ${motion.allocations}`);
         const changed = motion.samples.find(sample => sample.face !== motion.from.face);
         assert.ok(changed.width < .4, `${label}: new face stays edge-on instead of flashing full width: ${changed.width}`);
         const range = motion.to.height - motion.from.height;

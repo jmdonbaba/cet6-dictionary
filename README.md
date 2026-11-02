@@ -87,6 +87,9 @@
 - `node tests/glass-sections.browser.js`：用一条收藏验证工具独立卡片、详情每面一整块玻璃、无分隔线，以及桌面/平板/手机布局。
 - `node tests/favorite-flip.browser.js`：用两条收藏验证默认释义、已存记法才显示翻转按钮、键盘焦点、中断复位，以及查看时不写收藏或请求接口。
 - `node tests/favorite-motion.browser.js`：用一条收藏逐帧验证桌面/手机/传统界面的换面不闪帧，卡片和弹窗跨越高度上限时同步缓动，翻转与高度变化一起结束。
+- **收藏翻面绘制**：翻面期间复用弹窗画布存储，用圆角裁切跟随高度变化，避免每帧重新分配画布；背景模糊在一次翻面中复用，折射板继续更新，弹窗外水波继续流动。结束或中断后恢复正常背景更新和自然尺寸。
+- **玻璃首屏**：读取已存主题的脚本先于样式表执行；首次正确绘制就绪前只显示主题底色，避免从临时 CSS 配色切到 GPU 配色。水波等图片就绪再发布画布，图片失败时保留水色底图；原生降级及脚本异常有退出等待的后备路径。
+- `node tests/glass-startup.browser.js`：验证五种主题的冷启动、慢样式表、慢水图及 WebGL 不可用时的首次显示和后备退出。
 - `node tests/input-focus.browser.js`：用灰阶背景实测凸边的局部放大与平坦中心，验证七种输入框聚焦的真实折射像素变化、失焦复位、文字清晰、空闲停止绘制及原生/小屏后备。
 - `node tests/button-refraction.browser.js`：直接读取渲染像素，验证按钮中央零变化、边缘实际弯折、弹窗与新展开菜单的按钮折射及文字清晰度。
 - `node tests/glass-performance.browser.js`：验证空闲时不持续绘制、滚动/鼠标移动不重复重建 SVG、减少透明度降级和 WebGL 上下文丢失后的原生恢复；输出极简/玻璃的帧间隔对照。`GLASS_FORCE_FALLBACK=1 node tests/liquid-glass.browser.js` 可强制检查无 WebGL 路径（PowerShell 用 `$env:GLASS_FORCE_FALLBACK='1'`）。

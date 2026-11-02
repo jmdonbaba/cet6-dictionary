@@ -9,12 +9,13 @@
   var canvas, gl, program, texture, buttonTexture, source, buffer;
   var modalElement = null, modalCanvas = null;
   var modalBlurTexture = null, modalBlurOutput = null, modalFramebuffer = null, modalBlurWidth = 0, modalBlurHeight = 0;
+  var modalBlurFrozen=false,modalBlurScene='';
   var active = false, failed = false, frame = 0, intensity = 1, lensScale = 1, lensBand = 63;
   var originX=0,originY=0,pixelRatio=0,layerCount=0,layerIntensity=1;
   var width = 0, height = 0, theme = '', draws = 0, lenses = 0, buttonCount = 0, buttonIntensity = 1;
   var selector = '.card, .modal-card, .btn-fav-nav';
   var observed = new Set(), resizeObserver;
-  var water = null, waterLoading = false;
+  var water = null, waterLoading = false, waterFailed = false;
   var locations = {};
   var motionUntil = 0, waterAnimating = false;
   var controlCount=0,controlIntensity=1;
@@ -192,7 +193,7 @@
       ctx.drawImage(water, (width - water.width * imageScale) / 2, (height - water.height * imageScale) / 2,
         water.width * imageScale, water.height * imageScale);
       ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(0, 0, width, height);
-    } else if (theme !== 'minimal') {
+    } else if (theme !== 'minimal' && theme !== 'water') {
       var style = getComputedStyle(root), vmax = Math.max(width, height);
       var colors = ['a','b','c','d'].map(function (n) { return style.getPropertyValue('--aurora-' + n).trim() || '125,211,252'; });
       [[.08,.05,.62,.7],[.98,.2,.54,.6],[.86,1.1,.52,.48],[.05,1.15,.5,.44]].forEach(function (blob, i) {
@@ -225,13 +226,13 @@
     waterLoading = true;
     var image = new Image();
     image.onload = function () { water = image; theme = ''; requestRender(); };
-    image.onerror = function () { waterLoading = false; };
+    image.onerror = function () { waterLoading = false;waterFailed=true;requestRender(); };
     if (location.protocol === 'file:') {
       // A data URL keeps direct local HTML opening origin-clean for WebGL.
       var script = document.createElement('script');
       script.src = 'assets/water-caustics-data.js?v=b4267103b84a';
       script.onload = function () { image.src = window.Cet6WaterTexture; script.remove(); };
-      script.onerror = function () { waterLoading = false; script.remove(); };
+      script.onerror = function () { script.remove();image.onerror(); };
       document.head.appendChild(script);
     } else image.src = 'assets/water-caustics.webp?v=8922591c3548';
   }
@@ -243,7 +244,8 @@
     try {
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
       var box=canvas.getBoundingClientRect();
-      if(!box.width||!box.height){clearModal();root.classList.remove('glass-gpu');return;}
+      if(!box.width||!box.height){clearModal();root.classList.remove('glass-gpu');if(window.finishGlassStartup)window.finishGlassStartup();return;}
+      if(root.dataset.wallpaper==='water'&&!water&&!waterFailed){root.classList.remove('glass-gpu');loadWater();return;}
       originX=box.left;originY=box.top;
       if (width !== box.width || height !== box.height || pixelRatio !== (devicePixelRatio||1) || theme !== root.dataset.wallpaper) {
         width=box.width;height=box.height;pixelRatio=devicePixelRatio||1;theme=root.dataset.wallpaper;
@@ -293,6 +295,7 @@
       drawModal(sx,sy,rects,shapes);
       draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
+      if(window.finishGlassStartup){window.finishGlassStartup();draw(performance.now());return;}
       if (performance.now() < motionUntil) requestRender();
       if (waterAnimating) requestRender();
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
@@ -310,7 +313,7 @@
     if(modalBlurTexture)gl.deleteTexture(modalBlurTexture);
     if(modalBlurOutput)gl.deleteTexture(modalBlurOutput);
     if(modalFramebuffer)gl.deleteFramebuffer(modalFramebuffer);
-    modalBlurTexture=modalBlurOutput=modalFramebuffer=null;modalBlurWidth=modalBlurHeight=0;
+    modalBlurTexture=modalBlurOutput=modalFramebuffer=null;modalBlurWidth=modalBlurHeight=0;modalBlurFrozen=false;
   }
   function blurModalBackdrop(element,sx,sy) {
     var overlay=element.closest('.modal-overlay'),style=overlay&&getComputedStyle(overlay);
@@ -320,6 +323,11 @@
     radius*=overlay.getBoundingClientRect().width/(overlay.offsetWidth||width);
     var factor=Math.max(1,radius*Math.max(sx,sy)/1.7);
     var w=Math.max(1,Math.ceil(canvas.width/factor)),h=Math.max(1,Math.ceil(canvas.height/factor));
+    var turning=!!element.querySelector('.vf-detail.is-flipping');
+    var scene=[theme,canvas.width,canvas.height,originX,originY,radius].join(':');
+    if(turning&&modalBlurFrozen&&modalBlurScene===scene&&modalBlurWidth===w&&modalBlurHeight===h){
+      gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,modalBlurTexture);gl.activeTexture(gl.TEXTURE0);return;
+    }
     if(!modalBlurTexture){
       modalBlurTexture=gl.createTexture();modalBlurOutput=gl.createTexture();modalFramebuffer=gl.createFramebuffer();
     }
@@ -342,6 +350,9 @@
     var x=Math.max(0,Math.floor((r.left-originX)*tx-mx)),y=Math.max(0,Math.floor(h-(r.bottom-originY)*ty-my));
     var right=Math.min(w,Math.ceil((r.right-originX)*tx+mx)),top=Math.min(h,Math.ceil(h-(r.top-originY)*ty+my));
     gl.scissor(x,y,Math.max(0,right-x),Math.max(0,top-y));
+    // Cache the complete blurred backdrop for this finite turn. The refracting
+    // plates still move; water outside the popup keeps flowing normally.
+    if(turning)gl.scissor(0,0,w,h);
     gl.uniform1f(locations.overlayPass,1);
     gl.viewport(0,0,w,h);gl.uniform2f(locations.viewport,w,h);
     gl.bindFramebuffer(gl.FRAMEBUFFER,modalFramebuffer);
@@ -360,6 +371,8 @@
     gl.bindTexture(gl.TEXTURE_2D,modalBlurTexture);gl.activeTexture(gl.TEXTURE0);
     gl.viewport(0,0,canvas.width,canvas.height);gl.uniform2f(locations.viewport,canvas.width,canvas.height);
     gl.uniform2f(locations.blurDirection,0,0);
+    modalBlurFrozen=turning;
+    modalBlurScene=scene;
   }
   function drawModal(sx,sy,rects,shapes) {
     var element=document.querySelector('.modal-card.active');
@@ -394,9 +407,17 @@
     }
     gl.disable(gl.SCISSOR_TEST);
     var r=element.getBoundingClientRect(),w=Math.max(1,Math.round(r.width*sx)),h=Math.max(1,Math.round(r.height*sy));
+    var turning=!!element.querySelector('.vf-detail.is-flipping');
+    var bufferHeight=turning?Math.max(h,Math.ceil(height*sy*.8)):h;
     if(modalCanvas.width!==w)modalCanvas.width=w;
-    if(modalCanvas.height!==h)modalCanvas.height=h;
-    var ctx=modalCanvas.getContext('2d');ctx.clearRect(0,0,w,h);
+    if(modalCanvas.height!==bufferHeight)modalCanvas.height=bufferHeight;
+    // Keep backing storage stable while CSS height changes. Clip unused rows
+    // instead of reallocating and clearing the graphics buffer every frame.
+    var modalStyle=getComputedStyle(element),scaleY=r.height/parseFloat(modalStyle.height),scaleX=r.width/parseFloat(modalStyle.width);
+    var cssHeight=bufferHeight/sy/scaleY+'px',clip='inset(0 0 '+Math.max(0,(bufferHeight-h)/sy/scaleY)+'px 0 round '+materialRadius(element,r)/Math.min(scaleX,scaleY)+'px)';
+    if(modalCanvas.style.height!==cssHeight)modalCanvas.style.height=cssHeight;
+    if(modalCanvas._glassClip!==clip){modalCanvas.style.clipPath=clip;modalCanvas._glassClip=clip;}
+    var ctx=modalCanvas.getContext('2d');ctx.clearRect(0,0,w,bufferHeight);
     ctx.drawImage(canvas,(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy,0,0,w,h);
   }
   function materialRadius(element,r) {
