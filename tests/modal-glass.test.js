@@ -17,7 +17,7 @@ test('focused search fields drop the border and bend their glass card harder', (
   assert.doesNotMatch(focusRule[0], /background-color:|backdrop-filter:|box-shadow:/, 'focus keeps the clear input tint');
   assert.match(focusRule[0], /\.fav-search input/);
   assert.match(focusRule[0], /\.comparison-search/);
-  assert.match(renderer, /button\.matches\('input'\)/);
+  assert.match(renderer, /button\.matches\('input, textarea'\)/);
   assert.match(renderer, /GlassOptics\.inputStrength\(input,performance\.now\(\)\)/, 'the whole input background gets the focus lens');
 });
 

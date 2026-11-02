@@ -5,7 +5,9 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   const text = value => typeof value === 'string' ? value.trim() : '';
-  const wordKey = value => text(value).replace(/\s+/g, ' ').toLowerCase();
+  const normalizeWord = value => text(value).normalize('NFKC').replace(/\s+/g, ' ').toLowerCase();
+  const wordKey = normalizeWord;
+  const sentenceKey = (sentence, question = '') => JSON.stringify([text(sentence).replace(/\s+/g, ' '), text(question).replace(/\s+/g, ' ')]);
   const example = value => ({ en: text(value && value.en), cn: text(value && value.cn) });
 
   function pairKey(left, right) {
@@ -48,6 +50,14 @@
 
   function normalizeStudy(value) {
     if (!value || typeof value !== 'object') return null;
+    if (value.kind === 'sentence') {
+      const sentence = text(value.sentence), question = text(value.question);
+      const translation = text(value.translation), structure = text(value.structure), answer = text(value.answer);
+      if (!sentence || sentence.length > 5000 || question.length > 2000 || !translation || !structure || (question && !answer)) return null;
+      const grammar = (Array.isArray(value.grammar) ? value.grammar : []).map(item => ({ point: text(item && item.point), explanation: text(item && item.explanation) })).filter(item => item.point && item.explanation);
+      if (!grammar.length) return null;
+      return { kind: 'sentence', sentence, question, translation, structure, grammar, ...(question ? { answer } : {}) };
+    }
     if (value.kind === 'mnemonic') {
       const mnemonic = normalizeMnemonic(value.mnemonic, value.word);
       return mnemonic ? { kind: 'mnemonic', word: text(value.word), mnemonic } : null;
@@ -93,5 +103,29 @@
     });
   }
 
-  return { wordKey, pairKey, normalizeMnemonic, normalizeMnemonicParts, normalizeStudy, mergeMnemonic, normalizeComparisons };
+  function normalizeSentences(values) {
+    const seen = new Set(), ids = new Set();
+    return (Array.isArray(values) ? values : []).flatMap(value => {
+      const result = normalizeStudy(value);
+      if (!result || result.kind !== 'sentence') return [];
+      const key = sentenceKey(result.sentence, result.question);
+      if (seen.has(key)) return [];
+      seen.add(key);
+      let id=text(value.id)||key;
+      if(ids.has(id)){id=key;let suffix=1;while(ids.has(id))id=key+'#'+suffix++;}
+      ids.add(id);
+      return [{ ...result, id, pinned: value.pinned === true, createdAt: text(value.createdAt) }];
+    }).sort((a,b)=>Number(b.pinned)-Number(a.pinned));
+  }
+
+  function normalizeDraft(value) {
+    if (!value || !['mnemonic', 'comparison', 'sentence'].includes(value.kind) || !Array.isArray(value.words) || value.words.some(word => typeof word !== 'string')) return null;
+    const words = value.words.map(word => value.kind === 'sentence' ? text(word) : normalizeWord(word));
+    if (value.kind === 'sentence') {
+      if (words.length !== 2 || !words[0] || words[0].length > 5000 || words[1].length > 2000) return null;
+    } else if (words.length !== (value.kind === 'mnemonic' ? 1 : 2) || words.some(word => !word || word.length > 100)) return null;
+    return { kind: value.kind, words };
+  }
+
+  return { normalizeWord, wordKey, pairKey, sentenceKey, normalizeMnemonic, normalizeMnemonicParts, normalizeStudy, mergeMnemonic, normalizeComparisons, normalizeSentences, normalizeDraft };
 });

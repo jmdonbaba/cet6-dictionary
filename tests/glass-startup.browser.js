@@ -8,24 +8,61 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  try{
   for(const theme of ['minimal','aurora','peach','night','water']){
    const page=await browser.newPage({viewport:{width:1100,height:900},reducedMotion:'reduce'});
-   await page.addInitScript(theme=>{localStorage.setItem('cet6_interface_style','glass');localStorage.setItem('cet6_theme_glass',theme);localStorage.setItem('cet6_liquid_glass','on');window.visibleFrames=[];function sample(){if(document.body&&getComputedStyle(document.body).visibility!=='hidden')visibleFrames.push({gpu:document.documentElement.classList.contains('glass-gpu'),theme:document.documentElement.dataset.wallpaper});requestAnimationFrame(sample)}requestAnimationFrame(sample)},theme);
-   const pending=page.goto(`http://127.0.0.1:${server.address().port}/`);
+   await page.addInitScript(theme=>{localStorage.setItem('cet6_interface_style','glass');localStorage.setItem('cet6_theme_glass',theme);localStorage.setItem('cet6_liquid_glass','on');window.visibleFrames=[];function sample(){if(document.body&&getComputedStyle(document.body).visibility!=='hidden')visibleFrames.push({preview:document.documentElement.classList.contains('glass-preview'),theme:document.documentElement.dataset.wallpaper});requestAnimationFrame(sample)}requestAnimationFrame(sample)},theme);
+   const pending=page.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'domcontentloaded'});
    pending.catch(()=>{});
    await page.waitForRequest(url=>url.url().includes('appearance.css'));
    assert.equal(await page.evaluate(()=>document.documentElement.dataset.wallpaper),theme,'stored theme applies before slow CSS can block parsing');
    await pending;
+   assert.equal(await page.evaluate(()=>getComputedStyle(document.body).visibility),'visible','UI does not wait hidden for graphics or water');
+   await page.locator('.word-search-input').first().fill('immediately usable');
    await page.waitForFunction(()=>document.documentElement.classList.contains('glass-gpu')&&getComputedStyle(document.body).visibility==='visible');
    await page.waitForTimeout(200);
    const frames=await page.evaluate(()=>visibleFrames);
-   assert.ok(frames.length>0&&frames.every(frame=>frame.gpu&&frame.theme===theme),theme+': first visible UI already uses the final GPU theme');
+   assert.ok(frames.length>0&&frames.every(frame=>frame.preview&&frame.theme===theme),theme+': first visible UI uses the same wallpaper recipe, without a hidden startup gate');
+   const pixels=await page.evaluate(()=>{const a=document.querySelector('.glass-preview-canvas'),b=document.querySelector('.glass-wallpaper-canvas'),copy=document.createElement('canvas');copy.width=b.width;copy.height=b.height;const ctx=copy.getContext('2d');GlassRenderer.flush();ctx.drawImage(b,0,0);return {preview:Array.from(a.getContext('2d').getImageData(20,20,1,1).data),gpu:Array.from(ctx.getImageData(20,20,1,1).data)}});
+   assert.ok(pixels.preview.every((v,i)=>Math.abs(v-pixels.gpu[i])<3),theme+': GPU handoff keeps wallpaper pixels unchanged '+JSON.stringify(pixels));
    await page.close();
   }
+  const gutter=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+  await gutter.addInitScript(()=>{localStorage.setItem('cet6_interface_style','glass');localStorage.setItem('cet6_theme_glass','water');localStorage.setItem('cet6_liquid_glass','on')});
+  await gutter.goto(`http://127.0.0.1:${server.address().port}/`);
+  await gutter.waitForFunction(()=>document.documentElement.classList.contains('glass-gpu'));
+  const match=await gutter.evaluate(()=>{
+   document.documentElement.style.scrollbarGutter='stable both-edges';document.body.style.minHeight='150vh';
+   GlassRenderer.setIntensity(0);GlassRenderer.setButtonIntensity(0);GlassRenderer.setLayerIntensity(0);GlassRenderer.setControlIntensity(0);GlassRenderer.flush();
+   const a=document.querySelector('.glass-preview-canvas'),b=document.querySelector('.glass-wallpaper-canvas'),copy=document.createElement('canvas');copy.width=b.width;copy.height=b.height;const ctx=copy.getContext('2d');ctx.drawImage(b,0,0);
+   const before=a.getContext('2d').getImageData(0,0,a.width,a.height).data,after=ctx.getImageData(0,0,b.width,b.height).data;let sum=0;for(let i=0;i<before.length;i++)sum+=Math.abs(before[i]-after[i]);
+   return {sizeA:[a.width,a.height],sizeB:[b.width,b.height],mean:sum/before.length};
+  });
+  assert.deepEqual(match.sizeA,match.sizeB,'preview and GPU share actual gutter-adjusted dimensions');assert.ok(match.mean<.05,'full wallpaper handoff keeps pixels stable: '+match.mean);await gutter.close();
+  const compiling=await browser.newPage({viewport:{width:1100,height:900}});
+  await compiling.addInitScript(()=>{
+   localStorage.setItem('cet6_interface_style','glass');localStorage.setItem('cet6_theme_glass','minimal');localStorage.setItem('cet6_liquid_glass','on');
+   const context=HTMLCanvasElement.prototype.getContext;
+   HTMLCanvasElement.prototype.getContext=function(type,...args){
+    const gl=context.call(this,type,...args);if(type!=='webgl'||!gl)return gl;
+    const extension=gl.getExtension('KHR_parallel_shader_compile');if(!extension)return gl;
+    const parameter=gl.getProgramParameter.bind(gl);let until;
+    gl.getProgramParameter=function(program,key){
+     if(key===extension.COMPLETION_STATUS_KHR){if(!until){until=performance.now()+700;window.pendingGraphics=true}if(performance.now()<until)return false;window.pendingGraphics=false;}
+     if(key===gl.LINK_STATUS&&performance.now()<until)throw Error('blocking link query during parallel compilation');
+     return parameter(program,key);
+    };return gl;
+   };
+  });
+  await compiling.goto(`http://127.0.0.1:${server.address().port}/`,{waitUntil:'domcontentloaded'});
+  await compiling.waitForFunction(()=>window.pendingGraphics===true);
+  await compiling.locator('.word-search-input').first().fill('usable while compiling');
+  assert.equal(await compiling.evaluate(()=>window.pendingGraphics),true,'UI accepts input while GPU program is still compiling');
+  await compiling.waitForFunction(()=>document.documentElement.classList.contains('glass-gpu'));
+  await compiling.close();
   const page=await browser.newPage({viewport:{width:1100,height:900}});
   await page.addInitScript(()=>{localStorage.setItem('cet6_interface_style','glass');localStorage.setItem('cet6_theme_glass','night');const context=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type==='webgl'?null:context.call(this,type,...args)}});
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.waitForFunction(()=>getComputedStyle(document.body).visibility==='visible'&&!document.documentElement.classList.contains('glass-starting'));
   assert.equal(await page.evaluate(()=>document.documentElement.dataset.wallpaper),'night','fallback keeps the stored theme and releases the startup gate');
-  assert.ok(await page.evaluate(()=>LiquidGlass.getState().surfaces>0),'native fallback calibrates visible surfaces before publishing');
+  await page.waitForFunction(()=>LiquidGlass.getState().surfaces>0);
   for(const pref of ['off','auto']){
    const fallback=await browser.newPage({viewport:{width:1100,height:900},reducedMotion:'reduce'});
    await fallback.addInitScript(pref=>{localStorage.setItem('cet6_interface_style','glass');localStorage.setItem('cet6_theme_glass','night');localStorage.setItem('cet6_liquid_glass',pref)},pref);

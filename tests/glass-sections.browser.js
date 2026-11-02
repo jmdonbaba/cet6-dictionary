@@ -11,7 +11,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.waitForTimeout(600);
   const out=path.resolve(__dirname,'../.gstack/glass-sections');fs.mkdirSync(out,{recursive:true});
   assert.equal(await page.locator('.study-toolbox.card').count(),0,'tools no longer share one outer card');
-  assert.equal(await page.locator('.study-tool-form.card').count(),2,'each tool has its own glass card');
+  assert.equal(await page.locator('.study-tool-form.card').count(),3,'each tool has its own glass card');
   const first=await page.locator('#mnemonicForm').boundingBox(),second=await page.locator('#comparisonForm').boundingBox();
   assert.ok(second.y-first.y-first.height>=12,'desktop tools have a visible gap');
   await page.locator('.study-toolbox').screenshot({path:path.join(out,'tools.png')});

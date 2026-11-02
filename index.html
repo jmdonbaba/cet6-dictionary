@@ -6,6 +6,12 @@
 <meta name="theme-color" content="#f8fafc">
 <title>CET-6 查词助手</title>
 <style>
+/* Correct base color is available even while external styles are loading. */
+html[data-interface="glass"] { background-color: #eef0f8; }
+html[data-interface="glass"][data-wallpaper="water"] { background-color: #8fd8d2; }
+html[data-interface="glass"][data-wallpaper="aurora"] { background-color: #eef0fb; }
+html[data-interface="glass"][data-wallpaper="peach"] { background-color: #fff7ed; }
+html[data-interface="glass"][data-wallpaper="night"] { background-color: #0b1026; }
 :root {
   --primary: #4f46e5;
   --primary-light: #eef2ff;
@@ -781,10 +787,6 @@ button:not(:disabled):active { scale: .96; transition-duration: 70ms; }
   color: var(--primary);
 }
 </style>
-<style>
-html.glass-starting { background: var(--wallpaper-base, var(--bg)); }
-html.glass-starting body { visibility: hidden; }
-</style>
 <script>
 // 首帧前应用上次选择的界面与主题，避免玻璃质感页面先闪一下传统界面。
 try {
@@ -797,14 +799,6 @@ try {
   document.documentElement.dataset.interface = savedInterface;
   document.documentElement.dataset.wallpaper = savedTheme;
   if (savedInterface === 'glass') {
-    document.documentElement.classList.add('glass-starting');
-    window.finishGlassStartup = function () {
-      document.documentElement.classList.remove('glass-starting');
-      clearTimeout(window.glassStartupTimeout);
-      window.finishGlassStartup = null;
-    };
-    // Also recover when graphics, scripts or images are unavailable.
-    window.glassStartupTimeout = setTimeout(window.finishGlassStartup, 2500);
     if (savedTheme === 'water') {
       var waterPreload = document.createElement('link');
       waterPreload.rel = 'preload'; waterPreload.as = 'image';
@@ -820,8 +814,9 @@ try {
   document.documentElement.dataset.wallpaper = 'minimal';
 }
 </script>
-<link rel="stylesheet" href="study-tools.css?v=fb6be9c0cb6c">
-<link rel="stylesheet" href="appearance.css?v=3660ba2d2b36">
+<link rel="stylesheet" href="study-tools.css?v=ff3dde0a4752">
+<link rel="stylesheet" href="appearance.css?v=25b83778e137">
+<script src="glass-wallpaper.js?v=8377738be2ba"></script>
 </head>
 <body>
 <div class="appearance-backdrop" id="appearanceBackdrop" aria-hidden="true">
@@ -832,6 +827,7 @@ try {
   <span class="appearance-water"></span>
   <span class="appearance-noise"></span>
 </div>
+<script>if(window.GlassWallpaper)GlassWallpaper.refresh();</script>
 <button class="settings-entry" id="btnOpenSettings" type="button" aria-label="打开设置" aria-haspopup="dialog" title="设置">
   <svg class="settings-entry-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <circle cx="12" cy="12" r="3.1"></circle>
@@ -864,6 +860,7 @@ try {
         <div class="mobile-tool-tabs" id="mobileToolTabs" role="tablist" aria-label="学习功能" data-active="mnemonic">
           <button type="button" id="mnemonicToolTab" role="tab" aria-selected="true" aria-controls="mnemonicForm" data-tool-tab="mnemonic">怎么记</button>
           <button type="button" id="comparisonToolTab" role="tab" aria-selected="false" aria-controls="comparisonForm" tabindex="-1" data-tool-tab="comparison">词语对比</button>
+          <button type="button" id="sentenceToolTab" role="tab" aria-selected="false" aria-controls="sentenceForm" tabindex="-1" data-tool-tab="sentence">例句讲解</button>
         </div>
         <div class="study-tool-pages" id="studyToolPages">
         <form id="mnemonicForm" class="study-tool-form card">
@@ -876,6 +873,13 @@ try {
           <div class="study-pair-inputs"><input id="compareLeft" name="left" placeholder="单词 A" aria-label="对比的第一个单词" autocomplete="off" required maxlength="100"><span>和</span><input id="compareRight" name="right" placeholder="单词 B" aria-label="对比的第二个单词" autocomplete="off" required maxlength="100"></div>
           <button class="btn-primary" type="submit">看看区别 <span aria-hidden="true">↗</span></button>
         </form>
+        <form id="sentenceForm" class="study-tool-form card">
+          <label for="sentenceInput">例句讲解</label>
+          <textarea id="sentenceInput" name="sentence" class="comparison-search" placeholder="输入想理解的英语例句" aria-label="要讲解的例句" rows="3" required maxlength="5000"></textarea>
+          <label for="sentenceQuestion" class="sentence-question-label">你的疑问（选填）</label>
+          <input id="sentenceQuestion" name="question" placeholder="例如：这里为什么用过去完成时？" aria-label="关于例句的疑问（选填）" autocomplete="off" maxlength="2000">
+          <button class="btn-primary" type="submit">讲解例句 <span aria-hidden="true">↗</span></button>
+        </form>
         </div>
       </div>
     </aside>
@@ -885,7 +889,7 @@ try {
 
   <!-- Favorites button -->
   <div class="fav-btns">
-    <button class="btn-fav-nav" id="btnOpenVocabFav">词汇收藏 <span id="vocabFavCount">(0)</span></button>
+    <button class="btn-fav-nav" id="btnOpenVocabFav">收藏 <span id="vocabFavCount">(0)</span></button>
   </div>
   <div class="page-actions" role="group" aria-label="页面操作">
     <button class="btn-sm" id="btnClearPage" type="button">清空页面</button>
@@ -929,7 +933,7 @@ try {
 <div class="modal-overlay" id="modalOverlay" style="display:none">
   <div class="modal-card" id="modalVocabFav">
     <div class="modal-header">
-      <span class="modal-header-title">词汇收藏 (<span id="modalVocabCount">0</span>)</span>
+      <span class="modal-header-title">收藏 (<span id="modalVocabCount">0</span>)</span>
       <div class="modal-header-actions">
         <div class="study-export-wrap" id="studyExportWrap">
           <button class="btn-study-export" id="btnStudyExport" type="button" aria-haspopup="menu" aria-expanded="false">导出<span class="study-export-chevron" aria-hidden="true"></span></button>
@@ -938,7 +942,7 @@ try {
             <button type="button" role="menuitem" data-study-format="markdown">Markdown</button>
           </div>
         </div>
-        <button class="modal-close" data-close="modalVocabFav" aria-label="关闭词汇收藏">&times;</button>
+        <button class="modal-close" data-close="modalVocabFav" aria-label="关闭收藏">&times;</button>
       </div>
     </div>
     <div class="modal-body" id="modalVocabBody">
@@ -946,6 +950,7 @@ try {
         <div class="ws-mode-slider" aria-hidden="true"></div>
         <button type="button" class="active" id="wordFavoritesTab" role="tab" aria-selected="true" aria-controls="wordFavPanel" data-favorite-tab="words">单词 <span id="wordFavoriteCount">0</span></button>
         <button type="button" id="comparisonFavoritesTab" role="tab" aria-selected="false" aria-controls="comparisonFavPanel" tabindex="-1" data-favorite-tab="comparisons">词语对比 <span id="comparisonFavoriteCount">0</span></button>
+        <button type="button" id="sentenceFavoritesTab" role="tab" aria-selected="false" aria-controls="sentenceFavPanel" tabindex="-1" data-favorite-tab="sentences">例句讲解 <span id="sentenceFavoriteCount">0</span></button>
       </div>
       <div id="wordFavPanel" role="tabpanel" aria-labelledby="wordFavoritesTab">
       <div class="fav-search" id="favSearch" style="display:none">
@@ -958,6 +963,10 @@ try {
       <div id="comparisonFavPanel" role="tabpanel" aria-labelledby="comparisonFavoritesTab" hidden>
         <input type="search" id="comparisonSearch" class="comparison-search" placeholder="搜索收藏的词语对比…" aria-label="搜索词语对比">
         <div id="comparisonFavList"></div>
+      </div>
+      <div id="sentenceFavPanel" role="tabpanel" aria-labelledby="sentenceFavoritesTab" hidden>
+        <input type="search" id="sentenceSearch" class="comparison-search" placeholder="搜索收藏的例句讲解…" aria-label="搜索例句讲解">
+        <div id="sentenceFavList"></div>
       </div>
     </div>
   </div>
@@ -1075,12 +1084,13 @@ try {
 
 <script src="study-export.js?v=18626f1c6545"></script>
 <script src="saved-page-store.js?v=813381f03d1f"></script>
-<script src="study-tools.js?v=e69ab7911425"></script>
-<script src="study-tools-ui.js?v=373a5d9e8888"></script>
+<script src="study-tools.js?v=2d30abe7c5ea"></script>
+<script src="card-motion.js?v=fb1895f08638"></script>
+<script src="study-tools-ui.js?v=edd487b4ef6a"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
 <script src="glass-optics.js?v=242c18884651"></script>
-<script src="glass-renderer.js?v=6c0737e70f82"></script>
-<script src="glass-refraction.js?v=61fe71b1a8fa"></script>
+<script src="glass-renderer.js?v=59e37bd073ee"></script>
+<script src="glass-refraction.js?v=73e5bdef55ce"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
@@ -1482,6 +1492,7 @@ function hasDualPhonetic(value) {
 }
 
 async function searchWord(word, wrapper, mode) {
+  word = StudyTools.normalizeWord(word);
   const resultEl = wrapper.querySelector('.word-search-result');
   if (wrapper._studyData?.kind === 'mnemonic' && wrapper._studyData.word.toLowerCase() !== word.trim().toLowerCase()) {
     delete wrapper._studyData;
@@ -1721,6 +1732,7 @@ function favoriteDetailContent(favorite, face = 'definition', busy = false) {
 }
 
 function resetFavoriteFaces() {
+  $modalVocabFav._cancelCardMotion?.();
   $favListContainer.querySelectorAll('.vf-detail[data-face="memory"], .vf-detail.is-flipping').forEach(detail => {
     detail.getAnimations({ subtree: true }).forEach(animation => animation.cancel());
     detail._flipping = false;
@@ -1806,6 +1818,7 @@ function closeStudyExportMenu(returnFocus = false) {
 function exportStudyDocument(format) {
   if (!['html', 'markdown'].includes(format)) return;
   if (typeof StudyToolsUI !== 'undefined' && StudyToolsUI.activeTab() === 'comparisons') { StudyToolsUI.exportComparisons(format); return; }
+  if (typeof StudyToolsUI !== 'undefined' && StudyToolsUI.activeTab() === 'sentences') { StudyToolsUI.exportSentences(format); return; }
   const words = StudyExport.normalizeFavorites(getVFavs());
   if (!words.length) { toast('收藏夹为空，暂无可导出的单词'); return; }
   closeStudyExportMenu();
@@ -1902,6 +1915,10 @@ function normalizeWordSearchCard(card) {
     const study = StudyTools.normalizeStudy(card.study);
     if (study) normalized.study = study;
   }
+  if (card.studyDraft && typeof StudyTools !== 'undefined') {
+    const draft = StudyTools.normalizeDraft(card.studyDraft);
+    if (draft) normalized.studyDraft = draft;
+  }
   const info = card.result;
   if (!info || typeof info.word !== 'string' || !info.word.trim()) return normalized;
   const text = value => typeof value === 'string' ? value : '';
@@ -1942,7 +1959,8 @@ function captureWordSearchCards() {
     input: wrapper.querySelector('.word-search-input').value,
     mode: getSearchMode(wrapper),
     result: wrapper._wordData,
-    ...(wrapper._studyData ? { study: wrapper._studyData, ...(wrapper._studyFace === 'definition' ? { studyFace: 'definition' } : {}) } : {})
+    ...(wrapper._studyData ? { study: wrapper._studyData, ...(wrapper._studyFace === 'definition' ? { studyFace: 'definition' } : {}) } : {}),
+    ...(wrapper._studyDraft ? { studyDraft: wrapper._studyDraft } : {})
   }));
 }
 
@@ -1962,6 +1980,7 @@ function saveWordSearchSession() {
 }
 
 function applyWordSearchCards(cards) {
+  globalThis.CardMotion?.cancel();
   const previousNodes = Array.from($wsModules.childNodes);
   const wasRestoring = restoringWordSearchSession;
   restoringWordSearchSession = true;
@@ -1983,6 +2002,7 @@ function applyWordSearchCards(cards) {
         else StudyToolsUI.renderStudyCard(wrapper, card.study);
       }
       else if (card.result) renderWordResult(wrapper, wrapper.querySelector('.word-search-result'), card.input, card.result, favoriteWords);
+      else if (card.studyDraft) StudyToolsUI.renderDraft(wrapper, card.studyDraft);
       toggles.push(wrapper.querySelector('.ws-mode-toggle'));
     });
     $wsModules.replaceChildren(fragment);
@@ -2201,6 +2221,7 @@ function openModal(modal, skipFocus) {
     setTimeout(function () {
       var si = document.getElementById('favSearchInput');
       if (typeof StudyToolsUI !== 'undefined' && StudyToolsUI.activeTab() === 'comparisons') document.getElementById('comparisonSearch').focus();
+      else if (typeof StudyToolsUI !== 'undefined' && StudyToolsUI.activeTab() === 'sentences') document.getElementById('sentenceSearch').focus();
       else if (si && getVFavs().length) si.focus();
     }, 150);
   }
@@ -2368,6 +2389,7 @@ $wsModules.addEventListener('click', async e => {
     } else if (act === 'remove') {
       const modules = document.querySelectorAll('.word-search-wrapper');
       if (modules.length <= 1) return;
+      globalThis.CardMotion?.cancel();
       wrapper.remove();
       schedulePageJumpUpdate();
       updateMinusButtons();
@@ -2488,15 +2510,14 @@ document.addEventListener('pointerdown', e => {
   if (!toggle) return;
   const slider = toggle.querySelector('.ws-mode-slider');
   const btns = toggle.querySelectorAll('button');
-  if (!slider || btns.length !== 2) return;
+  if (!slider || btns.length < 2) return;
   _activeDragToggle = toggle;
   toggle._drag = {
     startX: e.clientX,
     startLeft: parseFloat(getComputedStyle(slider).translate) || btns[0].offsetLeft,
     minL: btns[0].offsetLeft,
-    maxL: btns[1].offsetLeft,
-    w0: btns[0].offsetWidth,
-    w1: btns[1].offsetWidth,
+    maxL: btns[btns.length - 1].offsetLeft,
+    positions: Array.from(btns, button => ({ left: button.offsetLeft, width: button.offsetWidth })),
     moved: false
   };
 });
@@ -2510,12 +2531,13 @@ document.addEventListener('pointermove', e => {
   if (!d.moved) return;
   let nl = d.startLeft + dx;
   nl = Math.max(d.minL, Math.min(d.maxL, nl));
-  const mid = (d.minL + d.maxL) / 2;
-  const hoverIdx = nl >= mid ? 1 : 0;
+  const hoverIdx = d.positions.reduce((best, position, index) => Math.abs(position.left - nl) < Math.abs(d.positions[best].left - nl) ? index : best, 0);
   const btns = toggle.querySelectorAll('button');
   btns.forEach((b, i) => b.classList.toggle('drag-hover', i === hoverIdx));
-  const p = (nl - d.minL) / (d.maxL - d.minL || 1);
-  const sw = d.w0 + (d.w1 - d.w0) * p;
+  const lower = d.positions.findLastIndex(position => position.left <= nl);
+  const a = d.positions[Math.max(0, lower)], b = d.positions[Math.min(d.positions.length - 1, lower + 1)];
+  const p = (nl - a.left) / (b.left - a.left || 1);
+  const sw = a.width + (b.width - a.width) * p;
   const slider = toggle.querySelector('.ws-mode-slider');
   slider.style.translate = nl + 'px 0';
   slider.style.width = sw + 'px';
@@ -2529,10 +2551,9 @@ function _finishToggleDrag(toggle) {
   const slider = toggle.querySelector('.ws-mode-slider');
   const btns = toggle.querySelectorAll('button');
   btns.forEach(b => b.classList.remove('drag-hover'));
-  if (!slider || btns.length !== 2) { delete toggle._drag; return; }
+  if (!slider || btns.length < 2) { delete toggle._drag; return; }
   const curL = parseFloat(slider.style.translate) || d.minL;
-  const mid = (d.minL + d.maxL) / 2;
-  const idx = curL >= mid ? 1 : 0;
+  const idx = d.positions.reduce((best, position, index) => Math.abs(position.left - curL) < Math.abs(d.positions[best].left - curL) ? index : best, 0);
   btns.forEach(b => b.classList.remove('active'));
   btns[idx].classList.add('active');
   syncSlider(toggle);
@@ -2981,7 +3002,7 @@ async function exportData() {
       exportedAt: fmtTime(new Date()),
       apiKey: getApiKey(),
       favorites: getVFavs(),
-      ...(typeof StudyToolsUI !== 'undefined' ? { comparisons: StudyToolsUI.getComparisons() } : {}),
+      ...(typeof StudyToolsUI !== 'undefined' ? { comparisons: StudyToolsUI.getComparisons(), sentences: StudyToolsUI.getSentences() } : {}),
       pageRecords: await getPageRecords(() => { throw new Error('保存记录无法读取'); })
     };
   } catch {
@@ -3027,7 +3048,7 @@ function importData(file) {
     const pageCount = Array.isArray(data.pageRecords) ? data.pageRecords.length : 0;
     const hasKey = typeof data.apiKey === 'string' && data.apiKey.trim() !== '';
     document.getElementById('importSummary').textContent =
-      `文件包含 ${favCount} 条单词收藏${Array.isArray(data.comparisons) ? `、${data.comparisons.length} 条对比收藏` : ''}、${pageCount} 条页面记录${hasKey ? ' 和 API Key' : ''}。页面记录会合并保留，请选择收藏的导入方式：`;
+      `文件包含 ${favCount} 条单词收藏${Array.isArray(data.comparisons) ? `、${data.comparisons.length} 条对比收藏` : ''}${Array.isArray(data.sentences) ? `、${data.sentences.length} 条例句收藏` : ''}、${pageCount} 条页面记录${hasKey ? ' 和 API Key' : ''}。页面记录会合并保留，请选择收藏的导入方式：`;
     openModal(document.getElementById('modalImportChoice'));
   };
   reader.onerror = function () {
@@ -3111,6 +3132,13 @@ async function applyImport(mode, data) {
       if (!Array.isArray(existing) || existing.some(item => StudyTools.normalizeStudy(item)?.kind !== 'comparison')) throw new Error('已有对比收藏无法读取');
       const comparisons = StudyTools.normalizeComparisons(mode === 'overwrite' ? data.comparisons : [...existing, ...data.comparisons]);
       entries.push(['cet6_comparison_favorites', JSON.stringify(comparisons)]);
+    }
+    if (data.sentences !== undefined) {
+      if (!Array.isArray(data.sentences) || data.sentences.some(item => StudyTools.normalizeStudy(item)?.kind !== 'sentence')) throw new Error('例句收藏格式无效');
+      const existing = mode === 'overwrite' ? [] : JSON.parse(localStorage.getItem('cet6_sentence_favorites') || '[]');
+      if (!Array.isArray(existing) || existing.some(item => StudyTools.normalizeStudy(item)?.kind !== 'sentence')) throw new Error('已有例句收藏无法读取');
+      const sentences = StudyTools.normalizeSentences(mode === 'overwrite' ? data.sentences : [...existing, ...data.sentences]);
+      entries.push(['cet6_sentence_favorites', JSON.stringify(sentences)]);
     }
     if (mode === 'overwrite' || importedKey) entries.push([KEY_STORAGE, importedKey]);
     const changes = entries.map(([key, value]) => ({ key, value, previous: localStorage.getItem(key) }));

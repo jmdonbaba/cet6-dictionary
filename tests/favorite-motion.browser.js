@@ -10,6 +10,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     page.on('pageerror', error => errors.push(error.message));
     page.on('dialog', dialog => dialog.accept());
     await page.goto('file:///' + path.resolve(__dirname, '../index.html').replaceAll('\\', '/'));
+    await page.evaluate(()=>document.startViewTransition=undefined); // Legacy fallback remains covered.
     for (const [iface, width] of [['glass', 1100], ['glass', 390], ['classic', 1100]]) {
       await page.setViewportSize({ width, height: 900 });
       await page.evaluate(iface => {

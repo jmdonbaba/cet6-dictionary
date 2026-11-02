@@ -465,7 +465,7 @@
   }
 
   function disable(options) {
-    if(window.finishGlassStartup)window.finishGlassStartup();
+
     cancelAnimationFrame(focusFrame);focusFrame=0;
     clearInteraction();
     var settings = normalizeOptions(options);
@@ -706,6 +706,7 @@
   }
 
   function syncSurfaces() {
+    window.GlassWallpaper?.refresh();
     if (!state.enabled || !state.svg || root().dataset.interface !== 'glass') {
       if (window.GlassRenderer) GlassRenderer.disable();
       clearSurfaces();
@@ -718,13 +719,13 @@
     // Building SVG maps for those same surfaces causes a pause on tab changes.
     if(gpu){clearSurfaces();return;}
     // Calibrate visible fallback surfaces in this same task, before first paint.
-    if(window.finishGlassStartup)window.finishGlassStartup();
+
     // Calibrate individual maps only for the native fallback.
     var nativeSelector = mobile?GlassOptics.inputs:config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls+', '+MODAL_INNER;
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
       if(element.matches('.ws-mode-toggle button'))return;
-      var input=element.matches('input'),control=element.matches(GlassOptics.controls);
+      var input=element.matches('input, textarea'),control=element.matches(GlassOptics.controls);
       var button = element.matches('button:not(.btn-fav-nav)')||control;
       var inner=element.matches(MODAL_INNER);
       var layer=element.matches(GlassOptics.layers)||inner;
@@ -786,7 +787,7 @@
       }
     });
     applyScale();
-    if(window.finishGlassStartup)window.finishGlassStartup();
+
   }
 
   var interactions = new Map();
@@ -898,7 +899,7 @@
   }
 
   function autoInit() {
-    if (!supported) {if(window.finishGlassStartup)window.finishGlassStartup();return;}
+    if (!supported) {return;}
     window.addEventListener('resize', onResize);
     document.addEventListener('appearancechange', onAppearanceChange);
     window.addEventListener('storage', onStorage);
@@ -921,7 +922,6 @@
     document.addEventListener('focusout', onFocusSurfaces);
 
     applyAutoPolicy();
-    if(!state.enabled&&window.finishGlassStartup)window.finishGlassStartup();
   }
 
   window.LiquidGlass = Object.freeze({

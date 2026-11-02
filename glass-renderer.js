@@ -7,6 +7,7 @@
   'use strict';
   var root = document.documentElement;
   var canvas, gl, program, texture, buttonTexture, source, buffer;
+  var parallelCompile=null, programReady=false, compileTimer=0;
   var modalElement = null, modalCanvas = null;
   var modalBlurTexture = null, modalBlurOutput = null, modalFramebuffer = null, modalBlurWidth = 0, modalBlurHeight = 0;
   var modalBlurFrozen=false,modalBlurScene='';
@@ -111,7 +112,7 @@
   function compile(type, code) {
     var shader = gl.createShader(type);
     gl.shaderSource(shader, code); gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error('glass-shader');
+    if (!parallelCompile && !gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error('glass-shader');
     return shader;
   }
 
@@ -124,12 +125,25 @@
       canvas.setAttribute('aria-hidden', 'true');
       gl = canvas.getContext('webgl', { alpha: false, antialias: false, depth: false, stencil: false });
       if (!gl) throw new Error('no-webgl');
+      parallelCompile=gl.getExtension('KHR_parallel_shader_compile');
       program = gl.createProgram();
       var shaderSource = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT).precision > 0
         ? fragment.replace('precision mediump float;', 'precision highp float;') : fragment;
       var vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, shaderSource);
       gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program);
       gl.deleteShader(vs); gl.deleteShader(fs);
+      if(parallelCompile&&!gl.getProgramParameter(program,parallelCompile.COMPLETION_STATUS_KHR)){
+        compileTimer=setTimeout(pollProgram,8);return true;
+      }
+      finishProgram();
+      return true;
+    } catch (error) {
+      failed = true; disable();
+      return false;
+    }
+  }
+
+  function finishProgram(){
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error('glass-program');
       gl.useProgram(program);
       buffer = gl.createBuffer();
@@ -161,16 +175,17 @@
       });
       document.getElementById('appearanceBackdrop').appendChild(canvas);
       if (window.ResizeObserver) resizeObserver = new ResizeObserver(requestRender);
-      return true;
-    } catch (error) {
-      failed = true; disable();
-      return false;
-    }
+    programReady=true;requestRender();
+  }
+  function pollProgram(){
+    compileTimer=0;if(!gl||failed)return;
+    if(gl.isContextLost()){failed=true;disable();window.LiquidGlass?.refresh();return;}
+    if(!gl.getProgramParameter(program,parallelCompile.COMPLETION_STATUS_KHR)){compileTimer=setTimeout(pollProgram,8);return;}
+    try{finishProgram();}catch(error){failed=true;disable();window.LiquidGlass?.refresh();}
   }
 
-  function rgba(token, alpha) { return 'rgba(' + token + ',' + alpha + ')'; }
-
   function buildWallpaper() {
+    GlassWallpaper.refresh();
     var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     // Bound texture size on high DPI screens; one shared texture, not one per card.
     var maxSize = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
@@ -179,39 +194,7 @@
     canvas.height = source.height = Math.max(1, Math.round(height * scale));
     var ctx = source.getContext('2d');
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    var palettes = {
-      aurora: ['#f1f6ff','#f7f2ff','#eefbf8'], peach: ['#fff8f0','#fff1f2','#f7f3ff'],
-      night: ['#0b1026','#131a3a','#0b2130'], water: ['#a7e6df','#8fd8d2','#6fc9c4'],
-      minimal: ['#eef0f8','#eef0f8','#eef0f8']
-    };
-    var palette = palettes[theme] || palettes.aurora;
-    var base = ctx.createLinearGradient(0, 0, width * .4, height);
-    palette.forEach(function (color, i) { base.addColorStop(i / 2, color); });
-    ctx.fillStyle = base; ctx.fillRect(0, 0, width, height);
-    if (theme === 'water' && water) {
-      var imageScale = Math.max(width / water.width, height / water.height);
-      ctx.drawImage(water, (width - water.width * imageScale) / 2, (height - water.height * imageScale) / 2,
-        water.width * imageScale, water.height * imageScale);
-      ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(0, 0, width, height);
-    } else if (theme !== 'minimal' && theme !== 'water') {
-      var style = getComputedStyle(root), vmax = Math.max(width, height);
-      var colors = ['a','b','c','d'].map(function (n) { return style.getPropertyValue('--aurora-' + n).trim() || '125,211,252'; });
-      [[.08,.05,.62,.7],[.98,.2,.54,.6],[.86,1.1,.52,.48],[.05,1.15,.5,.44]].forEach(function (blob, i) {
-        var x = width * blob[0], y = height * blob[1], r = vmax * blob[2];
-        var gradient = ctx.createRadialGradient(x,y,0,x,y,r);
-        gradient.addColorStop(0, rgba(colors[i],blob[3])); gradient.addColorStop(1, rgba(colors[i],0));
-        ctx.fillStyle = gradient; ctx.fillRect(0,0,width,height);
-      });
-      // The same contours and palette treatment for every detailed wallpaper.
-      ctx.save(); ctx.scale(width / 1440, height / 1000);
-      var ribbon = ctx.createLinearGradient(0,0,1440,1000);
-      ribbon.addColorStop(0,rgba(colors[0],.45)); ribbon.addColorStop(.5,rgba(colors[1],.4)); ribbon.addColorStop(1,rgba(colors[2],.48));
-      ctx.strokeStyle = ribbon;
-      ctx.lineWidth = 110; ctx.beginPath(); ctx.moveTo(-160,160); ctx.bezierCurveTo(160,40,380,580,750,340); ctx.bezierCurveTo(1000,180,1190,20,1580,300); ctx.stroke();
-      ctx.globalAlpha = .7; ctx.lineWidth = 170; ctx.beginPath(); ctx.moveTo(-120,640); ctx.bezierCurveTo(200,910,400,310,760,560); ctx.bezierCurveTo(1100,800,1170,940,1580,600); ctx.stroke();
-      ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-80,870); ctx.bezierCurveTo(290,630,530,1040,900,820); ctx.bezierCurveTo(1200,650,1290,550,1540,780); ctx.stroke();
-      ctx.restore();
-    }
+    GlassWallpaper.paint(ctx,width,height,theme,water);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, buttonTexture);
@@ -222,29 +205,20 @@
   }
 
   function loadWater() {
-    if (water || waterLoading) return;
-    waterLoading = true;
-    var image = new Image();
-    image.onload = function () { water = image; theme = ''; requestRender(); };
-    image.onerror = function () { waterLoading = false;waterFailed=true;requestRender(); };
-    if (location.protocol === 'file:') {
-      // A data URL keeps direct local HTML opening origin-clean for WebGL.
-      var script = document.createElement('script');
-      script.src = 'assets/water-caustics-data.js?v=b4267103b84a';
-      script.onload = function () { image.src = window.Cet6WaterTexture; script.remove(); };
-      script.onerror = function () { script.remove();image.onerror(); };
-      document.head.appendChild(script);
-    } else image.src = 'assets/water-caustics.webp?v=8922591c3548';
+    if(water||waterLoading)return;waterLoading=true;
+    GlassWallpaper.waterReady().then(function(image){
+      water=image;waterFailed=!image;waterLoading=false;theme='';requestRender();
+    });
   }
 
   function draw(now) {
     frame = 0;
-    if (!active || document.hidden) return;
+    if (!active || !programReady || document.hidden) return;
     if (root.dataset.interface !== 'glass' || innerWidth <= 720) { clearModal();root.classList.remove('glass-gpu'); return; }
     try {
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
       var box=canvas.getBoundingClientRect();
-      if(!box.width||!box.height){clearModal();root.classList.remove('glass-gpu');if(window.finishGlassStartup)window.finishGlassStartup();return;}
+      if(!box.width||!box.height){clearModal();root.classList.remove('glass-gpu');return;}
       if(root.dataset.wallpaper==='water'&&!water&&!waterFailed){root.classList.remove('glass-gpu');loadWater();return;}
       originX=box.left;originY=box.top;
       if (width !== box.width || height !== box.height || pixelRatio !== (devicePixelRatio||1) || theme !== root.dataset.wallpaper) {
@@ -295,7 +269,6 @@
       drawModal(sx,sy,rects,shapes);
       draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
-      if(window.finishGlassStartup){window.finishGlassStartup();draw(performance.now());return;}
       if (performance.now() < motionUntil) requestRender();
       if (waterAnimating) requestRender();
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
@@ -377,6 +350,7 @@
   function drawModal(sx,sy,rects,shapes) {
     var element=document.querySelector('.modal-card.active');
     if(!element||!element.getBoundingClientRect().width){clearModal();return;}
+    if(element.querySelector('[data-snapshot-turning]'))return;
     if(element!==modalElement){
       clearModal();modalElement=element;
       modalCanvas=document.createElement('canvas');
@@ -400,7 +374,7 @@
       });
       copyComposite();
       element.querySelectorAll(':is(button, '+GlassOptics.controls+'):not([hidden], [hidden] *)').forEach(function(button){
-        if(button.matches('input, .ws-mode-toggle button'))return;
+        if(button.matches('input, textarea, .ws-mode-toggle button'))return;
         var strength=button.matches(GlassOptics.controls)?controlIntensity:buttonIntensity;
         if(strength)drawSurface(button,true,strength,sx,sy,rects,shapes);
       });
@@ -494,7 +468,7 @@
     // Clear buttons inside a search box sample its completed input plate.
     copyComposite();
     document.querySelectorAll('button, '+GlassOptics.controls).forEach(function(button){
-      if(button.closest('.modal-card')||button.matches('.ws-mode-toggle button')||button.matches('input'))return;
+      if(button.closest('.modal-card')||button.matches('.ws-mode-toggle button')||button.matches('input, textarea'))return;
       var control=button.matches(GlassOptics.controls),strength=control?controlIntensity:buttonIntensity;
       // Focused inputs/sliders bend their whole silhouette harder instead of
       // drawing a CSS focus border; the boost is visible even without hover.
@@ -551,6 +525,7 @@
     if (resizeObserver) resizeObserver.disconnect(); observed.clear();
   }
   function destroy() {
+    clearTimeout(compileTimer);programReady=false;
     disable();
     document.removeEventListener('scroll', requestRender, true);
     window.removeEventListener('resize', requestRender);

@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const test = require('node:test');
 const StudyExport = require('../study-export.js');
+const StudyTools = require('../study-tools.js');
 
 const source = fs.readFileSync('index.html', 'utf8');
 const dual = '英 /ˈkɒmbæt/　美 /ˈkɑːmbæt/';
@@ -27,6 +28,7 @@ function harness(favorites = [], phonetic = dual) {
     'searchWord', 'renderWordResult', 'extractJSON', 'renderForms',
     'addVFav', 'normalizeWordSearchCard'
   ], {
+    StudyTools,
     DEEPSEEK_URL: 'https://example.test/chat', getApiKey: () => 'test-key', esc: StudyExport.escapeHtml,
     getVFavs: () => favorites,
     setVFavs: next => { favorites = next; favoriteWrites.push(structuredClone(next)); },

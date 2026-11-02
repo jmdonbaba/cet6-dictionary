@@ -37,10 +37,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.ok(focusedRim.rim<restingRim.rim*.65,'focus concentrates real magnification at the outside rim: '+JSON.stringify({restingRim,focusedRim}));
   assert.ok(focusedRim.rim<focusedRim.shoulder*.7&&Math.abs(focusedRim.center-1)<.15,'the convex rim must blend into an undistorted center');
   await page.locator('.rim-fixture').evaluate(el=>el.remove());
-  const selectors=['.word-search-input','#mnemonicInput','#compareLeft','#compareRight','#apiKeyInput','#favSearchInput','#comparisonSearch'];
+  const selectors=['.word-search-input','#mnemonicInput','#compareLeft','#compareRight','#sentenceInput','#sentenceQuestion','#apiKeyInput','#favSearchInput','#comparisonSearch','#sentenceSearch'];
   for(const selector of selectors){
    if(selector==='#favSearchInput')await page.evaluate(()=>openModal(document.getElementById('modalVocabFav'),true));
    if(selector==='#comparisonSearch')await page.evaluate(()=>StudyToolsUI.selectFavoriteTab('comparisons'));
+   if(selector==='#sentenceSearch')await page.evaluate(()=>StudyToolsUI.selectFavoriteTab('sentences'));
    await page.locator(selector).first().scrollIntoViewIfNeeded();
    // A repeatable high-contrast backdrop lets modal blur and empty wallpaper
    // regions keep the same measurable optical signal.
@@ -73,6 +74,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.setViewportSize({width:390,height:900});await page.waitForTimeout(400);
   assert.ok(await page.locator('.glass-input-optics').count()>0,'small screens keep only the small input lenses');
   assert.deepEqual(errors,[]);
-  console.log('PASS: convex outer rim, flat center; all seven input families focus/restore with sharp text and idle settlement; native/mobile covered',JSON.stringify({restingRim,focusedRim}));
+  console.log('PASS: convex outer rim, flat center; all input families focus/restore with sharp text and idle settlement; native/mobile covered',JSON.stringify({restingRim,focusedRim}));
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});
