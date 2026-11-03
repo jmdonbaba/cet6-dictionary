@@ -26,8 +26,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    assert.equal(await page.locator('[data-snapshot-turning],.card-motion-plate').count(),0,'snapshot state cleans up');
    console.log('PASS:',where,JSON.stringify({frames:motion.frames,layouts:motion.heights.length,copies:motion.copies}));
   }
-  // Named snapshots live above the document and must retain the scroll pane's
-  // clipping while the final layout clamps its scroll position.
+  // Only the turning card is captured. Unchanged rows keep their live text and
+  // the scroll pane clips them while their compositor transforms interpolate.
   await page.evaluate(()=>{
    closeModal();Appearance.setTheme('minimal');renderVFavs();
    openModal(document.getElementById('modalVocabFav'),true);
@@ -43,9 +43,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    document.querySelector('#vfDetail11 .vf-flip').click();
    await clipTransition.ready;
    document.getAnimations().forEach(animation=>{
-    if(animation.effect?.pseudoElement?.includes('view-transition')){animation.pause();animation.currentTime=260;}
+    if(animation.effect?.pseudoElement?.includes('view-transition')||animation.id.startsWith('card-motion-')){animation.pause();animation.currentTime=260;}
    });
   });
+  assert.equal(await page.locator('[style*="study-follow-"],[style*="study-shell"]').count(),0,'unrelated text never swaps into a bitmap snapshot');
+  assert.equal(await page.locator('.card-motion-placeholder').count(),0,'followers keep their native flow and scrolling layout');
   const screenshot=await page.screenshot();
   const ink=await page.evaluate(async([encoded,pane])=>{
    const bitmap=await createImageBitmap(await(await fetch('data:image/png;base64,'+encoded)).blob());
@@ -63,11 +65,11 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.ok(ink.inside>20,'the paused frame contains visible snapshot text');
   assert.equal(ink.outside,0,'snapshot rows must stay inside their scrolling pane: '+JSON.stringify(ink));
   await page.evaluate(async()=>{
-   document.getAnimations().forEach(animation=>{if(animation.effect?.pseudoElement?.includes('view-transition'))animation.play()});
+   document.getAnimations().forEach(animation=>{if(animation.effect?.pseudoElement?.includes('view-transition')||animation.id.startsWith('card-motion-'))animation.play()});
    await clipTransition.finished;delete window.clipTransition;
   });
   assert.equal(await page.locator('[data-snapshot-turning],.card-motion-plate').count(),0,'clipped snapshots clean up after finishing');
-  console.log('PASS: paused row snapshots retain scroll-panel clipping',JSON.stringify(ink));
+  console.log('PASS: paused live rows retain scroll-panel clipping',JSON.stringify(ink));
   await page.evaluate(async()=>{
    const start=document.startViewTransition.bind(document);
    document.startViewTransition=function(...args){document.startViewTransition=start;return window.cancelTransition=start(...args)};
@@ -79,7 +81,10 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.mouse.wheel(0,100);await page.waitForTimeout(100);
   assert.equal(await page.locator('[data-snapshot-turning],.card-motion-plate').count(),0,'a real wheel gesture cancels viewport-fixed snapshots');
   assert.equal(await page.locator('[style*="study-follow-"],[style*="study-turn"],[style*="study-shell"]').count(),0,'manual cancellation restores transition names');
+  assert.equal(await page.locator('.card-motion-shell,.card-motion-live-modal').count(),0,'cancellation restores the real popup material');
   console.log('PASS: real scrolling cancels snapshots and releases their state');
+  await page.evaluate(()=>closeModal());await page.waitForTimeout(80);
+  assert.equal(await page.locator('#modalVocabFav .card-motion-follow').count(),0,'closing the popup releases retained text layers');
   assert.deepEqual(errors,[]);
  }finally{await browser.close()}
 })().catch(e=>{console.error(e);process.exitCode=1});
