@@ -6,8 +6,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const mnemonic = word => ({ word, breakdown: 'af + fect', parts: [{ part: 'af', source: '词根：朝向' }, { part: 'fect', source: '联想到 effect（结果），纯记忆联想' }] });
 const phraseMnemonic = {
   word: 'resolve to',
-  breakdown: 'resolve（下定决心） + to（引出要做的事） → 下定决心去做 → 决心、决定（做某事）',
-  parts: [{ part: 'resolve', source: '动词：在这个搭配中表示下定决心' }, { part: 'to', source: '不定式标记：后接动词原形，引出决心要做的事' }]
+  breakdown: 'resolve（解决；作出决定） + to（到、向；此处引出动作） → 作出决定要去做 → 决心做某事',
+  parts: [{ part: 'resolve', source: '基本义：解决问题，也可指作出决定；这里取作出决定、下决心的意思' }, { part: 'to', source: '常见义：到、向；这里作不定式标记，后接动词原形，引出决心要做的事' }]
 };
 const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 'v.', definitions: ['影响'], forms: { inflections: [], derivatives: [] }, sentences: [{ en: 'Stress can affect memory.', cn: '压力会影响记忆。' }] });
 
@@ -37,6 +37,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
       const word = JSON.parse(user).words[0];
       if (word === 'resolve to') {
         assert.match(system, /完整单词/);
+        assert.match(system, /先.*常见基本义.*再.*当前.*最后.*整体含义/);
         assert.doesNotMatch(system, /plaus|advisable/);
         await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(phraseMnemonic) } }] } });
         return;
@@ -341,7 +342,8 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     await remember('resolve to');
     const phraseCard = page.locator('#wordSearchModules .study-card');
     assert.deepEqual(await phraseCard.locator('.study-parts strong').allTextContents(), ['resolve', 'to']);
-    assert.match(await phraseCard.locator('.study-parts').textContent(), /^词语解释：resolve：动词/);
+    assert.match(await phraseCard.locator('.study-parts').textContent(), /^词语解释：resolve：基本义：解决问题/);
+    assert.match(await phraseCard.locator('.study-breakdown').textContent(), /resolve（解决；作出决定）/);
     assert.doesNotMatch(await phraseCard.locator('.study-content').textContent(), /re-|词块来源/);
     assert.deepEqual(await favorites(), originalFavorites, 'phrase generation is not automatically favorited');
     await phraseCard.screenshot({ path: path.join(process.env.TEMP, 'cet6-phrase-memory-desktop.png') });
@@ -352,7 +354,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     await page.reload();
     await page.locator('#wordSearchModules [data-study-action="flip"]').click();
     await page.waitForFunction(() => !document.querySelector('#wordSearchModules .word-search-wrapper')._flipping);
-    assert.match(await page.locator('#wordSearchModules .study-parts').textContent(), /^词语解释：resolve：动词/);
+    assert.match(await page.locator('#wordSearchModules .study-parts').textContent(), /^词语解释：resolve：基本义：解决问题/);
     await page.evaluate(favorites => { setVFavs(favorites); renderVFavs(); }, originalFavorites);
     console.log('PASS: phrase memory uses whole words and keeps word explanations through manual favorites and refresh');
     await page.evaluate(info => applyWordSearchCards([{ input: 'novels', mode: 'lemma', result: { ...info, sourceForm: 'novels', inflection: '复数' } }]), dict('novel'));

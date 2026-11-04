@@ -6,10 +6,10 @@ const StudyExport = require('../study-export');
 
 const phraseMnemonic = {
   word: 'resolve to',
-  breakdown: 'resolve（下定决心） + to（引出要做的事） → 下定决心去做 → 决心、决定（做某事）',
+  breakdown: 'resolve（解决；作出决定） + to（到、向；此处引出动作） → 作出决定要去做 → 决心做某事',
   parts: [
-    { part: 'resolve', source: '动词：在这个搭配中表示下定决心' },
-    { part: 'to', source: '不定式标记：后接动词原形，引出决心要做的事' }
+    { part: 'resolve', source: '基本义：解决问题，也可指作出决定；这里取作出决定、下决心的意思' },
+    { part: 'to', source: '常见义：到、向；这里作不定式标记，后接动词原形，引出决心要做的事' }
   ]
 };
 
@@ -36,6 +36,17 @@ test('phrase requests explain whole words and their roles instead of splitting i
   assert.doesNotMatch(prompt, /plaus|advisable/);
   assert.deepEqual(JSON.parse(h.requests[0].messages[1].content), { words: ['resolve to'] });
   assert.deepEqual(result.mnemonic, phraseMnemonic);
+});
+
+test('phrase memory starts from basic word meanings before explaining context and the whole phrase', async () => {
+  const h = requestHarness();
+  await h.request('mnemonic', ['resolve to']);
+  const prompt = h.requests[0].messages[0].content;
+  assert.match(prompt, /先.*常见基本义.*再.*当前.*最后.*整体含义/);
+  assert.match(prompt, /resolve（解决；作出决定）/);
+  assert.match(prompt, /to（到、向；此处引出动作）/);
+  assert.match(prompt, /不能.*直接.*词组.*释义/);
+  assert.doesNotMatch(prompt, /先确定常用整体义/);
 });
 
 test('phrase requests reject internal-root parts and missing word explanations', async () => {
@@ -70,8 +81,8 @@ test('phrase exports label word explanations and retain complete words in both f
   const words = StudyExport.normalizeFavorites([{ word: 'resolve to', mnemonic: phraseMnemonic }]);
   const html = StudyExport.renderHtml(words);
   const markdown = StudyExport.renderMarkdown(words);
-  assert.match(html, /词语解释：<\/strong><strong>resolve<\/strong>：动词/);
-  assert.match(markdown, /\*\*词语解释\*\*：resolve：动词/);
+  assert.match(html, /词语解释：<\/strong><strong>resolve<\/strong>：基本义：解决问题/);
+  assert.match(markdown, /\*\*词语解释\*\*：resolve：基本义：解决问题/);
   assert.doesNotMatch(html, /词块来源/);
   assert.doesNotMatch(markdown, /词块来源/);
 });
