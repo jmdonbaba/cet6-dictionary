@@ -13,14 +13,15 @@ const StudyToolsUI = (() => {
   const exampleHtml = example => `<div class="study-example">${esc(example.en)}<span>${esc(example.cn)}</span></div>`;
 
   function mnemonicContent(mnemonic) {
-    const parts = mnemonic.breakdown ? StudyExport.renderMemoryParts(mnemonic.parts) : '';
+    const phrase = /\s/.test(mnemonic.word.trim());
+    const parts = mnemonic.breakdown ? StudyExport.renderMemoryParts(mnemonic.parts, phrase) : '';
     // Older favorites only have prose; keep them readable, but new cards use the formula alone.
     const legacy = !mnemonic.breakdown
       ? `${mnemonic.association ? `<div class="study-section-label">这样联想</div><p>${esc(mnemonic.association)}</p>` : ''}${mnemonic.tip ? `<div class="study-takeaway"><strong>记住这一点</strong>${esc(mnemonic.tip)}</div>` : ''}`
       : '';
     return `<div class="study-content">
       ${mnemonic.breakdown ? `<p class="study-breakdown"><span class="study-breakdown-label">拆分记忆：</span>${StudyExport.renderMemoryBreakdown(mnemonic.breakdown)}</p>` : ''}
-      ${parts ? `<p class="study-parts"><span class="study-parts-label">词块来源：</span>${parts}</p>` : ''}
+      ${parts ? `<p class="study-parts"><span class="study-parts-label">${phrase ? '词语解释' : '词块来源'}：</span>${parts}</p>` : ''}
       ${legacy}
     </div>`;
   }
@@ -294,6 +295,8 @@ const StudyToolsUI = (() => {
       ? '返回 {"word":"原词","breakdown":"词块（中文含义） + 词块（中文含义） → 组合后的直观含义 → 单词的核心中文释义","parts":[{"part":"词块本身","source":"这个词块的来源说明"}]}。breakdown 是记法的唯一正文，要像一条简短的拆分记忆公式，示例 advisable：advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。词块尽量使用容易识别的完整词或常见词缀，使用自然的中文把各部分含义串起来，不写 advis(e) 之类的拼写标记，不在公式里附加“去 e 加后缀”等拼写过程，必要的拼写变化写在对应词块的 source 里。无法按词根词缀合理拆分时不要硬拆、不编造伪词根，改用清楚标明“联想”的词块（近形词、谐音或整词联想）组成 breakdown，并在 parts 里写明联想到的词或联想依据，不得把联想伪装成词源。breakdown 必须给出内容，不能为空。parts 与 breakdown 的词块一一对应并按出现顺序列出，每个 source 必须说明这个词块凭什么有这个含义：有构词依据时写成词根、前缀或后缀及其含义，例如 {"part":"plaus","source":"词根：拍手、鼓掌，与 applause 同源"}、{"part":"re-","source":"前缀：再、重新"}、{"part":"-ible","source":"后缀：能…的"}；只是记忆联想时明确写成“联想到某词”并给出该单词，例如 {"part":"plaus","source":"联想到 applause（掌声），借“拍手称好”来记"}。不要把联想说成词源，不编造词源、构词或发音，不确定来源时只写清楚是记忆联想；source 不要重复词块本身。纯文本，不使用 Markdown、HTML 或重复“拆分记忆”标题，不写额外的联想段落或记忆提示。'
       : '返回 {"summary":"中文核心区别，解释词性、含义、语气或使用场景差别","items":[{"word":"第一个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}},{"word":"第二个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}}],"tip":"一句话辨析提示"}。不要生硬地为近义词编造绝对区别，必要时说明重叠、特殊用法；不是近义词也如实比较。';
     if (kind === 'sentence') schema = '返回 {"translation":"完整自然的中文翻译","structure":"中文解释句子主干、从句及修饰关系","grammar":[{"point":"具体语法或用法要点","explanation":"结合原句说明形式、含义和作用"}]' + (words[1] ? ',"answer":"直接回答用户疑问，结合原句给出依据和必要的例子"}' : '}') + '。至少给出一个相关语法要点；不要编造规则或绝对化，疑问不成立时温和纠正。保留原句大小写和标点。';
+    const phraseWords = kind === 'mnemonic' ? StudyTools.normalizeWord(words[0]).split(' ') : [];
+    if (phraseWords.length > 1) schema = '返回 {"word":"原词组","breakdown":"完整单词（此处的含义或作用） + 完整单词（此处的含义或作用） → 自然的含义串联 → 词组整体释义","parts":[{"part":"输入词组中的完整单词","source":"这个单词在当前搭配中的含义或语法作用"}]}。这是词组记忆，按空格分隔的完整单词逐个解释，不再把词组内部的单词拆成词根、前缀或后缀，不分析单词词源，不把词组混合拆成字母片段。parts 必须按输入顺序列出每个完整单词，不能遗漏、添加或改写单词。例如 resolve to 应写成 resolve（下定决心） + to（引出要做的事） → 下定决心去做 → 决心、决定（做某事）；parts 为 [{"part":"resolve","source":"动词：在这个搭配中表示下定决心"},{"part":"to","source":"不定式标记：后接动词原形，引出决心要做的事"}]。动词、名词、形容词解释它们在搭配中的语境义；介词、副词、冠词和不定式标记解释在搭配中的实际作用，不能都按孤立的字面释义机械拼接。固定搭配、习语和短语动词先确定常用整体义，再用自然中文串联各词；字面联想与真实含义不同就明确是记忆联想，不编造含义推导。只返回非空 breakdown 和与完整单词一一对应的 parts，不加例句、额外联想段落、记忆提示、词源说明、Markdown、HTML 或重复标题。';
     const response = await fetch(DEEPSEEK_URL, {
       method: 'POST', signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getApiKey()}` },
       body: JSON.stringify({ model: 'deepseek-flash', temperature: .3, messages: [
@@ -308,6 +311,15 @@ const StudyToolsUI = (() => {
       ? { kind, word: words[0], mnemonic: result }
       : kind === 'sentence' ? { ...result, kind, sentence: words[0], question: words[1] || '' } : { ...result, kind, left: words[0], right: words[1] });
     if (!study) throw new Error('返回内容不完整或输入不匹配，请重新生成');
+    if (phraseWords.length > 1) {
+      const parts = study.mnemonic.parts || [];
+      const formulaWords = StudyTools.normalizeWord(study.mnemonic.breakdown).split('→')[0].split('+')
+        .map(chunk => StudyTools.normalizeWord(chunk.match(/^([^()]+?)\s*\(/u)?.[1] || ''));
+      if (parts.length !== phraseWords.length || parts.some((part, index) => StudyTools.normalizeWord(part.part) !== phraseWords[index])
+        || formulaWords.length !== phraseWords.length || formulaWords.some((word, index) => word !== phraseWords[index])) {
+        throw new Error('词组记法未按完整单词拆分，请重新生成');
+      }
+    }
     return study;
   }
 

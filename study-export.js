@@ -106,9 +106,9 @@
     }).join(' → ');
   }
 
-  function renderMemoryParts(parts) {
+  function renderMemoryParts(parts, phrase = false) {
     return normalizeMnemonicParts(parts)
-      .map(item => `<strong>${escapeHtml(item.part)}</strong> ← ${escapeHtml(item.source)}`)
+      .map(item => `<strong>${escapeHtml(item.part)}</strong>${phrase ? '：' : ' ← '}${escapeHtml(item.source)}`)
       .join('；');
   }
 
@@ -117,12 +117,13 @@
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
-  function renderMemoryField(mnemonic) {
+  function renderMemoryField(mnemonic, word) {
     const breakdown = clean(mnemonic.breakdown);
-    const parts = breakdown ? renderMemoryParts(mnemonic.parts) : '';
+    const phrase = /\s/.test(clean(mnemonic.word || word));
+    const parts = breakdown ? renderMemoryParts(mnemonic.parts, phrase) : '';
     // Older favorites only have prose; keep them readable, but new cards use the formula alone.
     const legacy = breakdown ? '' : [mnemonic.association, mnemonic.tip].filter(clean).map(value => `<p>${escapeHtml(value)}</p>`).join('');
-    return `<div class="field"><strong>怎么记</strong>${breakdown ? `<p>拆分记忆：${renderMemoryBreakdown(breakdown)}</p>` : ''}${parts ? `<p class="parts"><strong>词块来源：</strong>${parts}</p>` : ''}${legacy}</div>`;
+    return `<div class="field"><strong>怎么记</strong>${breakdown ? `<p>拆分记忆：${renderMemoryBreakdown(breakdown)}</p>` : ''}${parts ? `<p class="parts"><strong>${phrase ? '词语解释' : '词块来源'}：</strong>${parts}</p>` : ''}${legacy}</div>`;
   }
 
   function renderStudyCardHtml(word, index, options) {
@@ -141,7 +142,7 @@
       <div class="word-heading"><h2>${index + 1}. ${escapeHtml(word.word)}${continuation ? '（续）' : ''}</h2>${continuation ? '' : '<span class="checkbox">□ 已掌握</span>'}</div>
       ${detail ? `<p class="pronunciation">${detail}</p>` : ''}
       ${definitionBlock}${formsBlock}${exampleBlock}
-      ${!continuation && word.mnemonic ? renderMemoryField(word.mnemonic) : ''}
+      ${!continuation && word.mnemonic ? renderMemoryField(word.mnemonic, word.word) : ''}
       ${includeNotes ? '<div class="notes"><strong>复习笔记</strong><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div><div class="note-line"></div></div>' : ''}
     </section>`;
   }
@@ -210,7 +211,8 @@
         lines.push('', '**怎么记**');
         if (breakdown) {
           lines.push(escapeMarkdown(breakdown));
-          if (parts.length) lines.push(`**词块来源**：${parts.map(item => `${escapeMarkdown(item.part)} ← ${escapeMarkdown(item.source)}`).join('；')}`);
+          const phrase = /\s/.test(clean(word.mnemonic.word || word.word));
+          if (parts.length) lines.push(`**${phrase ? '词语解释' : '词块来源'}**：${parts.map(item => `${escapeMarkdown(item.part)}${phrase ? '：' : ' ← '}${escapeMarkdown(item.source)}`).join('；')}`);
         } else {
           // Older favorites only have prose; keep them readable, but new cards use the formula alone.
           [word.mnemonic.association, word.mnemonic.tip].filter(clean).forEach(value => lines.push(escapeMarkdown(value)));

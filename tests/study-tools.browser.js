@@ -4,6 +4,11 @@ const path = require('node:path');
 const http = require('node:http');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const mnemonic = word => ({ word, breakdown: 'af + fect', parts: [{ part: 'af', source: '词根：朝向' }, { part: 'fect', source: '联想到 effect（结果），纯记忆联想' }] });
+const phraseMnemonic = {
+  word: 'resolve to',
+  breakdown: 'resolve（下定决心） + to（引出要做的事） → 下定决心去做 → 决心、决定（做某事）',
+  parts: [{ part: 'resolve', source: '动词：在这个搭配中表示下定决心' }, { part: 'to', source: '不定式标记：后接动词原形，引出决心要做的事' }]
+};
 const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 'v.', definitions: ['影响'], forms: { inflections: [], derivatives: [] }, sentences: [{ en: 'Stress can affect memory.', cn: '压力会影响记忆。' }] });
 
 (async () => {
@@ -29,6 +34,13 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     const user = body.messages[1].content;
     let data;
     if (system.includes('记忆方法')) {
+      const word = JSON.parse(user).words[0];
+      if (word === 'resolve to') {
+        assert.match(system, /完整单词/);
+        assert.doesNotMatch(system, /plaus|advisable/);
+        await route.fulfill({ json: { choices: [{ message: { content: JSON.stringify(phraseMnemonic) } }] } });
+        return;
+      }
       assert.match(system, /词块（中文含义）/);
       assert.match(system, /advise（建议） \+ able（能…的）/);
       assert.match(system, /parts 与 breakdown 的词块一一对应/);
@@ -323,6 +335,26 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     }
     assert.equal(await page.locator('.study-toolbox-heading, .study-toolbox-note, .study-tool-form label span').count(), 0);
     const originalCards = await page.evaluate(() => captureWordSearchCards());
+    const originalFavorites = await favorites();
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => applyWordSearchCards([{ input: '', mode: 'lemma', result: null }]));
+    await remember('resolve to');
+    const phraseCard = page.locator('#wordSearchModules .study-card');
+    assert.deepEqual(await phraseCard.locator('.study-parts strong').allTextContents(), ['resolve', 'to']);
+    assert.match(await phraseCard.locator('.study-parts').textContent(), /^词语解释：resolve：动词/);
+    assert.doesNotMatch(await phraseCard.locator('.study-content').textContent(), /re-|词块来源/);
+    assert.deepEqual(await favorites(), originalFavorites, 'phrase generation is not automatically favorited');
+    await phraseCard.screenshot({ path: path.join(process.env.TEMP, 'cet6-phrase-memory-desktop.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await phraseCard.screenshot({ path: path.join(process.env.TEMP, 'cet6-phrase-memory-mobile.png') });
+    await phraseCard.locator('[data-study-action="save-mnemonic"]').click();
+    await page.waitForFunction(() => getVFavs().some(item => item.word === 'resolve to' && item.mnemonic));
+    await page.reload();
+    await page.locator('#wordSearchModules [data-study-action="flip"]').click();
+    await page.waitForFunction(() => !document.querySelector('#wordSearchModules .word-search-wrapper')._flipping);
+    assert.match(await page.locator('#wordSearchModules .study-parts').textContent(), /^词语解释：resolve：动词/);
+    await page.evaluate(favorites => { setVFavs(favorites); renderVFavs(); }, originalFavorites);
+    console.log('PASS: phrase memory uses whole words and keeps word explanations through manual favorites and refresh');
     await page.evaluate(info => applyWordSearchCards([{ input: 'novels', mode: 'lemma', result: { ...info, sourceForm: 'novels', inflection: '复数' } }]), dict('novel'));
     const directCard = page.locator('#wordSearchModules .word-search-wrapper');
     assert.equal(await directCard.locator('[data-study-action="generate-mnemonic"]').count(), 1);
