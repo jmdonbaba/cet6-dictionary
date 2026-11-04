@@ -75,6 +75,32 @@
     return { kind: 'comparison', left: text(value.left), right: text(value.right), summary: text(value.summary), tip: text(value.tip), items };
   }
 
+  function sameStudy(left, right) {
+    const canonical = value => {
+      const study = normalizeStudy(value);
+      if (!study) return null;
+      if (study.kind === 'mnemonic') {
+        study.word = wordKey(study.word);
+        study.mnemonic.word = study.word;
+        // Legacy examples are retained in backups but are not part of the memory face.
+        delete study.mnemonic.example;
+      } else if (study.kind === 'comparison') {
+        study.left = wordKey(study.left); study.right = wordKey(study.right);
+        study.items = study.items.map(item => ({ ...item, word: wordKey(item.word) }));
+        if (study.left > study.right) {
+          [study.left, study.right] = [study.right, study.left];
+          study.items.reverse();
+        }
+      } else {
+        study.sentence = study.sentence.replace(/\s+/g, ' ');
+        study.question = study.question.replace(/\s+/g, ' ');
+      }
+      return study;
+    };
+    const a = canonical(left), b = canonical(right);
+    return Boolean(a && b && JSON.stringify(a) === JSON.stringify(b));
+  }
+
   function mergeMnemonic(favorites, word, value, dictionary) {
     const mnemonic = normalizeMnemonic(value, word);
     if (!mnemonic) throw new Error('记忆方法与单词不匹配，请重新生成');
@@ -92,14 +118,17 @@
   }
 
   function normalizeComparisons(values) {
-    const seen = new Set();
+    const seen = new Set(), ids = new Set();
     return (Array.isArray(values) ? values : []).flatMap(value => {
       const result = normalizeStudy(value);
       if (!result || result.kind !== 'comparison') return [];
       const key = pairKey(result.left, result.right);
       if (seen.has(key)) return [];
       seen.add(key);
-      return [{ ...result, id: text(value.id) || key, pinned: value.pinned === true, createdAt: text(value.createdAt) }];
+      let id = text(value.id) || key;
+      if (ids.has(id)) { id = key; let suffix = 1; while (ids.has(id)) id = key + '#' + suffix++; }
+      ids.add(id);
+      return [{ ...result, id, pinned: value.pinned === true, createdAt: text(value.createdAt) }];
     });
   }
 
@@ -127,5 +156,5 @@
     return { kind: value.kind, words };
   }
 
-  return { normalizeWord, wordKey, pairKey, sentenceKey, normalizeMnemonic, normalizeMnemonicParts, normalizeStudy, mergeMnemonic, normalizeComparisons, normalizeSentences, normalizeDraft };
+  return { normalizeWord, wordKey, pairKey, sentenceKey, normalizeMnemonic, normalizeMnemonicParts, normalizeStudy, sameStudy, mergeMnemonic, normalizeComparisons, normalizeSentences, normalizeDraft };
 });

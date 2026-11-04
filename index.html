@@ -1084,9 +1084,9 @@ try {
 
 <script src="study-export.js?v=71a68ffae37c"></script>
 <script src="saved-page-store.js?v=813381f03d1f"></script>
-<script src="study-tools.js?v=2d30abe7c5ea"></script>
+<script src="study-tools.js?v=dfd806f5ca5d"></script>
 <script src="card-motion.js?v=fb1895f08638"></script>
-<script src="study-tools-ui.js?v=90b334921d9d"></script>
+<script src="study-tools-ui.js?v=197fd953e82b"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
 <script src="glass-optics.js?v=242c18884651"></script>
 <script src="glass-renderer.js?v=59e37bd073ee"></script>
@@ -1615,14 +1615,19 @@ async function searchWord(word, wrapper, mode) {
 }
 
 // ==================== Vocab Favorites ====================
-function getVFavs() {
+function getVFavs(strict = false) {
   try {
     const v = JSON.parse(localStorage.getItem(VFAV_KEY) || '[]');
-    return Array.isArray(v) ? v : [];
-  } catch { return []; }
+    if (!Array.isArray(v) || v.some(item => !item || typeof item.word !== 'string' || !item.word.trim())) throw new Error('invalid favorites');
+    return v;
+  } catch {
+    if (strict) throw new Error('单词收藏无法读取，已有数据未改动，请检查浏览器存储或恢复备份');
+    return [];
+  }
 }
 function setVFavs(vs) {
   try {
+    if (!Array.isArray(vs) || vs.some(item => !item || typeof item.word !== 'string' || !item.word.trim())) throw new Error('invalid favorites');
     const snapshot = JSON.stringify(vs);
     localStorage.setItem(VFAV_KEY, snapshot);
     if (localStorage.getItem(VFAV_KEY) !== snapshot) throw new Error('收藏写入失败');
@@ -1633,9 +1638,11 @@ function setVFavs(vs) {
 }
 
 function addVFav(vocab) {
-  const favs = getVFavs();
+  if (!vocab || typeof vocab.word !== 'string' || !vocab.word.trim()) { toast('单词结果无效，请重新查询'); return false; }
+  let favs;
+  try { favs = getVFavs(true); } catch (error) { toast(error.message); return false; }
   if (favs.some(f => f.word.toLowerCase() === vocab.word.toLowerCase())) {
-    toast('该单词已收藏'); return;
+    toast('该单词已收藏'); updateAllVocabButtons(); return true;
   }
   const meaning = vocab.meaning || (vocab.definitions ? vocab.definitions.join('；') : '');
   const examples = vocab.examples || vocab.sentences || [];
@@ -1651,33 +1658,38 @@ function addVFav(vocab) {
     ...(vocab.mnemonic ? { mnemonic: vocab.mnemonic } : {}),
     createdAt: fmtTime(new Date())
   });
-  if (setVFavs(favs) === false) return;
+  if (setVFavs(favs) === false) return false;
   renderVFavs();
   toast('单词已收藏');
   updateAllVocabButtons();
+  return true;
 }
 
 function delVFav(id) {
   if (!confirm('确定要删除这个词汇吗？')) return;
-  setVFavs(getVFavs().filter(f => f.id !== id));
+  let favs;
+  try { favs = getVFavs(true); } catch (error) { toast(error.message); return false; }
+  if (setVFavs(favs.filter(f => f.id !== id)) === false) return false;
   renderVFavs();
   toast('已删除');
   updateAllVocabButtons();
 }
 
 function removeVFavByWord(word) {
-  const favs = getVFavs();
+  let favs;
+  try { favs = getVFavs(true); } catch (error) { toast(error.message); return false; }
   const idx = favs.findIndex(f => f.word.toLowerCase() === word.toLowerCase());
   if (idx === -1) return false;
   favs.splice(idx, 1);
-  setVFavs(favs);
+  if (setVFavs(favs) === false) return false;
   renderVFavs();
   updateAllVocabButtons();
   return true;
 }
 
 function pinVFav(id) {
-  const favs = getVFavs();
+  let favs;
+  try { favs = getVFavs(true); } catch (error) { toast(error.message); return false; }
   const idx = favs.findIndex(f => f.id === id);
   if (idx === -1) return;
   const item = favs[idx];
@@ -1688,7 +1700,7 @@ function pinVFav(id) {
     if (insertAt === -1) insertAt = favs.length;
     while (insertAt < favs.length && !favs[insertAt].pinned && favs[insertAt].createdAt > item.createdAt) insertAt++;
     favs.splice(insertAt, 0, item);
-    setVFavs(favs);
+    if (setVFavs(favs) === false) return false;
     renderVFavs();
     toast('已取消置顶');
   } else {
@@ -1697,7 +1709,7 @@ function pinVFav(id) {
     const firstUnpinned = favs.findIndex(f => !f.pinned);
     const pinPos = firstUnpinned === -1 ? favs.length : firstUnpinned;
     favs.splice(pinPos, 0, item);
-    setVFavs(favs);
+    if (setVFavs(favs) === false) return false;
     renderVFavs();
     toast('已置顶');
   }
@@ -2178,7 +2190,8 @@ function openFavoriteInCard(id) {
   const favorite = getVFavs().find(item => item.id === id);
   if (!favorite) { toast('未找到收藏记录'); return; }
   let wrapper = Array.from($wsModules.querySelectorAll('.word-search-wrapper')).find(card =>
-    !card._searching && card._wordData && card._wordData.word.toLowerCase() === favorite.word.toLowerCase());
+    !card._searching && card._wordData && card._wordData.word.toLowerCase() === favorite.word.toLowerCase()
+    && (typeof StudyToolsUI === 'undefined' || StudyToolsUI.matchesWordFavorite(card, favorite)));
   const alreadyOpen = Boolean(wrapper);
   if (!wrapper) {
     wrapper = createWordSearchModule();
@@ -2445,7 +2458,7 @@ $wsModules.addEventListener('click', async e => {
         }
         return;
       }
-      addVFav(wrapper._wordData);
+      if (addVFav(wrapper._wordData) === false) return;
       saveBtn.textContent = '取消收藏';
       saveBtn.classList.add('favorited');
     }
@@ -2932,14 +2945,14 @@ $favListContainer.addEventListener('pointerup', function (e) {
   if (target) {
     var targetIdx = parseInt(target.dataset.vfidx, 10);
     if (targetIdx !== dragSrcIdx) {
-      var favs = getVFavs();
+      var favs;
+      try { favs = getVFavs(true); } catch (error) { toast(error.message); clearDragState(); return; }
       var targetRect = target.getBoundingClientRect();
       var insertBefore = e.clientY < targetRect.top + targetRect.height / 2;
       if (!isNoOpFavoriteDrop(dragSrcIdx, targetIdx, insertBefore)) {
-        setVFavs(insertBefore
+        if (setVFavs(insertBefore
           ? moveFavoriteBefore(favs, dragSrcIdx, targetIdx)
-          : moveFavoriteAfter(favs, dragSrcIdx, targetIdx));
-        renderVFavs();
+          : moveFavoriteAfter(favs, dragSrcIdx, targetIdx)) !== false) renderVFavs();
       }
     }
   } else {
@@ -2948,11 +2961,11 @@ $favListContainer.addEventListener('pointerup', function (e) {
     if (firstCompact) {
       var fr = firstCompact.getBoundingClientRect();
       if (e.clientY < fr.top && e.clientX >= fr.left && e.clientX <= fr.right) {
-        var favs = getVFavs();
+        var favs;
+        try { favs = getVFavs(true); } catch (error) { toast(error.message); clearDragState(); return; }
         var moved = favs.splice(dragSrcIdx, 1)[0];
         favs.splice(0, 0, moved);
-        setVFavs(favs);
-        renderVFavs();
+        if (setVFavs(favs) !== false) renderVFavs();
       }
     }
   }
@@ -3001,7 +3014,7 @@ async function exportData() {
       version: 2,
       exportedAt: fmtTime(new Date()),
       apiKey: getApiKey(),
-      favorites: getVFavs(),
+      favorites: getVFavs(true),
       ...(typeof StudyToolsUI !== 'undefined' ? { comparisons: StudyToolsUI.getComparisons(), sentences: StudyToolsUI.getSentences() } : {}),
       pageRecords: await getPageRecords(() => { throw new Error('保存记录无法读取'); })
     };
@@ -3119,10 +3132,11 @@ async function applyImport(mode, data) {
   const addedPageKeys = [];
   const written = [];
   try {
-    const incoming = (Array.isArray(data.favorites) ? data.favorites : []).filter(f => f && typeof f.word === 'string');
+    if (!Array.isArray(data.favorites) || data.favorites.some(item => !item || typeof item.word !== 'string' || !item.word.trim())) throw new Error('单词收藏格式无效');
+    const incoming = data.favorites;
     if (!await importPageRecords(data.pageRecords, addedPageKeys)) return;
     // Read current browser data after the asynchronous page writes, then update without yielding.
-    const favorites = mode === 'overwrite' ? incoming : mergeFavorites(getVFavs(), incoming);
+    const favorites = mode === 'overwrite' ? incoming : mergeFavorites(getVFavs(true), incoming);
     const importedKey = typeof data.apiKey === 'string' ? data.apiKey.trim() : '';
     const entries = [[VFAV_KEY, JSON.stringify(favorites)]];
     if (data.comparisons !== undefined) {

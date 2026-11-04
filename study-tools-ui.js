@@ -129,18 +129,16 @@ const StudyToolsUI = (() => {
       let saved;
       if (study.kind === 'mnemonic') {
         const favorite = favorites.find(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
-        const mnemonic = StudyTools.normalizeMnemonic(favorite?.mnemonic, study.word);
-        saved = Boolean(mnemonic && ['breakdown', 'association', 'tip'].every(key => mnemonic[key] === study.mnemonic[key])
-          && JSON.stringify(mnemonic.parts || []) === JSON.stringify(study.mnemonic.parts || []));
+        saved = StudyTools.sameStudy({ kind: 'mnemonic', word: study.word, mnemonic: favorite?.mnemonic }, study);
       } else if (study.kind === 'sentence') {
-        saved = sentences.some(item => StudyTools.sentenceKey(item.sentence, item.question) === StudyTools.sentenceKey(study.sentence, study.question));
+        saved = sentences.some(item => StudyTools.sameStudy(item, study));
       } else {
-        saved = comparisons.some(item => StudyTools.pairKey(item.left, item.right) === StudyTools.pairKey(study.left, study.right));
+        saved = comparisons.some(item => StudyTools.sameStudy(item, study));
       }
       // Keep the label ready while the card is still turning; only unlock it after the turn.
       button.textContent = saved ? '取消收藏' : '收藏';
       button.dataset.saved = String(saved);
-      if (!wrapper._searching) button.disabled = false;
+      button.disabled = Boolean(wrapper._searching);
       button.classList.toggle('favorited', saved);
     });
   }
@@ -148,6 +146,22 @@ const StudyToolsUI = (() => {
   function hasMnemonic(wrapper, info) {
     return Boolean(StudyTools.normalizeMnemonic(info.mnemonic, info.word) ||
       (wrapper._studyData?.kind === 'mnemonic' && StudyTools.wordKey(wrapper._studyData.word) === StudyTools.wordKey(info.word)));
+  }
+
+  function matchesWordFavorite(wrapper, favorite) {
+    if (!wrapper._wordData || StudyTools.wordKey(wrapper._wordData.word) !== StudyTools.wordKey(favorite.word)) return false;
+    const current = { ...wrapper._wordData, examples: wrapper._wordData.sentences || wrapper._wordData.examples || [] };
+    if (wrapper._studyData?.kind === 'mnemonic') current.mnemonic = wrapper._studyData.mnemonic;
+    const canonical = value => {
+      const normalized = StudyExport.normalizeFavorites([value])[0];
+      normalized.word = StudyTools.wordKey(normalized.word);
+      if (normalized.mnemonic) {
+        normalized.mnemonic = StudyTools.normalizeMnemonic(normalized.mnemonic, normalized.word);
+        if (normalized.mnemonic) delete normalized.mnemonic.example;
+      }
+      return normalized;
+    };
+    return JSON.stringify(canonical(current)) === JSON.stringify(canonical(favorite));
   }
 
   function linkWordCard(wrapper, info) {
@@ -394,7 +408,7 @@ const StudyToolsUI = (() => {
     if (regenerate) regenerate.disabled = true;
     let dictionary = StudyTools.wordKey(wrapper._wordData?.word) === StudyTools.wordKey(study.word) ? wrapper._wordData : null;
     try {
-      const exists = getVFavs().some(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
+      const exists = getVFavs(true).some(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
       if (!exists && !dictionary) {
         // Expand the same card in place. Keep _studyData until the entire operation succeeds,
         // so a refresh or failed lookup can still recover the original mnemonic.
@@ -409,7 +423,7 @@ const StudyToolsUI = (() => {
         if (!dictionary) throw new Error('查词失败，记法已保留，请点击收藏重试');
         if (!wrapper.isConnected) return;
       }
-      const favorites = StudyTools.mergeMnemonic(getVFavs(), study.word, study.mnemonic, dictionary);
+      const favorites = StudyTools.mergeMnemonic(getVFavs(true), study.word, study.mnemonic, dictionary);
       if (setVFavs(favorites) === false) throw new Error('收藏未保存，记法已保留，请检查存储空间后重试');
       wrapper._searching = false;
       if (dictionary && (!exists || wrapper._studyFace === 'definition')) {
@@ -442,8 +456,9 @@ const StudyToolsUI = (() => {
     if (!study || study.kind !== 'comparison') return;
     try {
       const comparisons = getComparisons();
-      if (comparisons.some(item => StudyTools.pairKey(item.left, item.right) === StudyTools.pairKey(study.left, study.right))) return;
-      comparisons.unshift({ ...study, id: crypto.randomUUID(), createdAt: fmtTime(new Date()), pinned: false });
+      const index = comparisons.findIndex(item => StudyTools.pairKey(item.left, item.right) === StudyTools.pairKey(study.left, study.right));
+      if (index >= 0) comparisons[index] = { ...comparisons[index], ...study };
+      else comparisons.unshift({ ...study, id: crypto.randomUUID(), createdAt: fmtTime(new Date()), pinned: false });
       writeComparisons(comparisons);
       refreshFavorites();
       toast('这组对比已收藏');
@@ -456,8 +471,9 @@ const StudyToolsUI = (() => {
     try {
       const sentences = getSentences();
       const key = StudyTools.sentenceKey(study.sentence, study.question);
-      if (sentences.some(item => StudyTools.sentenceKey(item.sentence, item.question) === key)) return;
-      sentences.unshift({ ...study, id: crypto.randomUUID(), createdAt: fmtTime(new Date()), pinned: false });
+      const index = sentences.findIndex(item => StudyTools.sentenceKey(item.sentence, item.question) === key);
+      if (index >= 0) sentences[index] = { ...sentences[index], ...study };
+      else sentences.unshift({ ...study, id: crypto.randomUUID(), createdAt: fmtTime(new Date()), pinned: false });
       sentences.sort((a, b) => Number(b.pinned) - Number(a.pinned));
       writeSentences(sentences);
       refreshFavorites();
@@ -469,7 +485,7 @@ const StudyToolsUI = (() => {
     const study = wrapper._studyData;
     try {
       if (study.kind === 'mnemonic') {
-        const favorites = getVFavs();
+        const favorites = getVFavs(true);
         const index = favorites.findIndex(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
         if (index === -1) return;
         // The memory face only owns the mnemonic, so cancelling there keeps the word
@@ -671,8 +687,7 @@ const StudyToolsUI = (() => {
         if (!item) return;
         const action = button.dataset.sentenceAction;
         if (action === 'open') {
-          const key = StudyTools.sentenceKey(item.sentence, item.question);
-          let wrapper = Array.from($wsModules.children).find(card => !card._searching && card._studyData?.kind === 'sentence' && StudyTools.sentenceKey(card._studyData.sentence, card._studyData.question) === key);
+          let wrapper = Array.from($wsModules.children).find(card => !card._searching && StudyTools.sameStudy(card._studyData, item));
           if (!wrapper) { wrapper = makeStudyCard(item); renderStudyCard(wrapper, item); saveWordSearchSession(); }
           scrollToCard(wrapper);
           return;
@@ -697,8 +712,7 @@ const StudyToolsUI = (() => {
         if (!item) return;
         const action = button.dataset.comparisonAction;
         if (action === 'open') {
-          const key = StudyTools.pairKey(item.left, item.right);
-          let wrapper = Array.from($wsModules.children).find(card => !card._searching && card._studyData?.kind === 'comparison' && StudyTools.pairKey(card._studyData.left, card._studyData.right) === key);
+          let wrapper = Array.from($wsModules.children).find(card => !card._searching && StudyTools.sameStudy(card._studyData, item));
           if (!wrapper) { wrapper = makeStudyCard(item); renderStudyCard(wrapper, item); saveWordSearchSession(); }
           scrollToCard(wrapper);
           return;
@@ -715,7 +729,8 @@ const StudyToolsUI = (() => {
       } catch (error) { toast(error.message); }
     });
     window.addEventListener('storage', event => {
-      if (event.key === COMPARISON_KEY || event.key === SENTENCE_KEY || event.key === VFAV_KEY || event.key === null) refreshFavorites();
+      if (event.key === VFAV_KEY || event.key === null) { renderVFavs(); updateAllVocabButtons(); }
+      else if (event.key === COMPARISON_KEY || event.key === SENTENCE_KEY) refreshFavorites();
     });
     const favoriteTabs = byId('favoriteStudyTabs');
     const resizeCapsule = () => { if (favoriteTabs.offsetWidth) syncSlider(favoriteTabs); };
@@ -724,6 +739,6 @@ const StudyToolsUI = (() => {
     refreshFavorites();
   }
 
-  return { init, mnemonicBlock, mnemonicContent, turnCard, renderStudyCard, renderDraft, refreshFavorites, getComparisons, getSentences, hasMnemonic, linkWordCard,
+  return { init, mnemonicBlock, mnemonicContent, turnCard, renderStudyCard, renderDraft, refreshFavorites, getComparisons, getSentences, hasMnemonic, linkWordCard, matchesWordFavorite,
     activeTab: () => tab, selectFavoriteTab: selectTab, exportComparisons, exportSentences };
 })();
