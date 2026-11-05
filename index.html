@@ -815,6 +815,7 @@ try {
 }
 </script>
 <link rel="stylesheet" href="study-tools.css?v=ff3dde0a4752">
+<link rel="stylesheet" href="favorites-shortcut.css?v=3111c3966e68">
 <link rel="stylesheet" href="appearance.css?v=25b83778e137">
 <script src="glass-wallpaper.js?v=8377738be2ba"></script>
 </head>
@@ -889,7 +890,7 @@ try {
 
   <!-- Favorites button -->
   <div class="fav-btns">
-    <button class="btn-fav-nav" id="btnOpenVocabFav">收藏 <span id="vocabFavCount">(0)</span></button>
+    <button class="btn-fav-nav" id="btnOpenVocabFav" type="button" aria-haspopup="dialog" aria-controls="modalVocabFav">收藏夹 <span id="vocabFavCount">(0)</span></button>
   </div>
   <div class="page-actions" role="group" aria-label="页面操作">
     <button class="btn-sm" id="btnClearPage" type="button">清空页面</button>
@@ -920,12 +921,17 @@ try {
     </svg>
   </button>
 </nav>
+<div class="favorites-shortcuts" id="favoritesShortcuts" role="group" aria-label="收藏快捷导航" data-favorites-visible="false">
 <button class="page-jump-btn page-jump-btn-primary unfavorited-jump-btn" id="btnJumpUnfavorited" type="button" aria-label="定位到第一个未收藏的卡片" hidden>
   <svg class="page-jump-icon" viewBox="0 0 24 42" aria-hidden="true" focusable="false">
     <path d="m12 2 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9L12 2Z" fill="currentColor" stroke="none"></path>
     <path d="m12 2 2.8 5.7 6.3.9-4.5 4.4 1.1 6.2-5.7-3-5.7 3 1.1-6.2-4.5-4.4 6.3-.9L12 2Z" transform="translate(0 20)" fill="none"></path>
   </svg>
 </button>
+<span class="favorites-shortcut-slot" id="favoritesShortcutSlot" aria-hidden="true" inert>
+  <button class="floating-favorites-btn" id="btnOpenFavoritesShortcut" type="button" aria-label="打开收藏夹" aria-haspopup="dialog" aria-controls="modalVocabFav" aria-expanded="false" tabindex="-1" disabled>收藏夹</button>
+</span>
+</div>
 <div class="toast" id="toast"></div>
 <input type="file" id="importFileInput" accept=".json,application/json" style="display:none">
 
@@ -1089,9 +1095,10 @@ try {
 <script src="study-tools-ui.js?v=087ee85f7e44"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
 <script src="glass-optics.js?v=242c18884651"></script>
-<script src="glass-renderer.js?v=59e37bd073ee"></script>
+<script src="glass-renderer.js?v=31e2cb403de9"></script>
 <script src="glass-refraction.js?v=73e5bdef55ce"></script>
 <script src="glass-interaction.js?v=5183b003826e"></script>
+<script src="favorites-shortcut.js?v=153a92ec8de7"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
 // 每张可见卡片独立校准折射带，文字不参与滤镜。
@@ -1163,6 +1170,7 @@ function updatePageJumpControls() {
   $btnJumpUnfavorited.hidden = modalOpen;
   $btnJumpTop.disabled = scrollTop <= 1;
   $btnJumpBottom.disabled = scrollTop + clientHeight >= scrollHeight - 1;
+  globalThis.FavoritesShortcut?.update();
 }
 
 function schedulePageJumpUpdate() {
@@ -3251,6 +3259,7 @@ initKey();
 renderVFavs();
 restoreWordSearchSession();
 StudyToolsUI.init();
+globalThis.FavoritesShortcut?.init(schedulePageJumpUpdate);
 window.addEventListener('pagehide', saveWordSearchSession);
 schedulePageJumpUpdate();
 </script>

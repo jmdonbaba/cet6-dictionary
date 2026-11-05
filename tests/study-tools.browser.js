@@ -14,7 +14,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
 (async () => {
   const server = http.createServer((req, res) => {
     const name = req.url.split('?')[0].slice(1) || 'index.html';
-    if (!['index.html', 'study-tools.js', 'study-tools-ui.js', 'study-tools.css', 'study-export.js', 'saved-page-store.js'].includes(name)) { res.writeHead(404).end(); return; }
+    if (!['index.html', 'study-tools.js', 'study-tools-ui.js', 'study-tools.css', 'study-export.js', 'saved-page-store.js', 'favorites-shortcut.css', 'favorites-shortcut.js'].includes(name)) { res.writeHead(404).end(); return; }
     res.setHeader('Content-Type', name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8');
     res.end(fs.readFileSync(path.join(__dirname, '..', name)));
   });

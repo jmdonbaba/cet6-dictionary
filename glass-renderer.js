@@ -422,6 +422,8 @@
     if(r.width<8||r.height<8||r.bottom<=originY||r.top>=originY+height||r.right<=originX||r.left>=originX+width)return false;
     var style=getComputedStyle(element);
     if(style.visibility==='hidden'||style.display==='none')return false;
+    // A fading control must fade its sampled lens along with its CSS material.
+    var opacity=Number(style.opacity);if(opacity<=0)return false;strength*=opacity;
     if(resizeObserver&&!observed.has(element)){resizeObserver.observe(element);observed.add(element);}
     rects.set([(r.left-originX)*sx,(r.top-originY)*sy,r.width*sx,r.height*sy],0);
     shapes.set([materialRadius(element,r)*sx,sx],0);

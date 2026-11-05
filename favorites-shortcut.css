@@ -1,0 +1,82 @@
+.favorites-shortcuts {
+  position: fixed;
+  left: calc(50% + 426px);
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+}
+.favorites-shortcuts .unfavorited-jump-btn {
+  position: static;
+  flex: 0 0 44px;
+}
+.favorites-shortcut-slot {
+  width: 0;
+  margin-left: 0;
+  height: 44px;
+  transition: width 340ms var(--motion-spring), margin-left 340ms var(--motion-spring);
+}
+.floating-favorites-btn {
+  position: relative;
+  width: 96px;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--card-bg);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px) scale(.72);
+  pointer-events: none;
+  transition: opacity 260ms ease, transform 340ms var(--motion-spring), visibility 0s linear 340ms;
+}
+.favorites-shortcuts[data-favorites-visible="true"] .favorites-shortcut-slot { width: 96px; margin-left: 8px; }
+.favorites-shortcuts[data-favorites-visible="true"] .floating-favorites-btn {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
+@media (hover: hover) {
+  .floating-favorites-btn:hover { border-color: var(--primary); color: var(--primary); }
+}
+.favorites-handoff {
+  position: fixed;
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+@media (max-width: 1240px) {
+  .favorites-shortcuts { left: auto; right: max(24px, env(safe-area-inset-right)); }
+  /* Keep the fading pill anchored while its slot makes room for the star. */
+  .favorites-shortcuts .floating-favorites-btn { position: absolute; right: 0; top: 0; }
+}
+@media (max-width: 500px) {
+  .favorites-shortcuts {
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .favorites-shortcut-slot, .floating-favorites-btn { transition: none; }
+}
