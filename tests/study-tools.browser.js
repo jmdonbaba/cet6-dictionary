@@ -54,7 +54,8 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     }
     else if (system.includes('词语对比')) {
       const names = JSON.parse(user).words;
-      data = { summary: 'affect 侧重影响的动作，effect 侧重结果。', tip: '动作看 affect，结果看 effect。', items: names.map(word => ({ word, meaning: word === 'affect' ? '影响' : '结果', usage: word === 'affect' ? '通常作动词' : '通常作名词', collocations: ['have an effect on'], example: { en: 'The effect is lasting.', cn: '影响是持久的。' } })) };
+      assert.doesNotMatch(system, /"tip"/);
+      data = { summary: 'affect 侧重影响的动作，effect 侧重结果。', items: names.map(word => ({ word, meaning: word === 'affect' ? '影响' : '结果', usage: word === 'affect' ? '通常作动词' : '通常作名词', collocations: ['have an effect on'], example: { en: 'The effect is lasting.', cn: '影响是持久的。' } })) };
     } else {
       dictionaryRequests++;
       if (dictionaryFail) { await route.fulfill({ status: 503, body: '{}' }); return; }
@@ -200,6 +201,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     await page.locator('#compareRight').fill('effect');
     await page.locator('#comparisonForm button').click();
     await page.locator('[data-study-action="save-comparison"]').waitFor();
+    assert.equal(await page.locator('.comparison-grid + .study-takeaway').count(), 0);
     assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 0);
     await page.locator('[data-study-action="save-comparison"]').click();
     assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons().length), 1);
@@ -280,7 +282,10 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     assert.doesNotMatch(wordHtml, /sk-test/);
     await page.locator('[data-favorite-tab="comparisons"]').click();
     const [compareExport] = await Promise.all([page.waitForEvent('download'), page.evaluate(() => exportStudyDocument('markdown'))]);
-    assert.match(fs.readFileSync(await compareExport.path(), 'utf8'), /词语对比复习讲义/);
+    const compareMarkdown = fs.readFileSync(await compareExport.path(), 'utf8');
+    assert.match(compareMarkdown, /词语对比复习讲义/);
+    assert.doesNotMatch(compareMarkdown, /一句话分清|undefined/);
+    assert.equal(await page.locator('#comparisonFavList .study-takeaway').count(), 0);
     await page.locator('#comparisonFavList summary').click();
     await page.locator('[data-comparison-action="pin"]').click();
     assert.equal(await page.evaluate(() => StudyToolsUI.getComparisons()[0].pinned), true);

@@ -38,8 +38,7 @@ const StudyToolsUI = (() => {
         <div class="study-section-label">用在什么地方</div><p>${esc(item.usage)}</p>
         ${item.collocations.length ? `<div class="study-section-label">常见搭配</div><p class="comparison-collocations">${item.collocations.map(esc).join(' · ')}</p>` : ''}
         ${exampleHtml(item.example)}
-      </section>`).join('')}</div>
-      <div class="study-takeaway"><strong>一句话分清</strong>${esc(study.tip)}</div></div>`;
+      </section>`).join('')}</div></div>`;
   }
 
   function sentenceContent(study) {
@@ -308,7 +307,7 @@ const StudyToolsUI = (() => {
   async function requestStudy(kind, words, signal) {
     let schema = kind === 'mnemonic'
       ? '返回 {"word":"原词","breakdown":"词块（中文含义） + 词块（中文含义） → 组合后的直观含义 → 单词的核心中文释义","parts":[{"part":"词块本身","source":"这个词块的来源说明"}]}。breakdown 是记法的唯一正文，要像一条简短的拆分记忆公式，示例 advisable：advise（建议） + able（能…的） → 能接受建议的 → 明智的、可取的。词块尽量使用容易识别的完整词或常见词缀，使用自然的中文把各部分含义串起来，不写 advis(e) 之类的拼写标记，不在公式里附加“去 e 加后缀”等拼写过程，必要的拼写变化写在对应词块的 source 里。无法按词根词缀合理拆分时不要硬拆、不编造伪词根，改用清楚标明“联想”的词块（近形词、谐音或整词联想）组成 breakdown，并在 parts 里写明联想到的词或联想依据，不得把联想伪装成词源。breakdown 必须给出内容，不能为空。parts 与 breakdown 的词块一一对应并按出现顺序列出，每个 source 必须说明这个词块凭什么有这个含义：有构词依据时写成词根、前缀或后缀及其含义，例如 {"part":"plaus","source":"词根：拍手、鼓掌，与 applause 同源"}、{"part":"re-","source":"前缀：再、重新"}、{"part":"-ible","source":"后缀：能…的"}；只是记忆联想时明确写成“联想到某词”并给出该单词，例如 {"part":"plaus","source":"联想到 applause（掌声），借“拍手称好”来记"}。不要把联想说成词源，不编造词源、构词或发音，不确定来源时只写清楚是记忆联想；source 不要重复词块本身。纯文本，不使用 Markdown、HTML 或重复“拆分记忆”标题，不写额外的联想段落或记忆提示。'
-      : '返回 {"summary":"中文核心区别，解释词性、含义、语气或使用场景差别","items":[{"word":"第一个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}},{"word":"第二个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}}],"tip":"一句话辨析提示"}。不要生硬地为近义词编造绝对区别，必要时说明重叠、特殊用法；不是近义词也如实比较。';
+      : '返回 {"summary":"中文核心区别，解释词性、含义、语气或使用场景差别","items":[{"word":"第一个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}},{"word":"第二个原词","meaning":"核心中文释义与词性","usage":"具体使用场景和易错点","collocations":["常见搭配"],"example":{"en":"自然英文例句","cn":"中文翻译"}}]}。不要生硬地为近义词编造绝对区别，必要时说明重叠、特殊用法；不是近义词也如实比较。';
     if (kind === 'sentence') schema = '返回 {"translation":"完整自然的中文翻译","structure":"中文解释句子主干、从句及修饰关系","grammar":[{"point":"具体语法或用法要点","explanation":"结合原句说明形式、含义和作用"}]' + (words[1] ? ',"answer":"直接回答用户疑问，结合原句给出依据和必要的例子"}' : '}') + '。至少给出一个相关语法要点；不要编造规则或绝对化，疑问不成立时温和纠正。保留原句大小写和标点。';
     const phraseWords = kind === 'mnemonic' ? StudyTools.normalizeWord(words[0]).split(' ') : [];
     if (phraseWords.length > 1) schema = '返回 {"word":"原词组","breakdown":"完整单词（常见基本义） + 完整单词（常见基本义，可简注当前作用） → 此处含义或作用的衔接 → 词组整体释义","parts":[{"part":"输入词组中的完整单词","source":"常见基本义 → 当前搭配中的含义或语法作用 → 与整体含义的联系"}]}。这是词组记忆，先解释每个完整单词独立使用时的常见基本义，再解释它在当前搭配中取哪一义或发挥什么作用，最后串联出词组的整体含义。不能直接用词组整体释义代替单词基本义，也不能只写“此处表示什么”而跳过单词本来的意思。多义词只列与记忆相关的常见义，并说明此处取哪一义；虚词先说明常见意思或基本功能，再区分其在当前搭配中的实际作用，不强行套用字面翻译。按空格分隔的完整单词逐个解释，不再把词组内部的单词拆成词根、前缀或后缀，不分析历史词源，不把词组混合拆成字母片段。parts 必须按输入顺序列出每个完整单词，不能遗漏、添加或改写单词，每个 source 用一至两句按基本义、当前用法、整体联系的顺序解释。例如 resolve to：resolve（解决；作出决定） + to（到、向；此处引出动作） → 作出决定要去做 → 决心做某事；parts 为 [{"part":"resolve","source":"基本义：解决问题，也可指作出决定；这里取作出决定、下决心的意思"},{"part":"to","source":"常见义：到、向；这里作不定式标记，后接动词原形，引出决心要做的事"}]。不得把 resolve 的“解决”义机械翻译成整个搭配，也不得把此处的 to 当作表示方向的介词。固定搭配、习语和短语动词有约定含义时，如实说明基本义与整体义的联系；无法严格推导时标明是记忆联想，不编造因果关系或词义演变。只返回非空 breakdown 和与完整单词一一对应的 parts，不加例句、额外联想段落、记忆提示、词源说明、Markdown、HTML 或重复标题。';
@@ -564,7 +563,7 @@ const StudyToolsUI = (() => {
     const comparisons = safeComparisons();
     if (!comparisons.length) { toast('还没有可导出的词语对比'); return; }
     const words = StudyExport.normalizeFavorites(comparisons.map(item => ({ word: `${item.left} 和 ${item.right}`,
-      definitions: [item.summary, ...item.items.map(word => `${word.word}：${word.meaning}；${word.usage}；搭配：${word.collocations.join('、')}`), `一句话分清：${item.tip}`],
+      definitions: [item.summary, ...item.items.map(word => `${word.word}：${word.meaning}；${word.usage}；搭配：${word.collocations.join('、')}`)],
       examples: item.items.map(word => word.example)
     })));
     const html = format === 'html';

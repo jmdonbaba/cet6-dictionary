@@ -64,7 +64,7 @@
     }
     if (value.kind !== 'comparison') return null;
     try { pairKey(value.left, value.right); } catch { return null; }
-    if (!text(value.summary) || !text(value.tip) || !Array.isArray(value.items) || value.items.length !== 2) return null;
+    if (!text(value.summary) || !Array.isArray(value.items) || value.items.length !== 2) return null;
     const items = value.items.map((item, index) => {
       if (!item || wordKey(item.word) !== wordKey(index ? value.right : value.left)) return null;
       const result = { word: text(item.word), meaning: text(item.meaning), usage: text(item.usage),
@@ -72,7 +72,7 @@
       return result.meaning && result.usage && result.example.en && result.example.cn ? result : null;
     });
     if (items.some(item => !item)) return null;
-    return { kind: 'comparison', left: text(value.left), right: text(value.right), summary: text(value.summary), tip: text(value.tip), items };
+    return { kind: 'comparison', left: text(value.left), right: text(value.right), summary: text(value.summary), ...(text(value.tip) ? { tip: text(value.tip) } : {}), items };
   }
 
   function sameStudy(left, right) {
@@ -85,6 +85,8 @@
         // Legacy examples are retained in backups but are not part of the memory face.
         delete study.mnemonic.example;
       } else if (study.kind === 'comparison') {
+        // Older backups may retain a takeaway that is no longer displayed.
+        delete study.tip;
         study.left = wordKey(study.left); study.right = wordKey(study.right);
         study.items = study.items.map(item => ({ ...item, word: wordKey(item.word) }));
         if (study.left > study.right) {

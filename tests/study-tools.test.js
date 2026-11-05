@@ -98,6 +98,9 @@ test('study responses reject empty or mismatched output and strip unknown fields
   assert.deepEqual(clean.mnemonic, mnemonic);
   assert.doesNotMatch(JSON.stringify(clean), /secret|script/);
   assert.deepEqual(Tools.normalizeStudy(comparison), comparison);
+  const { tip, ...withoutTip } = comparison;
+  assert.deepEqual(Tools.normalizeStudy(withoutTip), withoutTip, 'comparison results do not require a takeaway');
+  assert.equal(Tools.sameStudy(comparison, withoutTip), true, 'a hidden legacy takeaway cannot change the saved state');
 });
 
 test('comparison favorites deduplicate reversed pairs and keep saved metadata', () => {
