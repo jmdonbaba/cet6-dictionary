@@ -107,7 +107,7 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
       const start = performance.now();
       const sample = () => {
         const rect = card.getBoundingClientRect();
-        const button = card.querySelector('[data-study-action^="save-"]');
+        const button = card.querySelector('.btn-favorite');
         frames.push({ top: rect.top, height: rect.height, saveLabel: button ? button.textContent : null });
         if (performance.now() - start < 900) requestAnimationFrame(sample);
       };
@@ -154,14 +154,21 @@ const dict = word => ({ word, phonetic: '英 /əˈfekt/　美 /əˈfekt/', pos: 
     await activeMemory.locator('[data-study-action="flip"]').click();
     await activeMemory.locator('.word-header .word').waitFor();
     await page.waitForFunction(() => !document.querySelector('.word-search-wrapper')._flipping);
-    assert.equal(await activeMemory.locator('[data-study-action="save-mnemonic"]').textContent(), '取消收藏');
-    await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
+    const wordFavorite = activeMemory.locator('.word-header .btn-favorite');
+    assert.equal(await wordFavorite.textContent(), '取消收藏');
+    await wordFavorite.click();
     assert.equal((await favorites()).length, 0, 'cancelling on the word face removes the whole favorite');
     assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '已取消收藏');
+    assert.equal(await wordFavorite.textContent(), '收藏');
+    await wordFavorite.click();
+    await page.waitForFunction(() => getVFavs().length === 1);
+    assert.equal((await favorites())[0].mnemonic, undefined, 'saving on the definition face saves only the word');
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '单词已收藏');
+    await activeMemory.locator('[data-study-action="flip"]').click();
     assert.equal(await activeMemory.locator('[data-study-action="save-mnemonic"]').textContent(), '收藏');
     await activeMemory.locator('[data-study-action="save-mnemonic"]').click();
-    await page.waitForFunction(() => getVFavs().length === 1);
-    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '单词与记法已一起收藏');
+    assert.equal(await page.evaluate(() => document.getElementById('toast').textContent), '记法已补充到单词收藏');
+    await activeMemory.locator('[data-study-action="flip"]').click();
     console.log('PASS: generation is unsaved; first save queries and favorites a full word at the current position');
 
     await page.evaluate(() => {

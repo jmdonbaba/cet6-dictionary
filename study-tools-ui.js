@@ -281,6 +281,7 @@ const StudyToolsUI = (() => {
         const next = wrapper.querySelector('[data-study-action="flip"]');
         if (next) { next.disabled = false; if (focus) next.focus({ preventScroll: true }); }
         if (wrapper._studyFace === 'definition') syncSlider(wrapper.querySelector('.ws-mode-toggle'));
+        updateAllVocabButtons();
         updateStudyButtons(wrapper);
       }
       saveWordSearchSession();
@@ -396,7 +397,7 @@ const StudyToolsUI = (() => {
   }
 
   async function saveMnemonic(wrapper) {
-    if (wrapper._searching) return;
+    if (wrapper._searching || wrapper._studyFace !== 'memory') return;
     const study = wrapper._studyData;
     if (!study || study.kind !== 'mnemonic') return;
     wrapper._searching = true;
@@ -485,19 +486,15 @@ const StudyToolsUI = (() => {
     const study = wrapper._studyData;
     try {
       if (study.kind === 'mnemonic') {
+        if (wrapper._studyFace !== 'memory') return;
         const favorites = getVFavs(true);
         const index = favorites.findIndex(item => StudyTools.wordKey(item.word) === StudyTools.wordKey(study.word));
         if (index === -1) return;
-        // The memory face only owns the mnemonic, so cancelling there keeps the word
-        // saved and lets a second click add the mnemonic back. Removing the whole word
-        // (and its mnemonic) stays on the definition face where the word is shown.
-        if (wrapper._studyFace === 'memory') {
-          if (!favorites[index].mnemonic) return;
-          const { mnemonic, ...word } = favorites[index];
-          favorites[index] = word;
-        } else {
-          favorites.splice(index, 1);
-        }
+        // A mnemonic is an optional part of a word favorite. Removing just this
+        // part must preserve the word and its metadata.
+        if (!favorites[index].mnemonic) return;
+        const { mnemonic, ...word } = favorites[index];
+        favorites[index] = word;
         if (setVFavs(favorites) === false) return;
         renderVFavs();
         updateAllVocabButtons();

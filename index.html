@@ -1086,7 +1086,7 @@ try {
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=dfd806f5ca5d"></script>
 <script src="card-motion.js?v=fb1895f08638"></script>
-<script src="study-tools-ui.js?v=197fd953e82b"></script>
+<script src="study-tools-ui.js?v=ccff7dc07e13"></script>
 <script src="appearance.js?v=282b62a9c95f"></script>
 <script src="glass-optics.js?v=242c18884651"></script>
 <script src="glass-renderer.js?v=59e37bd073ee"></script>
@@ -1461,7 +1461,7 @@ function renderWordResult(wrapper, resultEl, searchWord_, info, favoriteWords) {
         <span class="word">${esc(displayWord)}</span>
         ${info.phonetic ? `<span class="phonetic">${esc(info.phonetic)}</span>` : ''}
         ${info.pos ? `<span class="pos">${esc(info.pos.replace(/,\s*/g, ' & '))}</span>` : ''}
-        <button class="btn-favorite"${hasMnemonic ? ' data-study-action="save-mnemonic"' : ''}>收藏</button>
+        <button type="button" class="btn-favorite"${wrapper._flipping ? ' disabled' : ''}>收藏</button>
         ${hasMnemonic ? '<button type="button" class="btn-sm word-header-action" data-study-action="flip">怎么记 ↻</button>' : '<button type="button" class="btn-sm word-header-action" data-study-action="generate-mnemonic">生成记法</button>'}
       </div>
       ${info.definitions ? info.definitions.map((d, i) => `<div class="definition"><span class="def-label">${i + 1}.</span>${esc(d)}</div>`).join('') : ''}
@@ -1655,7 +1655,8 @@ function addVFav(vocab) {
     definitions: vocab.definitions || [],
     examples: examples,
     forms: vocab.forms || '',
-    ...(vocab.mnemonic ? { mnemonic: vocab.mnemonic } : {}),
+    // Word favorites are independent of any draft mnemonic still held by the card.
+    // Only the memory face may explicitly add a mnemonic to this record.
     createdAt: fmtTime(new Date())
   });
   if (setVFavs(favs) === false) return false;
@@ -1724,6 +1725,7 @@ function updateAllVocabButtons() {
       const isFav = favWords.has(wrapper._wordData.word.toLowerCase());
       if (isFav) { saveBtn.textContent = '取消收藏'; saveBtn.classList.add('favorited'); }
       else { saveBtn.textContent = '收藏'; saveBtn.classList.remove('favorited'); }
+      saveBtn.disabled = Boolean(wrapper._flipping);
     }
   });
 }
@@ -2448,7 +2450,7 @@ $wsModules.addEventListener('click', async e => {
   if (saveBtn) {
     if (saveBtn.dataset.studyAction) return;
     const wrapper = e.target.closest('.word-search-wrapper');
-    if (wrapper && wrapper._wordData) {
+    if (wrapper && wrapper._wordData && !wrapper._searching) {
       if (saveBtn.classList.contains('favorited')) {
         const word = wrapper._wordData && wrapper._wordData.word;
         if (word && removeVFavByWord(word)) {

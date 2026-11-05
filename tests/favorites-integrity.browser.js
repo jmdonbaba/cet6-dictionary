@@ -30,7 +30,7 @@ const sentence = version => ({ kind: 'sentence', sentence: 'Had I known, I would
   await page.goto(url);
   const favorite = () => page.evaluate(() => getVFavs());
   const read = key => page.evaluate(key => JSON.parse(localStorage.getItem(key) || '[]'), key);
-  const button = action => page.locator(`#wordSearchModules [data-study-action="${action}"]`).first();
+  const button = action => page.locator(`#wordSearchModules ${action === 'save-mnemonic' ? '.study-result-actions ' : ''}[data-study-action="${action}"]`).first();
   async function reset() {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.evaluate(keys => {
@@ -51,6 +51,149 @@ const sentence = version => ({ kind: 'sentence', sentence: 'Had I known, I would
     catch (error) { failures.push(name + ': ' + error.message); console.error('FAIL: ' + name + ': ' + error.message); }
   }
   try {
+    await run('the definition face saves only the word even when the card has a draft mnemonic', async () => {
+      await show(mnemonic('A'), dictionary);
+      await button('flip').click();
+      const wordButton = page.locator('#wordSearchModules .word-header .btn-favorite');
+      await wordButton.click();
+      assert.equal((await favorite()).length, 1);
+      assert.equal((await favorite())[0].mnemonic, undefined, 'saving a word must not implicitly save the draft mnemonic');
+      assert.equal(await wordButton.textContent(), '取消收藏');
+      await button('flip').click();
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+      await page.reload();
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+      await button('flip').click();
+      assert.equal(await wordButton.textContent(), '取消收藏');
+    });
+
+    for (const savedMnemonic of [undefined, mnemonic('A').mnemonic]) {
+      await run(`a saved word remains saved when its ${savedMnemonic ? 'regenerated' : 'first'} mnemonic is still a draft`, async () => {
+        await page.evaluate(({ dictionary, savedMnemonic }) => {
+          setVFavs([{ ...dictionary, id: 'saved-word', pinned: true, createdAt: 'keep-time', ...(savedMnemonic ? { mnemonic: savedMnemonic } : {}) }]); renderVFavs();
+        }, { dictionary, savedMnemonic });
+        await show(mnemonic('B'), dictionary);
+        assert.equal(await button('save-mnemonic').textContent(), '收藏');
+        await button('flip').click();
+        const wordButton = page.locator('#wordSearchModules .word-header .btn-favorite');
+        assert.equal(await wordButton.textContent(), '取消收藏', 'the definition button depends on the word, not the draft mnemonic');
+        await wordButton.click();
+        assert.equal((await favorite()).length, 0, 'cancelling the word also removes any saved mnemonic');
+        await button('flip').click();
+        assert.equal(await button('save-mnemonic').textContent(), '收藏');
+        await button('save-mnemonic').click();
+        const saved = (await favorite())[0];
+        assert.equal(saved.word, dictionary.word);
+        assert.match(saved.mnemonic.breakdown, /B/);
+      });
+    }
+
+    await run('cancelling a mnemonic keeps word buttons saved across cards and refresh', async () => {
+      await page.evaluate(({ dictionary, study }) => {
+        setVFavs([{ ...dictionary, id: 'saved-word', mnemonic: study.mnemonic }]); renderVFavs();
+        applyWordSearchCards([
+          { input: study.word, study, result: { ...dictionary, mnemonic: study.mnemonic }, studyFace: 'definition' },
+          { input: study.word, study, result: dictionary }
+        ]);
+      }, { dictionary, study: mnemonic('A') });
+      await button('save-mnemonic').click();
+      assert.equal((await favorite()).length, 1);
+      assert.equal((await favorite())[0].mnemonic, undefined);
+      const wordButton = page.locator('#wordSearchModules .word-header .btn-favorite');
+      assert.equal(await wordButton.textContent(), '取消收藏', 'removing the mnemonic cannot unset the word favorite');
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+      await page.reload();
+      assert.equal(await wordButton.textContent(), '取消收藏');
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+    });
+
+    await run('removing and re-adding a word never resurrects its cancelled mnemonic', async () => {
+      await page.evaluate(({ dictionary, study }) => {
+        setVFavs([{ ...dictionary, id: 'saved-word', mnemonic: study.mnemonic }]); renderVFavs();
+        applyWordSearchCards([
+          { input: study.word, study, result: { ...dictionary, mnemonic: study.mnemonic }, studyFace: 'definition' },
+          { input: study.word, study, result: dictionary }
+        ]);
+      }, { dictionary, study: mnemonic('A') });
+      const wordButton = page.locator('#wordSearchModules .word-header .btn-favorite');
+      await wordButton.click();
+      assert.equal((await favorite()).length, 0);
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+      await wordButton.click();
+      assert.equal((await favorite()).length, 1);
+      assert.equal((await favorite())[0].mnemonic, undefined, 'old card content is a draft after the favorite is removed');
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+      await button('save-mnemonic').click();
+      assert.match((await favorite())[0].mnemonic.breakdown, /A/);
+      assert.equal(await wordButton.textContent(), '取消收藏');
+      await button('save-mnemonic').click();
+      assert.equal((await favorite()).length, 1);
+      assert.equal((await favorite())[0].mnemonic, undefined);
+      assert.equal(await wordButton.textContent(), '取消收藏');
+    });
+
+    await run('word deletion and re-addition synchronize independent face states in another tab', async () => {
+      const other = await context.newPage();
+      try {
+        await page.evaluate(({ dictionary, study }) => {
+          setVFavs([{ ...dictionary, id: 'saved-word', mnemonic: study.mnemonic }]); renderVFavs();
+          applyWordSearchCards([{ input: study.word, study, result: dictionary, studyFace: 'definition' }]);
+        }, { dictionary, study: mnemonic('A') });
+        await other.goto(url);
+        await other.evaluate(({ dictionary, study }) => applyWordSearchCards([
+          { input: study.word, study, result: dictionary, studyFace: 'definition' },
+          { input: study.word, study, result: dictionary }
+        ]), { dictionary, study: mnemonic('A') });
+        const wordButton = page.locator('#wordSearchModules .word-header .btn-favorite');
+        await wordButton.click();
+        await other.waitForFunction(() => document.querySelector('#wordFavoriteCount').textContent === '0');
+        assert.equal(await other.locator('.word-header .btn-favorite').textContent(), '收藏');
+        assert.equal(await other.locator('.study-result-actions [data-study-action="save-mnemonic"]').textContent(), '收藏');
+        await wordButton.click();
+        await other.waitForFunction(() => document.querySelector('#wordFavoriteCount').textContent === '1');
+        assert.equal(await other.locator('.word-header .btn-favorite').textContent(), '取消收藏');
+        assert.equal(await other.locator('.study-result-actions [data-study-action="save-mnemonic"]').textContent(), '收藏');
+      } finally { await other.close(); }
+    });
+
+    await run('failed word cancellation preserves both favorites and retries as one operation', async () => {
+      await page.evaluate(({ dictionary, study }) => {
+        setVFavs([{ ...dictionary, id: 'saved-word', pinned: true, createdAt: 'keep-time', mnemonic: study.mnemonic }]); renderVFavs();
+        applyWordSearchCards([
+          { input: study.word, study, result: dictionary, studyFace: 'definition' },
+          { input: study.word, study, result: dictionary }
+        ]);
+        window.originalStorageSet = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) { if (key !== 'cet6_vocab_favorites') return window.originalStorageSet.call(this, key, value); };
+      }, { dictionary, study: mnemonic('A') });
+      const before = await favorite();
+      const wordButton = page.locator('#wordSearchModules .word-header .btn-favorite');
+      await wordButton.click();
+      assert.deepEqual(await favorite(), before);
+      assert.equal(await wordButton.textContent(), '取消收藏');
+      assert.equal(await button('save-mnemonic').textContent(), '取消收藏');
+      await page.evaluate(() => { Storage.prototype.setItem = window.originalStorageSet; });
+      await wordButton.click();
+      assert.equal((await favorite()).length, 0);
+      assert.equal(await wordButton.textContent(), '收藏');
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+    });
+
+    await run('deleting a word from the favorites list also clears both card favorite states', async () => {
+      await page.evaluate(({ dictionary, study }) => {
+        setVFavs([{ ...dictionary, id: 'saved-word', mnemonic: study.mnemonic }]); renderVFavs();
+        applyWordSearchCards([
+          { input: study.word, study, result: dictionary, studyFace: 'definition' },
+          { input: study.word, study, result: dictionary }
+        ]);
+        delVFav('saved-word');
+      }, { dictionary, study: mnemonic('A') });
+      assert.equal((await favorite()).length, 0);
+      assert.equal(await page.locator('#wordSearchModules .word-header .btn-favorite').textContent(), '收藏');
+      assert.equal(await button('save-mnemonic').textContent(), '收藏');
+      assert.equal(await page.locator('#wordFavoriteCount').textContent(), '0');
+    });
+
     await run('mnemonic save synchronizes the actual word favorite list in another tab', async () => {
       const other = await context.newPage();
       try {
@@ -134,6 +277,12 @@ const sentence = version => ({ kind: 'sentence', sentence: 'Had I known, I would
       assert.equal(await button('save-mnemonic').isDisabled(), true);
       await page.waitForFunction(() => !document.querySelector('#wordSearchModules .word-search-wrapper')._flipping);
       assert.equal(await button('save-mnemonic').isEnabled(), true);
+      await button('flip').click();
+      await page.waitForFunction(() => { const card = document.querySelector('#wordSearchModules .word-search-wrapper'); return card._searching && card._studyFace === 'definition'; });
+      const wordButton = page.locator('#wordSearchModules .word-header .btn-favorite');
+      assert.equal(await wordButton.isDisabled(), true);
+      await page.waitForFunction(() => !document.querySelector('#wordSearchModules .word-search-wrapper')._flipping);
+      assert.equal(await wordButton.isEnabled(), true);
     });
 
     for (const [kind, make, key] of [['mnemonic', mnemonic, keys[0]], ['comparison', comparison, keys[1]], ['sentence', sentence, keys[2]]]) {
@@ -176,6 +325,7 @@ const sentence = version => ({ kind: 'sentence', sentence: 'Had I known, I would
         await button(`save-${kind}`).click();
         const stored = await read(key);
         assert.equal(stored.length, 1);
+        if (kind === 'mnemonic') await button('flip').click();
         await page.evaluate(key => {
           Storage.prototype.setItem = function (name, value) { if (name !== key) return window.originalStorageSet.call(this, name, value); };
         }, key);
