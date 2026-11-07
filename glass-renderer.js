@@ -1,7 +1,7 @@
 /* Shared event-driven GPU wallpaper/card pass and scissored button lenses.
  * Text and controls stay in the DOM. No DOM capture, per-card render targets or
- * backdrop reads. Water follows the display refresh. The other themes drift at a
- * lower idle cadence through the same shader. Native glass is the fallback.
+ * backdrop reads. Animated themes follow the desktop display refresh. Narrow
+ * screens render fewer lenses and cap idle wallpaper motion at 60 fps.
  */
 (function () {
   'use strict';
@@ -19,7 +19,9 @@
   var water = null, waterLoading = false, waterFailed = false;
   var locations = {};
   var motionUntil = 0, waterAnimating = false;
-  var ambientAnimating = false, ambientTimer = 0, ambientElapsed = 0, ambientTick = null;
+  var ambientAnimating = false, ambientElapsed = 0, ambientTick = null;
+  var wallpaperFrame = false, nextMobileFrame = 0;
+  var mobileFrameInterval = 1000 / 60;
   var motionQuery = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
   var controlCount=0,controlIntensity=1;
   var MAX_LENSES = 16;
@@ -30,7 +32,7 @@
     'uniform sampler2D underGlass;',
     'uniform float uTime;',
     'uniform float waterMotion;',
-    'uniform vec4 ambientMotion;',
+    'uniform vec3 ambientMotion;',
     'uniform float buttonLens;',
     'uniform float inputLens;',
     'uniform float overlayPass;',
@@ -65,11 +67,6 @@
     ' vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999));',
     ' if(overlayPass>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb;',
     ' if(waterMotion>.5)return waterAt(uv);',
-    ' if(ambientMotion.w>0.){',
-    '  vec2 light=uv-vec2(.5)-ambientMotion.xy;',
-    '  float wash=1.-smoothstep(.02,.62,dot(light,light));',
-    '  return texture2D(wallpaper,uv).rgb+vec3(wash*ambientMotion.w);',
-    ' }',
     ' vec2 drift=ambientMotion.xy+ambientMotion.z*vec2(uv.y-.5,.5-uv.x);',
     ' return texture2D(wallpaper,uv+4.*uv*(1.-uv)*drift).rgb;',
     '}',
@@ -198,12 +195,13 @@
     try{finishProgram();}catch(error){failed=true;disable();window.LiquidGlass?.refresh();}
   }
 
-  function buildWallpaper() {
+  function buildWallpaper(mobile) {
     GlassWallpaper.refresh();
-    var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    var dpr = Math.min(window.devicePixelRatio || 1, mobile ? .85 : 1.5);
+    var pixelBudget = mobile ? 420000 : 2400000;
     // Bound texture size on high DPI screens; one shared texture, not one per card.
     var maxSize = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
-    var scale = Math.min(dpr, Math.sqrt(2400000 / (width * height)), maxSize / width, maxSize / height);
+    var scale = Math.min(dpr, Math.sqrt(pixelBudget / (width * height)), maxSize / width, maxSize / height);
     canvas.width = source.width = Math.max(1, Math.round(width * scale));
     canvas.height = source.height = Math.max(1, Math.round(height * scale));
     var ctx = source.getContext('2d');
@@ -230,7 +228,7 @@
     if (!motion) {
       ambientElapsed = 0;
       ambientTick = null;
-      gl.uniform4f(locations.ambientMotion, 0, 0, 0, 0);
+      gl.uniform3f(locations.ambientMotion, 0, 0, 0);
       return;
     }
     if (ambientTick !== null) {
@@ -241,18 +239,20 @@
     // Ease in from the preview pixels, then vary the warp without uploading a new texture.
     var amount = Math.min(1, ambientElapsed / 1.2);
     var phase = ambientElapsed * 2 * Math.PI / motion.period;
-    gl.uniform4f(locations.ambientMotion,
+    gl.uniform3f(locations.ambientMotion,
       motion.x * amount * Math.sin(phase),
       motion.y * amount * Math.sin(phase + .9),
-      motion.bend * amount * Math.sin(phase * .85 + .55),
-      motion.glow * amount * (.76 + .24 * Math.sin(phase)));
+      motion.bend * amount * Math.sin(phase * .85 + .55));
   }
 
   function draw(now) {
     frame = 0;
+    wallpaperFrame = false;
     if (!active || !programReady || document.hidden) return;
     ambientAnimating = waterAnimating = false;
-    if (root.dataset.interface !== 'glass' || innerWidth <= 720) { clearModal();root.classList.remove('glass-gpu'); return; }
+    if (root.dataset.interface !== 'glass') { clearModal();root.classList.remove('glass-gpu'); return; }
+    var mobile = innerWidth <= 720;
+    var lensLimit = mobile ? 6 : MAX_LENSES;
     try {
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
       var box=canvas.getBoundingClientRect();
@@ -262,16 +262,16 @@
       if (width !== box.width || height !== box.height || pixelRatio !== (devicePixelRatio||1) || theme !== root.dataset.wallpaper) {
         if (theme !== root.dataset.wallpaper) { ambientElapsed = 0; ambientTick = null; }
         width=box.width;height=box.height;pixelRatio=devicePixelRatio||1;theme=root.dataset.wallpaper;
-        buildWallpaper();
+        buildWallpaper(mobile);
       }
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
       var count = 0;
       var hoverElement=null,hoverIndex=-1,recoilElement=null,recoilIndex=-1;
       document.querySelectorAll(selector).forEach(function (element) {
-        if (element.matches('.modal-card, button')) return;
+        if (count >= lensLimit || element.matches('.modal-card, button')) return;
         if (resizeObserver && !observed.has(element)) { resizeObserver.observe(element); observed.add(element); }
         var r = element.getBoundingClientRect();
-        if (count >= MAX_LENSES || r.width < 32 || r.height < 32 || r.bottom < originY || r.top > originY+height) return;
+        if (r.width < 32 || r.height < 32 || r.bottom < originY || r.top > originY+height) return;
         if (getComputedStyle(element).visibility === 'hidden') return;
         rects.set([r.left-originX,r.top-originY,r.width,r.height],count*4);
         shapes.set([materialRadius(element,r),0],count*2);
@@ -304,13 +304,19 @@
       for (var i=0;i<count;i++) { rects[i*4]*=sx;rects[i*4+1]*=sy;rects[i*4+2]*=sx;rects[i*4+3]*=sy;shapes[i*2]*=sx;shapes[i*2+1]=sx; }
       gl.uniform4fv(locations['rects[0]'], rects); gl.uniform2fv(locations['shapes[0]'], shapes);
       gl.drawArrays(gl.TRIANGLES,0,3);
-      drawLayers(sx,sy,rects,shapes);
-      drawButtons(sx, sy, rects, shapes);
-      drawModal(sx,sy,rects,shapes);
+      if (mobile) {
+        layerCount = 0;
+        clearModal();
+      } else drawLayers(sx,sy,rects,shapes);
+      drawButtons(sx, sy, rects, shapes, mobile);
+      if (!mobile) drawModal(sx,sy,rects,shapes);
       draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
-      if (waterAnimating || performance.now() < motionUntil) requestRender();
-      else if (ambientAnimating) ambientTimer = setTimeout(requestRender, 32);
+      if (performance.now() < motionUntil) requestRender();
+      else if (waterAnimating || ambientAnimating) {
+        if (mobile) requestMobileWallpaperFrame();
+        else requestRender();
+      }
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
   }
 
@@ -502,12 +508,13 @@
     });
     return count;
   }
-  function drawButtons(sx,sy,rects,shapes) {
-    buttonCount=0;controlCount=0;if(!buttonIntensity&&!controlIntensity)return;
+  function drawButtons(sx,sy,rects,shapes,mobile) {
+    buttonCount=0;controlCount=0;if(!controlIntensity&&(mobile||!buttonIntensity))return;
     copyComposite();gl.enable(gl.SCISSOR_TEST);
     if(controlIntensity)document.querySelectorAll(GlassOptics.inputs).forEach(function(input){
       if(!input.closest('.modal-card')&&drawSurface(input,true,controlIntensity*GlassOptics.inputStrength(input,performance.now()),sx,sy,rects,shapes))controlCount++;
     });
+    if (mobile) { gl.disable(gl.SCISSOR_TEST); return; }
     // Clear buttons inside a search box sample its completed input plate.
     copyComposite();
     document.querySelectorAll('button, '+GlassOptics.controls).forEach(function(button){
@@ -544,19 +551,32 @@
   }
 
   function requestRender() {
-    if (!active || frame || document.hidden) return;
-    if (ambientTimer) clearTimeout(ambientTimer);
-    ambientTimer = 0;
+    if (!active || document.hidden || (frame && !wallpaperFrame)) return;
+    cancelRender();
     frame = requestAnimationFrame(draw);
+  }
+  function requestMobileWallpaperFrame() {
+    wallpaperFrame = true;
+    frame = requestAnimationFrame(drawMobileWallpaperFrame);
+  }
+  function drawMobileWallpaperFrame(now) {
+    if (now + 1 < nextMobileFrame) {
+      requestMobileWallpaperFrame();
+      return;
+    }
+    // Keep the cadence on the display clock while avoiding catch-up bursts.
+    nextMobileFrame = Math.max(now - 8, nextMobileFrame) + mobileFrameInterval;
+    draw(now);
   }
   function cancelRender() {
     if (frame) cancelAnimationFrame(frame);
-    if (ambientTimer) clearTimeout(ambientTimer);
-    frame = ambientTimer = 0;
+    frame = 0;
+    wallpaperFrame = false;
   }
   function onVisibilityChange() {
     if (document.hidden) {
       cancelRender();
+      nextMobileFrame = 0;
       ambientTick = null;
       ambientAnimating = waterAnimating = false;
     } else requestRender();
@@ -580,6 +600,7 @@
     clearModal();
     active = false;
     cancelRender();
+    nextMobileFrame = 0;
     ambientElapsed = 0;
     ambientTick = null;
     ambientAnimating = waterAnimating = false;

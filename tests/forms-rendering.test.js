@@ -43,7 +43,7 @@ test('uses non-layout drag indicators and avoids focusing favorite search on mob
   assert.match(source, /\.vf-compact\.drag-over\s*\{\s*box-shadow:\s*inset 0 -2px 0 var\(--primary\);/);
   assert.match(source, /\.vf-compact\.drag-over-top\s*\{\s*box-shadow:\s*inset 0 2px 0 var\(--primary\);/);
   assert.doesNotMatch(source, /\.vf-compact\.drag-over\s*\{\s*border-bottom:/);
-  assert.match(source, /modal === \$modalVocabFav && !skipFocus && !window\.matchMedia\('\(max-width: 500px\)'\)\.matches/);
+  assert.match(source, /modal === \$modalVocabFav && !skipFocus && mobileModal\.matches\) \{\s*modal\.querySelector\('\.modal-close'\)\.focus\(\{ preventScroll: true \}\)/);
 });
 
 test('maps both sides of an insertion gap to the same indicator edge', () => {

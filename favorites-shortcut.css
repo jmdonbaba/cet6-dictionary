@@ -57,6 +57,7 @@
   font-size: 14px;
   font-weight: 600;
   pointer-events: none;
+  contain: layout paint;
 }
 .favorites-handoff-surface, .favorites-handoff-rim { position: absolute; inset: 0; }
 .favorites-handoff-surface { background: var(--card-bg); }
@@ -64,15 +65,36 @@
 .favorites-handoff-outline { fill: none; stroke: var(--border); stroke-width: 1.25; }
 .favorites-handoff-rim.favorites-handoff-focused .favorites-handoff-outline { stroke: var(--primary); stroke-width: 2; }
 .favorites-handoff-traveler, .favorites-handoff-label { position: absolute; inset: 0 auto auto 0; white-space: nowrap; }
-html[data-interface="glass"] .favorites-handoff-surface {
-  background: linear-gradient(152deg, rgba(255, 255, 255, .37), rgba(255, 255, 255, .10) 60%, rgba(255, 255, 255, .23));
-  -webkit-backdrop-filter: blur(9px) saturate(1.24);
-  backdrop-filter: blur(9px) saturate(1.24);
+html[data-interface="glass"] .favorites-handoff-surface { background: transparent; }
+/* Match both controls' paint without reblurring the page under a moving clip. */
+html[data-interface="glass"] .favorites-handoff-surface::before,
+html[data-interface="glass"] .favorites-handoff-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
 }
-html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-surface {
-  background: linear-gradient(152deg, rgba(48, 61, 102, .88), rgba(23, 32, 69, .87));
+html[data-interface="glass"] .favorites-handoff-surface::before {
+  background-color: var(--handoff-compact-color);
+  background-image: var(--handoff-compact-sheen);
+  opacity: calc(1 - var(--handoff-footer-weight, 0));
 }
-html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff { color: #f1f4ff; }
+html[data-interface="glass"] .favorites-handoff-surface::after {
+  background-color: var(--handoff-footer-color);
+  background-image: var(--handoff-footer-sheen);
+  opacity: var(--handoff-footer-weight, 0);
+}
+@supports (color: color-mix(in srgb, white, black)) {
+  html[data-interface="glass"] .favorites-handoff-surface {
+    background-color: color-mix(in srgb, var(--handoff-compact-color),
+      var(--handoff-footer-color) calc(var(--handoff-footer-weight, 0) * 100%));
+  }
+  html[data-interface="glass"] .favorites-handoff-surface::before,
+  html[data-interface="glass"] .favorites-handoff-surface::after { background-color: transparent; }
+}
+html[data-interface="glass"][data-wallpaper="night"] .floating-favorites-btn {
+  --glass-button-fill: rgba(30, 40, 71, .8);
+  --glass-button-ink: #f1f4ff;
+}
 html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-focused .favorites-handoff-outline { stroke: #c2ccff; }
 html[data-interface="glass"] .favorites-handoff-rim:not(.favorites-handoff-focused) .favorites-handoff-outline {
   stroke: url(#favorites-handoff-rim-light);
@@ -90,13 +112,37 @@ html[data-interface="glass"] .favorites-handoff-rim:not(.favorites-handoff-focus
 }
 :root button[data-favorites-handoff-cover]::before,
 :root button[data-favorites-handoff-cover]::after { visibility: hidden !important; }
+:root .floating-favorites-btn[data-favorites-handoff-cover] { transition: none !important; }
+/* Once the outline is nearly settled, dissolve onto the real footer glass.
+   Only that stationary plate samples the backdrop. */
+html[data-interface="glass"] .btn-fav-nav[data-favorites-handoff-cover="landing"]::before {
+  visibility: visible !important;
+  animation: favorites-handoff-material 100ms linear both;
+}
+.favorites-handoff-surface.favorites-handoff-landing { animation: favorites-handoff-material 100ms linear reverse both; }
+@keyframes favorites-handoff-material {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+:root button[data-favorites-handoff-highlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: favorites-handoff-highlight 220ms ease-out;
+}
+@keyframes favorites-handoff-highlight {
+  from { box-shadow: 0 0 8px rgba(105, 108, 228, .28); }
+  to { box-shadow: 0 0 8px rgba(105, 108, 228, 0); }
+}
 @media (prefers-reduced-transparency: reduce) {
-  html[data-interface="glass"] .favorites-handoff-surface { background: var(--card-bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
-  html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-surface { background: #273459; }
+  html[data-interface="glass"][data-wallpaper="night"] .floating-favorites-btn { --glass-button-ink: var(--text); }
 }
 @media (forced-colors: active) {
   .favorites-handoff { color: CanvasText !important; }
-  .favorites-handoff-surface { background: Canvas !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .favorites-handoff-surface { background: Canvas !important; }
+  .favorites-handoff-surface::before, .favorites-handoff-surface::after { display: none; }
   .favorites-handoff-outline { stroke: CanvasText !important; }
 }
 @media (max-width: 1240px) {

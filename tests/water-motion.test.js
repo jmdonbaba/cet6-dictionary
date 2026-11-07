@@ -13,7 +13,7 @@ test('glass water flows in the shader at display refresh and freezes for reduced
   assert.match(renderer, /vec3 waterAt\(vec2 uv\)\{/);
   assert.match(renderer, /if\(waterMotion>\.5\)return waterAt\(uv\)/);
   assert.match(renderer, /waterAnimating = theme === 'water' && !!water && canAnimate;/);
-  assert.match(renderer, /if \(waterAnimating \|\| performance\.now\(\) < motionUntil\) requestRender\(\);/);
+  assert.match(renderer, /else if \(waterAnimating \|\| ambientAnimating\)/);
   assert.match(renderer, /prefers-reduced-motion: reduce/);
   assert.match(renderer, /waterMotion: waterAnimating/);
 });
@@ -29,15 +29,16 @@ test('classic water adds a compositor-only flow layer that respects reduced moti
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\.appearance-water::after \{\s*animation: none !important;\s*transform: none !important;/);
 });
 
-test('ambient themes share the lens sampling path and opt into a slower idle cadence', () => {
+test('detailed themes share the lens sampling path and the mobile frame budget', () => {
   const drawBody = renderer.slice(renderer.indexOf('function draw(now)'), renderer.indexOf('function copyComposite()'));
   assert.doesNotMatch(drawBody, /requestAnimationFrame\(draw\)/,
     'draw must not self-schedule an unconditional frame loop');
-  assert.match(renderer, /else if \(ambientAnimating\) ambientTimer = setTimeout\(requestRender, 32\);/);
+  assert.match(renderer, /if \(mobile\) requestMobileWallpaperFrame\(\);\s*else requestRender\(\);/);
+  assert.match(renderer, /mobileFrameInterval = 1000 \/ 60;/);
   assert.match(renderer, /updateAmbient\(now, canAnimate && GlassWallpaper\.motionFor\(theme\)\)/);
-  assert.match(renderer, /vec3 sampleAt[\s\S]*?if\(ambientMotion\.w>0\.\)[\s\S]*?vec2 drift=ambientMotion\.xy/);
-  assert.match(renderer, /if \(!active \|\| frame \|\| document\.hidden\) return;/);
+  assert.match(renderer, /vec3 sampleAt[\s\S]*?vec2 drift=ambientMotion\.xy/);
+  assert.match(renderer, /if \(!active \|\| document\.hidden \|\| \(frame && !wallpaperFrame\)\) return;/);
   const themes = wallpaper.match(/var ambientThemes = \{([\s\S]*?)\n  \};/)[1];
   assert.deepEqual(Array.from(themes.matchAll(/^    (\w+):/gm), match => match[1]),
-    ['aurora', 'peach', 'night', 'minimal']);
+    ['aurora', 'peach', 'night']);
 });

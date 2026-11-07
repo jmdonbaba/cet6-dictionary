@@ -1272,6 +1272,11 @@ html[data-interface="glass"] .glass-jelly::after {
   html[data-interface="glass"] {
     --glass-blur: blur(4px) saturate(145%) brightness(1.02);
   }
+  /* Frost the sheet itself without blurring every animated background frame. */
+  html.glass-gpu[data-interface="glass"] .modal-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
   html.glass-refraction[data-interface="glass"] .card::before,
   html.glass-refraction[data-interface="glass"] .modal-card::before,
   html.glass-refraction[data-interface="glass"] .btn-fav-nav::before {

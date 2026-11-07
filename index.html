@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#f8fafc">
 <title>CET-6 查词助手</title>
 <style>
@@ -814,10 +814,10 @@ try {
   document.documentElement.dataset.wallpaper = 'minimal';
 }
 </script>
-<link rel="stylesheet" href="study-tools.css?v=ff3dde0a4752">
-<link rel="stylesheet" href="favorites-shortcut.css?v=cec2094c913c">
-<link rel="stylesheet" href="appearance.css?v=5a9e53637e3c">
-<script src="glass-wallpaper.js?v=2af390e4a5e0"></script>
+<link rel="stylesheet" href="study-tools.css?v=aa1a9c4c4466">
+<link rel="stylesheet" href="favorites-shortcut.css?v=bc96d6b22482">
+<link rel="stylesheet" href="appearance.css?v=5af7a02ff8fc">
+<script src="glass-wallpaper.js?v=b29d7ef2e393"></script>
 </head>
 <body>
 <div class="appearance-backdrop" id="appearanceBackdrop" aria-hidden="true">
@@ -937,9 +937,9 @@ try {
 
 <!-- Modal overlay -->
 <div class="modal-overlay" id="modalOverlay" style="display:none">
-  <div class="modal-card" id="modalVocabFav">
+  <div class="modal-card" id="modalVocabFav" role="dialog" aria-modal="true" aria-labelledby="vocabFavTitle">
     <div class="modal-header">
-      <span class="modal-header-title">收藏 (<span id="modalVocabCount">0</span>)</span>
+      <span class="modal-header-title" id="vocabFavTitle">收藏 (<span id="modalVocabCount">0</span>)</span>
       <div class="modal-header-actions">
         <div class="study-export-wrap" id="studyExportWrap">
           <button class="btn-study-export" id="btnStudyExport" type="button" aria-haspopup="menu" aria-expanded="false">导出<span class="study-export-chevron" aria-hidden="true"></span></button>
@@ -1092,13 +1092,13 @@ try {
 <script src="saved-page-store.js?v=813381f03d1f"></script>
 <script src="study-tools.js?v=d3d633f3b42c"></script>
 <script src="card-motion.js?v=fb1895f08638"></script>
-<script src="study-tools-ui.js?v=087ee85f7e44"></script>
+<script src="study-tools-ui.js?v=fa8ea4cfdf8b"></script>
 <script src="appearance.js?v=bfdfa4f5ddee"></script>
 <script src="glass-optics.js?v=242c18884651"></script>
-<script src="glass-renderer.js?v=1deffbc61c7d"></script>
-<script src="glass-refraction.js?v=bbf282d03d47"></script>
+<script src="glass-renderer.js?v=a25f5358559d"></script>
+<script src="glass-refraction.js?v=916ae3d28b64"></script>
 <script src="glass-interaction.js?v=ca8022786359"></script>
-<script src="favorites-shortcut.js?v=4179058bbd70"></script>
+<script src="favorites-shortcut.js?v=546bc5715f3d"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
 // 每张可见卡片独立校准折射带，文字不参与滤镜。
@@ -2231,8 +2231,20 @@ function openFavoriteInCard(id) {
 // ==================== Events ====================
 
 // Modal open/close
+const mobileModal = matchMedia('(max-width: 600px)');
+let mobileFavoritesOpener = null;
+function fitMobileModal() {
+  const viewport = window.visualViewport;
+  if (!mobileModal.matches || !viewport || $modalOverlay.style.display === 'none') return;
+  $modalOverlay.style.setProperty('--modal-visible-height', `${viewport.height}px`);
+  $modalOverlay.style.setProperty('--modal-visible-top', `${viewport.offsetTop}px`);
+}
+window.visualViewport?.addEventListener('resize', fitMobileModal, { passive: true });
+window.visualViewport?.addEventListener('scroll', fitMobileModal, { passive: true });
+mobileModal.addEventListener('change', fitMobileModal);
 function openModal(modal, skipFocus) {
   $modalOverlay.style.display = 'flex';
+  fitMobileModal();
   schedulePageJumpUpdate();
   document.querySelectorAll('.modal-card').forEach(m => m.classList.remove('active'));
   modal.classList.add('active');
@@ -2240,7 +2252,9 @@ function openModal(modal, skipFocus) {
   // 弹窗首帧就要带上最终折射，避免“先闪一下、再变一次颜色”。
   if (window.LiquidGlass && typeof LiquidGlass.flush === 'function') LiquidGlass.flush();
   // Focus search input when opening vocab favorites (skip when navigating from "open in favorites")
-  if (modal === $modalVocabFav && !skipFocus && !window.matchMedia('(max-width: 500px)').matches) {
+  if (modal === $modalVocabFav && !skipFocus && mobileModal.matches) {
+    modal.querySelector('.modal-close').focus({ preventScroll: true });
+  } else if (modal === $modalVocabFav && !skipFocus) {
     setTimeout(function () {
       var si = document.getElementById('favSearchInput');
       if (typeof StudyToolsUI !== 'undefined' && StudyToolsUI.activeTab() === 'comparisons') document.getElementById('comparisonSearch').focus();
@@ -2260,6 +2274,8 @@ function closeModal() {
   var si = document.getElementById('favSearchInput');
   if (si) { si.value = ''; }
   hideSearchDropdown();
+  mobileFavoritesOpener?.focus({ preventScroll: true });
+  mobileFavoritesOpener = null;
 }
 
 // Track mousedown target to avoid closing modal when drag-releasing outside
@@ -2280,7 +2296,10 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape' && $modalOverlay.style.display === 'flex') closeModal();
 });
-document.getElementById('btnOpenVocabFav').addEventListener('click', () => openModal($modalVocabFav));
+document.getElementById('btnOpenVocabFav').addEventListener('click', e => {
+  if (mobileModal.matches && document.activeElement === e.currentTarget) mobileFavoritesOpener = e.currentTarget;
+  openModal($modalVocabFav);
+});
 document.getElementById('btnClearPage').addEventListener('click', clearPage);
 document.getElementById('btnSavePage').addEventListener('click', savePageRecord);
 document.getElementById('btnRestorePage').addEventListener('click', async () => {

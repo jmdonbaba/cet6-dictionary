@@ -36,8 +36,10 @@ test('modal inner rows use clear glass without stacked white fog', () => {
 
 test('native modal inner rows keep a clear refractive backdrop', () => {
   assert.match(refraction, /MODAL_INNER = GlassOptics\.modalLayers/);
-  const nativeLine = refraction.split('\n').find(line => line.includes('var nativeSelector'));
-  assert.ok(nativeLine && nativeLine.includes('MODAL_INNER'), 'modal inner rows join the native surface selector');
+  assert.match(refraction, /var nativeSelector = mobile[\s\S]*?config\.surfaceSelector[^;]+MODAL_INNER;/,
+    'modal inner rows join the desktop native surface selector');
+  assert.match(refraction, /gpu \? '\.modal-card :is\('\+GlassOptics\.inputs\+'\)' : GlassOptics\.inputs/,
+    'mobile GPU keeps native input lenses in the modal');
   assert.match(refraction, /var inner=element\.matches\(MODAL_INNER\);/);
   assert.match(css, /\.modal-card :is\(\.appearance-option, \.theme-option,[\s\S]*?\.glass-layer-optics::before \{[\s\S]*?backdrop-filter: blur\(\.3px\);[\s\S]*?filter: var\(--glass-filter, none\);/);
 });

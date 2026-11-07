@@ -605,6 +605,19 @@ const StudyToolsUI = (() => {
   function init() {
     const pages = byId('studyToolPages');
     const mobileTabs = byId('mobileToolTabs');
+    const mobileTools = matchMedia('(max-width: 600px)');
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    const toolForms = toolKinds.map(kind => byId(`${kind}Form`));
+    const pageOffset = kind => Math.min(toolKinds.indexOf(kind) * pages.clientWidth, pages.scrollWidth - pages.clientWidth);
+    let scrollTarget = null;
+    function fitActiveTool() {
+      if (!mobileTools.matches) return;
+      const height = toolForms[toolKinds.indexOf(mobileTabs.dataset.active)].offsetHeight;
+      const size = `${height}px`;
+      if (height && pages.style.getPropertyValue('--active-tool-height') !== size) {
+        pages.style.setProperty('--active-tool-height', size);
+      }
+    }
     function setToolTab(kind, move = true, focus = false) {
       mobileTabs.dataset.active = kind;
       mobileTabs.querySelectorAll('button').forEach(button => {
@@ -613,10 +626,15 @@ const StudyToolsUI = (() => {
         button.tabIndex = active ? 0 : -1;
         if (active && focus) button.focus();
       });
-      if (move) pages.scrollTo({ left: toolKinds.indexOf(kind) * pages.clientWidth, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-      const mobile = matchMedia('(max-width: 600px)').matches;
+      if (move) {
+        const left = pageOffset(kind);
+        const smooth = mobileTools.matches && !reducedMotion.matches && Math.abs(pages.scrollLeft - left) > 1;
+        scrollTarget = smooth ? kind : null;
+        pages.scrollTo({ left, behavior: smooth ? 'smooth' : 'instant' });
+      }
       // Offscreen controls should not trap keyboard focus; touch scroll remains native.
-      toolKinds.forEach(value => { byId(`${value}Form`).inert = mobile && kind !== value; });
+      toolForms.forEach((form, index) => { form.inert = mobileTools.matches && kind !== toolKinds[index]; });
+      fitActiveTool();
     }
     mobileTabs.addEventListener('click', event => {
       const button = event.target.closest('[data-tool-tab]');
@@ -633,10 +651,25 @@ const StudyToolsUI = (() => {
       if (scrollFrame) return;
       scrollFrame = requestAnimationFrame(() => {
         scrollFrame = 0;
-        if (matchMedia('(max-width: 600px)').matches) setToolTab(toolKinds[Math.max(0, Math.min(toolKinds.length - 1, Math.round(pages.scrollLeft / (pages.clientWidth || 1))))], false);
+        if (!mobileTools.matches) return;
+        // A tab click already chose the pane. Ignore the positions it passes during the slide.
+        if (scrollTarget !== null) {
+          if (Math.abs(pages.scrollLeft - pageOffset(scrollTarget)) <= 1) scrollTarget = null;
+          return;
+        }
+        const kind = toolKinds[Math.max(0, Math.min(toolKinds.length - 1, Math.round(pages.scrollLeft / (pages.clientWidth || 1))))];
+        if (kind !== mobileTabs.dataset.active) setToolTab(kind, false);
       });
     }, { passive: true });
-    matchMedia('(max-width: 600px)').addEventListener('change', () => setToolTab(mobileTabs.dataset.active));
+    pages.addEventListener('pointerdown', () => { scrollTarget = null; }, { passive: true });
+    pages.addEventListener('wheel', event => {
+      if (event.deltaX || event.shiftKey) scrollTarget = null;
+    }, { passive: true });
+    mobileTools.addEventListener('change', () => setToolTab(mobileTabs.dataset.active));
+    if (window.ResizeObserver) {
+      const observer = new ResizeObserver(fitActiveTool);
+      toolForms.forEach(form => observer.observe(form));
+    } else window.addEventListener('resize', fitActiveTool, { passive: true });
     setToolTab('mnemonic', false);
     byId('mnemonicForm').addEventListener('submit', event => { event.preventDefault(); generate('mnemonic', [byId('mnemonicInput').value]); });
     byId('comparisonForm').addEventListener('submit', event => { event.preventDefault(); generate('comparison', [byId('compareLeft').value, byId('compareRight').value]); });

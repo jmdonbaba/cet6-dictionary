@@ -5,19 +5,29 @@ window.FavoritesShortcut = (() => {
   let visible = false, initialized = false, returnFocus = false;
   let ghost, frame = 0, pulse, journey;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const mobile = matchMedia('(max-width: 600px)');
+  const rightAligned = matchMedia('(max-width: 1240px)');
   const duration = 540;
   const covered = 'data-favorites-handoff-cover';
+  const highlighted = 'data-favorites-handoff-highlight';
   // Marching-squares cases, with edges numbered clockwise from the top.
   const edges = [[], [3, 0], [0, 1], [3, 1], [1, 2], null, [0, 2], [3, 2],
     [2, 3], [0, 2], null, [1, 2], [1, 3], [0, 1], [3, 0], []];
 
   function cancelMotion() {
     cancelAnimationFrame(frame); frame = 0;
-    if (pulse) { pulse.cancel(); pulse = null; }
+    if (pulse) {
+      clearTimeout(pulse.timer);
+      pulse.element.removeAttribute(highlighted);
+      pulse = null;
+    }
     journey?.receiver.removeAttribute(covered);
     if (journey?.receiver === source) button.removeAttribute(covered);
     journey = null;
-    ghost?.remove(); ghost = null;
+    if (ghost) {
+      ghost.remove(); ghost = null;
+      window.GlassRenderer?.render();
+    }
   }
 
   function viewport() {
@@ -33,7 +43,7 @@ window.FavoritesShortcut = (() => {
 
   function compactCenter() {
     const bounds = group.getBoundingClientRect();
-    return { x: matchMedia('(max-width: 1240px)').matches ? bounds.right - 48 : bounds.left + 100,
+    return { x: rightAligned.matches ? bounds.right - 48 : bounds.left + 100,
       y: bounds.top + bounds.height / 2 };
   }
 
@@ -52,60 +62,70 @@ window.FavoritesShortcut = (() => {
   function distance(x, y, rect) {
     const dx = Math.abs(x - rect.x) - rect.width / 2 + rect.radius;
     const dy = Math.abs(y - rect.y) - rect.height / 2 + rect.radius;
-    return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - rect.radius;
+    return (dx > 0 && dy > 0 ? Math.sqrt(dx * dx + dy * dy) : Math.max(dx, dy)) - rect.radius;
   }
 
-  function joinedOutline(a, b, area, blend) {
-    // Sample the smooth union of two rounded boxes. Its zero contour supplies
-    // both the glass clip and the rim, including the concave neck between them.
+  function contains(contour, x, y) {
+    let inside = false;
+    for (let i = 0, j = contour.length - 1; i < contour.length; j = i++) {
+      const [ax, ay] = contour[i], [bx, by] = contour[j];
+      if ((ay > y) !== (by > y) && x < ax + (bx - ax) * (y - ay) / (by - ay)) inside = !inside;
+    }
+    return inside;
+  }
+
+  function joinedOutline(a, b, area, blend, motion) {
+    // Follow just the boundary of the smooth union. Most of the wide footer is
+    // empty or flat glass, so sampling every cell would not change the contour.
     const step = Math.max(3, Math.sqrt(area.width * area.height / 9000));
     const cols = Math.ceil(area.width / step) + 1, rows = Math.ceil(area.height / step) + 1;
-    const field = new Float32Array(cols * rows);
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        const u = area.left + x * step, v = area.top + y * step;
-        const da = distance(u, v, a), db = distance(u, v, b);
+    const count = cols * rows;
+    if (!motion.field || motion.field.length < count) {
+      const capacity = Math.max(count, (motion.field?.length || 0) * 2);
+      motion.field = new Float32Array(capacity);
+      motion.sampled = new Uint16Array(capacity);
+    }
+    const { field, sampled } = motion;
+    const epoch = ++motion.sampleEpoch;
+    function sample(index) {
+      if (sampled[index] !== epoch) {
+        const x = area.left + index % cols * step, y = area.top + Math.floor(index / cols) * step;
+        const da = distance(x, y, a), db = distance(x, y, b);
         const overlap = Math.max(0, 1 - Math.abs(da - db) / blend);
-        field[y * cols + x] = Math.min(da, db) - blend * .25 * overlap * overlap;
+        field[index] = Math.min(da, db) - blend * .25 * overlap * overlap;
+        sampled[index] = epoch;
       }
+      return field[index];
     }
-    const points = new Map(), links = new Map();
+
+    // Start at the first crossing above the traveller, then visit the adjacent
+    // cell through each outgoing edge until the path closes.
+    const col = Math.round((a.x - area.left) / step);
+    let row = 0;
+    while (row < rows - 1 && sample((row + 1) * cols + col) >= 0) row++;
+    if (row === rows - 1) return '';
+    const start = row * cols + col;
     const offsets = [0, 1, cols, 0];
-    function edgePoint(cell, edge) {
-      const index = cell + offsets[edge], vertical = edge % 2;
-      const key = index * 2 + vertical;
-      if (!points.has(key)) {
-        const f = field[index], g = field[index + (vertical ? cols : 1)];
-        const ratio = f / (f - g);
-        points.set(key, [(index % cols + (vertical ? 0 : ratio)) * step,
-          (Math.floor(index / cols) + (vertical ? ratio : 0)) * step]);
-      }
-      return key;
-    }
-    for (let y = 0; y < rows - 1; y++) {
-      for (let x = 0; x < cols - 1; x++) {
-        const i = y * cols + x;
-        const tl = field[i], tr = field[i + 1], br = field[i + cols + 1], bl = field[i + cols];
-        const mask = (tl < 0 ? 1 : 0) | (tr < 0 ? 2 : 0) | (br < 0 ? 4 : 0) | (bl < 0 ? 8 : 0);
-        const inside = tl + tr + br + bl < 0;
-        const pairs = edges[mask] || ((mask === 5) === inside ? [0, 1, 2, 3] : [3, 0, 1, 2]);
-        for (let k = 0; k < pairs.length; k += 2) {
-          const p = edgePoint(i, pairs[k]), q = edgePoint(i, pairs[k + 1]);
-          if (!links.has(p)) links.set(p, []);
-          if (!links.has(q)) links.set(q, []);
-          links.get(p).push(q); links.get(q).push(p);
-        }
-      }
-    }
-    const first = links.keys().next().value, contour = [];
-    let current = first, previous;
-    while (current !== undefined && contour.length < links.size) {
-      contour.push(points.get(current));
-      const next = links.get(current).find(value => value !== previous);
-      previous = current; current = next;
-      if (current === first) break;
-    }
-    if (current !== first || contour.length !== links.size || contour.length < 3) return '';
+    const neighbors = [-cols, 1, cols, -1];
+    const contour = [];
+    let cell = start, entry = 3;
+    do {
+      if (cell < 0 || cell + cols + 1 >= count || cell % cols === cols - 1 || contour.length >= count) return '';
+      const tl = sample(cell), tr = sample(cell + 1), br = sample(cell + cols + 1), bl = sample(cell + cols);
+      const mask = (tl < 0 ? 1 : 0) | (tr < 0 ? 2 : 0) | (br < 0 ? 4 : 0) | (bl < 0 ? 8 : 0);
+      const inside = tl + tr + br + bl < 0;
+      const pairs = edges[mask] || ((mask === 5) === inside ? [0, 1, 2, 3] : [3, 0, 1, 2]);
+      const pair = pairs.indexOf(entry);
+      if (pair === -1) return '';
+      const exit = pairs[pair ^ 1], vertical = exit % 2, index = cell + offsets[exit];
+      const f = sample(index), g = sample(index + (vertical ? cols : 1));
+      const ratio = f / (f - g);
+      contour.push([(index % cols + (vertical ? 0 : ratio)) * step,
+        (Math.floor(index / cols) + (vertical ? ratio : 0)) * step]);
+      cell += neighbors[exit];
+      entry = (exit + 2) % 4;
+    } while (cell !== start || entry !== 3);
+    if (!contains(contour, a.x - area.left, a.y - area.top) || !contains(contour, b.x - area.left, b.y - area.top)) return '';
     const vertices = contour.filter(([x, y], i) => {
       const [ax, ay] = contour[(i + contour.length - 1) % contour.length];
       const [bx, by] = contour[(i + 1) % contour.length];
@@ -149,13 +169,25 @@ window.FavoritesShortcut = (() => {
     // Relax the neck as the capsules overlap, so the final contour has the
     // receiver's dimensions instead of snapping from a swollen outline.
     const blend = 42 * (1 - smooth((t - .75) / .25));
-    let outline = blend < .6 ? roundedOutline(to, area) : gap < 22 ? joinedOutline(pill, to, area, blend) : '';
+    let outline = blend < .6 ? roundedOutline(to, area) : gap < 22 ? joinedOutline(pill, to, area, blend, motion) : '';
     const attached = Boolean(outline);
     if (!attached) { area = bounds(pill); outline = roundedOutline(pill, area); }
-    if (motion.receiver.hasAttribute(covered) !== attached) motion.receiver.toggleAttribute(covered, attached);
+    const landing = attached && motion.glass && motion.receiver === source && t >= .8;
+    const cover = attached ? (landing ? 'landing' : '') : null;
+    if (motion.receiver.getAttribute(covered) !== cover) {
+      if (cover === null) motion.receiver.removeAttribute(covered);
+      else motion.receiver.setAttribute(covered, cover);
+      window.GlassRenderer?.render();
+    }
     ghost.style.transform = `translate(${area.left}px, ${area.top}px)`;
     ghost.style.width = `${area.width}px`; ghost.style.height = `${area.height}px`;
     motion.surface.style.clipPath = `path('${outline}')`;
+    motion.surface.classList.toggle('favorites-handoff-landing', landing);
+    const mix = motion.fromMix + (motion.toMix - motion.fromMix) * smooth(t / .88);
+    motion.mix = mix;
+    motion.surface.style.setProperty('--handoff-footer-weight', mix.toFixed(3));
+    const ink = mix < .68 ? motion.compactInk : motion.footerInk;
+    if (motion.ink !== ink) { ghost.style.color = ink; motion.ink = ink; }
     motion.outline.setAttribute('d', outline);
     motion.rim.classList.toggle('favorites-handoff-focused', attached && motion.receiver.matches(':focus-visible'));
     motion.traveler.style.transform = `translate(${pill.x - area.left}px, ${pill.y - area.top}px) translate(-50%, -50%)`;
@@ -167,11 +199,12 @@ window.FavoritesShortcut = (() => {
     if (t < 1) { frame = requestAnimationFrame(paint); return; }
     const receiver = motion.receiver;
     cancelMotion();
-    // A short settling highlight continues on the actual, clickable entry.
-    pulse = receiver.animate?.([{ filter: 'drop-shadow(0 0 5px rgba(105, 108, 228, .26))' },
-      { filter: 'drop-shadow(0 0 0 rgba(105, 108, 228, 0))' }], { duration: 220, easing: 'ease-out' });
-    if (pulse) pulse.onfinish = () => { pulse = null; };
-    window.GlassRenderer?.render();
+    // The rim can glow without filtering the whole button and its backdrop.
+    receiver.setAttribute(highlighted, '');
+    pulse = { element: receiver, timer: setTimeout(() => {
+      receiver.removeAttribute(highlighted);
+      pulse = null;
+    }, 240) };
   }
 
   function targetBox(receiver, rect, view) {
@@ -180,7 +213,7 @@ window.FavoritesShortcut = (() => {
     return box(pos.x, rect.top + rect.height / 2, rect.width, rect.height, parseFloat(getComputedStyle(source).borderRadius) || 14);
   }
 
-  function handoff(from, receiver, target) {
+  function handoff(from, receiver, target, fromMix) {
     if (reduced.matches || !CSS.supports('clip-path', "path('M0 0L1 0L0 1Z')") || Math.hypot(target.x - from.x, target.y - from.y) < 20) return;
     ghost = document.createElement('div');
     ghost.className = 'favorites-handoff';
@@ -193,23 +226,47 @@ window.FavoritesShortcut = (() => {
         </linearGradient></defs><path class="favorites-handoff-outline"/>
       </svg><span class="favorites-handoff-traveler">收藏夹</span><span class="favorites-handoff-label"></span>`;
     const label = ghost.querySelector('.favorites-handoff-label');
+    if (receiver === source) button.setAttribute(covered, '');
+    const compact = getComputedStyle(button), footer = getComputedStyle(source);
+    const plate = getComputedStyle(source, '::before');
+    ghost.style.setProperty('--handoff-compact-color', compact.getPropertyValue('--glass-button-fill'));
+    ghost.style.setProperty('--handoff-compact-sheen', compact.getPropertyValue('--glass-button-sheen'));
+    ghost.style.setProperty('--handoff-footer-color', plate.backgroundColor);
+    ghost.style.setProperty('--handoff-footer-sheen', `${footer.getPropertyValue('--glass-button-sheen')}, ${plate.backgroundImage}`);
+    const receiverStyle = receiver === source ? footer : compact;
     label.textContent = receiver.textContent.trim();
-    label.style.fontSize = getComputedStyle(receiver).fontSize;
-    journey = { from, receiver, target, started: performance.now(), label,
+    label.style.fontSize = receiverStyle.fontSize;
+    label.style.fontWeight = receiverStyle.fontWeight;
+    journey = { from, receiver, target, started: performance.now(), label, sampleEpoch: 0,
+      glass: document.documentElement.dataset.interface === 'glass',
+      fromMix, toMix: receiver === source ? 1 : 0,
+      compactInk: compact.getPropertyValue('--glass-button-ink').trim(),
+      footerInk: footer.getPropertyValue('--glass-button-ink').trim(),
       surface: ghost.querySelector('.favorites-handoff-surface'), rim: ghost.querySelector('.favorites-handoff-rim'),
       outline: ghost.querySelector('.favorites-handoff-outline'), traveler: ghost.querySelector('.favorites-handoff-traveler') };
     document.body.append(ghost);
-    if (receiver === source) button.setAttribute(covered, '');
     paint(journey.started);
-    window.GlassRenderer?.animateFor(duration + 30);
+    window.GlassRenderer?.render();
+  }
+
+  function overlapsLookup() {
+    // The lookup buttons share the card's right alignment. Probe the dock's
+    // footprint even while hidden so it reappears when the row scrolls away.
+    const dockStyle = getComputedStyle(group);
+    const x = innerWidth - parseFloat(dockStyle.right) - 34;
+    const bottom = innerHeight - parseFloat(dockStyle.bottom);
+    return [6, 22, 38].some(offset => document.elementsFromPoint(x, bottom - offset)
+      .some(element => element.matches('.word-search-submit:not(:disabled)')));
   }
 
   function update() {
     if (!group) return;
     const modalOpen = overlay.style.display !== 'none';
-    group.hidden = modalOpen;
+    const typing = mobile.matches && document.activeElement?.matches('input:read-write, textarea:read-write');
+    const hidden = modalOpen || Boolean(typing) || (mobile.matches && overlapsLookup());
+    if (group.hidden !== hidden) group.hidden = hidden;
     button.setAttribute('aria-expanded', String(modalOpen && document.getElementById('modalVocabFav').classList.contains('active')));
-    if (modalOpen) { cancelMotion(); initialized = false; return; }
+    if (hidden) { cancelMotion(); initialized = false; return; }
     const view = viewport(), rect = source.getBoundingClientRect();
     const height = Math.max(0, Math.min(rect.bottom, view.top + view.height) - Math.max(rect.top, view.top));
     const width = Math.max(0, Math.min(rect.right, view.left + view.width) - Math.max(rect.left, view.left));
@@ -218,6 +275,7 @@ window.FavoritesShortcut = (() => {
     const next = !initialized ? ratio < .65 : ratio >= .65 ? false : ratio <= .15 ? true : visible;
     if (next !== visible || !initialized) {
       const previous = journey?.current;
+      const previousMix = journey?.mix;
       cancelMotion();
       const oldCenter = center(button.getBoundingClientRect(), view);
       const heldFocus = document.activeElement === button;
@@ -230,10 +288,12 @@ window.FavoritesShortcut = (() => {
       if (initialized && !reduced.matches) {
         const origin = next ? center(rect, view) : oldCenter;
         const receiver = next ? button : source;
-        handoff(previous || box(origin.x, origin.y, 96, 44, 12), receiver, targetBox(receiver, rect, view));
+        handoff(previous || box(origin.x, origin.y, 96, 44, 12), receiver, targetBox(receiver, rect, view), previousMix ?? Number(next));
       }
       visible = next;
-      if (!reduced.matches) window.GlassRenderer?.animateFor(440);
+      // On tablets the star moves as the dock changes width. Keep its native
+      // lens in sync while it moves, even though the traveller draws itself.
+      if (!reduced.matches && rightAligned.matches && innerWidth > 720) window.GlassRenderer?.animateFor(350);
     }
     // The page can keep scrolling during the handoff. Keep its endpoint attached
     // to the real entry instead of finishing at an obsolete screen position.
@@ -271,6 +331,8 @@ window.FavoritesShortcut = (() => {
     window.visualViewport?.addEventListener('scroll', schedule);
     reduced.addEventListener('change', () => { cancelMotion(); schedule(); });
     document.addEventListener('appearancechange', cancelMotion);
+    document.addEventListener('focusin', schedule);
+    document.addEventListener('focusout', schedule);
     document.addEventListener('visibilitychange', () => { if (document.hidden) cancelMotion(); else schedule(); });
     update();
   }

@@ -558,7 +558,7 @@
     if(event.target.matches(GlassOptics.inputs)){
       var now=performance.now();
       GlassOptics.setFocus(event.target,event.type==='focusin',now,prefersReducedMotion());
-      if(!gpuActive()){
+      if(!gpuActive() || surfaces.has(event.target)){
         focusUntil=now+(prefersReducedMotion()?0:GlassOptics.focusDuration);
         if(!focusFrame)focusFrame=requestAnimationFrame(updateInputFocus);
       }
@@ -567,7 +567,7 @@
   }
   function updateInputFocus() {
     focusFrame=0;
-    if(!state.enabled||gpuActive())return;
+    if(!state.enabled || (gpuActive() && !surfaces.size))return;
     applyScale();
     if(performance.now()<focusUntil)focusFrame=requestAnimationFrame(updateInputFocus);
   }
@@ -706,7 +706,8 @@
   }
 
   function onScrollSurfaces() {
-    if (state.enabled && root().dataset.interface === 'glass' && !gpuActive()) scheduleSurfaces();
+    if (!state.enabled || root().dataset.interface !== 'glass') return;
+    if (!gpuActive() || (innerWidth <= 720 && document.querySelector('.modal-card.active'))) scheduleSurfaces();
   }
 
   function syncSurfaces() {
@@ -717,15 +718,13 @@
       return;
     }
     var mobile=window.innerWidth<=720;
-    if(mobile&&window.GlassRenderer)GlassRenderer.disable();
-    var gpu = !mobile&&window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
-    // The shared canvas owns modal optics, including inner rows and controls.
-    // Building SVG maps for those same surfaces causes a pause on tab changes.
-    if(gpu){clearSurfaces();return;}
-    // Calibrate visible fallback surfaces in this same task, before first paint.
-
-    // Calibrate individual maps only for the native fallback.
-    var nativeSelector = mobile?GlassOptics.inputs:config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls+', '+MODAL_INNER;
+    var gpu = window.GlassRenderer && GlassRenderer.enable({ selector: config.surfaceSelector, intensity: state.intensity, scale: config.scale, band: config.band });
+    // Desktop composites the modal on the GPU. Mobile uses native frost and
+    // small modal input lenses to avoid copying the framebuffer each frame.
+    if(gpu && !mobile){clearSurfaces();return;}
+    var nativeSelector = mobile
+      ? (gpu ? '.modal-card :is('+GlassOptics.inputs+')' : GlassOptics.inputs)
+      : config.surfaceSelector+', button, '+GlassOptics.layers+', '+GlassOptics.controls+', '+MODAL_INNER;
     var visible = new Set();
     document.querySelectorAll(nativeSelector).forEach(function (element) {
       if(element.matches('.ws-mode-toggle button'))return;

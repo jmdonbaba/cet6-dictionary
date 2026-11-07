@@ -173,6 +173,25 @@ const root = path.resolve(__dirname, '..');
       assert.ok(visibleFrames.every(frame => frame.left >= 8 && frame.right <= 382), `mobile ${sourceVisible ? 'hide' : 'reveal'} stays inside the viewport throughout its transition: ${JSON.stringify(visibleFrames)}`);
     }
     await page.locator('#favoritesShortcuts').screenshot({ path: path.join(process.env.TEMP, 'cet6-favorites-shortcuts-mobile.png') });
+    await settle(true);
+    const mobileScroll = await page.evaluate(() => scrollY);
+    await page.evaluate(() => document.getElementById('mnemonicInput').focus({ preventScroll: true }));
+    await page.waitForFunction(() => document.getElementById('favoritesShortcuts').hidden, null, { timeout: 1500 });
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'mnemonicInput');
+    assert.equal(await page.evaluate(() => scrollY), mobileScroll, 'yielding to the mobile editor does not scroll the page');
+    await page.evaluate(() => document.activeElement.blur());
+    await settle(true);
+    await page.setViewportSize({ width: 320, height: 844 });
+    const lookup = page.locator('.word-search-submit').first();
+    const lookupBox = await lookup.boundingBox();
+    await page.setViewportSize({ width: 320, height: Math.ceil(lookupBox.y + lookupBox.height / 2 + 38) });
+    await page.waitForFunction(() => document.getElementById('favoritesShortcuts').hidden, null, { timeout: 1500 });
+    assert.equal(await lookup.evaluate(element => {
+      const r = element.getBoundingClientRect();
+      return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === element;
+    }), true, 'the mobile dock yields to a lookup button in its footprint');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await settle(true);
     await scrollToSource(true);
     await page.setViewportSize({ width: 1440, height: 900 });
     await scrollToSource(false);
@@ -195,8 +214,19 @@ const root = path.resolve(__dirname, '..');
       scrollTo(0, 0);
     });
     await settle(true);
-    await scrollToSource(true);
+    await page.evaluate(() => document.getElementById('btnOpenVocabFav').scrollIntoView({ block: 'end', behavior: 'instant' }));
+    const travellingMaterial = await (await page.waitForFunction(() => {
+      const receiver = document.querySelector('#btnOpenVocabFav[data-favorites-handoff-cover]');
+      const surface = document.querySelector('.favorites-handoff-surface');
+      if (!receiver || !surface) return null;
+      return { filter: getComputedStyle(surface).backdropFilter,
+        tint: getComputedStyle(surface).getPropertyValue('--handoff-footer-color').trim(),
+        receiverTint: getComputedStyle(receiver, '::before').backgroundColor };
+    })).jsonValue();
+    assert.equal(travellingMaterial.filter, 'none', 'the moving contour does not blur and flatten the wallpaper');
+    assert.equal(travellingMaterial.tint, travellingMaterial.receiverTint, 'the receiving material uses the native glass tint');
     await page.waitForFunction(() => !document.querySelector('.favorites-handoff'));
+    assert.equal(await source.evaluate(element => getComputedStyle(element).filter), 'none', 'the landing highlight does not filter the receiver');
     await scrollToSource(false);
     await page.waitForFunction(() => !document.querySelector('.favorites-handoff'));
     await page.locator('#favoritesShortcuts').screenshot({ path: path.join(process.env.TEMP, 'cet6-favorites-shortcuts-glass.png') });

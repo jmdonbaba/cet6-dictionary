@@ -160,7 +160,49 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.equal(await page.locator('#mobileToolTabs').getAttribute('data-active'), 'sentence');
     await page.locator('#studyToolPages').evaluate(el => el.scrollTo({ left: el.clientWidth, behavior: 'instant' }));
     await page.waitForFunction(() => document.querySelector('#mobileToolTabs').dataset.active === 'comparison');
-    await page.locator('#btnOpenVocabFav').click();
+    await page.waitForFunction(() => {
+      const carousel = document.getElementById('studyToolPages');
+      const active = document.getElementById('comparisonForm');
+      return Math.abs(carousel.clientHeight - active.offsetHeight) <= 2 && active.offsetHeight + 30 < document.getElementById('sentenceForm').offsetHeight;
+    }, null, { timeout: 2000 });
+    await page.locator('#mnemonicToolTab').click();
+    await page.waitForFunction(() => document.getElementById('studyToolPages').scrollLeft === 0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.evaluate(() => {
+      const tabs = document.getElementById('mobileToolTabs');
+      const modes = [tabs.dataset.active];
+      const observer = new MutationObserver(() => modes.push(tabs.dataset.active));
+      observer.observe(tabs, { attributes: true, attributeFilter: ['data-active'] });
+      window.toolTabAudit = { modes, observer };
+    });
+    await page.locator('#sentenceToolTab').click();
+    await page.waitForFunction(() => {
+      const pages = document.getElementById('studyToolPages');
+      return pages.scrollLeft >= pages.clientWidth * 2 - 1;
+    });
+    const smoothTabs = await page.evaluate(() => {
+      const { modes, observer } = window.toolTabAudit;
+      observer.disconnect();
+      delete window.toolTabAudit;
+      return modes;
+    });
+    assert.deepEqual(smoothTabs, ['mnemonic', 'sentence'], 'a smooth tab click does not select intermediate panes or resize to them');
+
+    await page.locator('#mnemonicToolTab').click();
+    await page.waitForFunction(() => document.getElementById('studyToolPages').scrollLeft === 0);
+    await page.evaluate(() => {
+      const pages = document.getElementById('studyToolPages');
+      pages.addEventListener('scroll', () => {
+        pages.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch' }));
+        pages.scrollTo({ left: pages.clientWidth, behavior: 'instant' });
+      }, { once: true });
+      document.getElementById('sentenceToolTab').click();
+    });
+    await page.waitForFunction(() => document.getElementById('mobileToolTabs').dataset.active === 'comparison');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.locator('#btnOpenVocabFav').focus();
+    await page.keyboard.press('Enter');
+    await page.locator('#modalVocabFav .modal-close:focus').waitFor();
     await page.locator('#sentenceFavoritesTab').focus();
     await page.keyboard.press('Home');
     assert.equal(await page.locator('#wordFavoritesTab').getAttribute('aria-selected'), 'true');
@@ -172,7 +214,22 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2, { steps: 12 });
     await page.mouse.up();
     assert.equal(await page.locator('#wordFavoritesTab').getAttribute('aria-selected'), 'true', 'third capsule supports dragging');
+    const keyboardLayout = await page.evaluate(() => {
+      const viewport = window.visualViewport;
+      Object.defineProperty(viewport, 'height', { configurable: true, value: 345 });
+      Object.defineProperty(viewport, 'offsetTop', { configurable: true, value: 32 });
+      viewport.dispatchEvent(new Event('resize'));
+      const sheet = document.querySelector('#modalVocabFav').getBoundingClientRect();
+      const close = document.querySelector('[data-close="modalVocabFav"]').getBoundingClientRect();
+      delete viewport.height;
+      delete viewport.offsetTop;
+      viewport.dispatchEvent(new Event('resize'));
+      return { sheetTop: sheet.top, sheetBottom: sheet.bottom, closeHeight: close.height };
+    });
+    assert.ok(keyboardLayout.sheetTop >= 32 && keyboardLayout.sheetBottom <= 377 && keyboardLayout.closeHeight >= 44,
+      `the bottom sheet and close control fit above an on-screen keyboard: ${JSON.stringify(keyboardLayout)}`);
     await page.locator('[data-close="modalVocabFav"]').click();
+    await page.locator('#btnOpenVocabFav:focus').waitFor();
     for (const width of [1920, 1440, 1240, 1024, 768, 601, 600, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       const bounds = await page.evaluate(() => ({ width: innerWidth, scroll: document.documentElement.scrollWidth, overflow: Array.from(document.querySelectorAll('body *')).filter(el => { const r = el.getBoundingClientRect(); return r.right > innerWidth + 1 && getComputedStyle(el).position !== 'fixed'; }).slice(0, 12).map(el => ({ name: el.id || el.className, right: el.getBoundingClientRect().right, width: el.getBoundingClientRect().width })) }));

@@ -4,10 +4,9 @@
   var waterPromise=null,water=null,preview=null,last='';
   // Travel is a fraction of the viewport, and the period is in seconds.
   var ambientThemes = {
-    aurora: { period: 24, x: .03, y: .026, bend: .035, glow: 0 },
-    peach: { period: 32, x: .025, y: .022, bend: .018, glow: 0 },
-    night: { period: 36, x: .024, y: .026, bend: .026, glow: 0 },
-    minimal: { period: 20, x: .24, y: .16, bend: 0, glow: .022 }
+    aurora: { period: 24, x: .03, y: .026, bend: .035 },
+    peach: { period: 32, x: .025, y: .022, bend: .018 },
+    night: { period: 36, x: .024, y: .026, bend: .026 }
   };
   function motionFor(theme) { return ambientThemes[theme] || null; }
   function rgba(token,alpha){return 'rgba('+token+','+alpha+')';}

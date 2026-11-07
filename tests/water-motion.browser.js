@@ -49,7 +49,7 @@ const OUT = path.join(ROOT, '.gstack', 'water-motion');
       'the water wallpaper must actually move between frames');
     await page.screenshot({ path: path.join(OUT, 'glass-water-motion.png'), animations: 'disabled' });
 
-    const sampleScene = () => page.evaluate(() => {
+    const sampleScene = (target = page) => target.evaluate(() => {
       const canvas = document.querySelector('.glass-wallpaper-canvas');
       const copy = document.createElement('canvas');
       copy.width = 96;
@@ -60,22 +60,36 @@ const OUT = path.join(ROOT, '.gstack', 'water-motion');
       return Array.from(ctx.getImageData(0, 0, copy.width, copy.height).data);
     });
     const difference = (a, b) => a.reduce((sum, value, index) => sum + Math.abs(value - b[index]), 0) / (a.length * .75);
+    const renderRate = target => target.evaluate(async () => {
+      const start = performance.now(), draws = GlassRenderer.getState().draws;
+      await new Promise(resolve => setTimeout(resolve, 850));
+      return Math.round((GlassRenderer.getState().draws - draws) * 1000 / (performance.now() - start));
+    });
     const ambient = {};
-    for (const theme of ['aurora', 'peach', 'night', 'minimal']) {
+    for (const theme of ['aurora', 'peach', 'night']) {
       await page.evaluate(value => Appearance.setTheme(value), theme);
       await page.waitForTimeout(250);
       const start = await page.evaluate(() => GlassRenderer.getState());
       assert.equal(start.waterMotion, false, theme + ' must stop the water shader');
       assert.equal(start.ambientMotion, true, theme + ' must enter ambient motion');
       const before = await sampleScene();
-      await page.waitForTimeout(850);
+      const fps = await renderRate(page);
       const after = await sampleScene();
-      const draws = await page.evaluate(() => GlassRenderer.getState().draws) - start.draws;
-      ambient[theme] = { difference: difference(before, after), draws };
+      ambient[theme] = { difference: difference(before, after), fps };
       assert.ok(ambient[theme].difference > .04, theme + ' must visibly change its wallpaper pixels');
       assert.ok(ambient[theme].difference < 6, theme + ' motion must stay subtle');
-      assert.ok(draws > 5 && draws < pacing.frames, theme + ' must use a lower idle cadence than water');
+      assert.ok(fps >= Math.min(48, pacing.frames * .8), theme + ' must draw at a smooth desktop cadence: ' + fps);
     }
+
+    await page.evaluate(() => Appearance.setTheme('minimal'));
+    await page.waitForTimeout(350);
+    const minimal = await page.evaluate(() => GlassRenderer.getState());
+    await page.waitForTimeout(250);
+    assert.equal(minimal.ambientMotion, false, 'minimal never animates');
+    assert.equal(await page.evaluate(() => GlassRenderer.getState().draws), minimal.draws,
+      'minimal must stay idle without UI changes');
+    await page.evaluate(() => Appearance.setTheme('night'));
+    await page.waitForFunction(() => GlassRenderer.getState().ambientMotion);
 
     // A background tab stops the loop and resumes when it is visible again.
     await page.evaluate(() => {
@@ -133,6 +147,52 @@ const OUT = path.join(ROOT, '.gstack', 'water-motion');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.appearance-water'), '::after').animationName), 'none',
       'reduced motion must remove the classic flow animation');
 
+    const mobile = await browser.newPage({
+      viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, hasTouch: true, isMobile: true
+    });
+    await mobile.goto('file:///' + ROOT.replaceAll('\\', '/') + '/index.html');
+    await mobile.evaluate(() => { Appearance.set('glass'); Appearance.setTheme('water'); LiquidGlass.enable(); });
+    await mobile.waitForFunction(() => document.documentElement.classList.contains('glass-gpu'), null, { timeout: 5000 });
+    const mobileStats = {};
+    for (const theme of ['water', 'aurora', 'peach', 'night']) {
+      await mobile.evaluate(value => Appearance.setTheme(value), theme);
+      await mobile.waitForTimeout(250);
+      const start = await mobile.evaluate(() => ({
+        ...GlassRenderer.getState(), canvasWidth: document.querySelector('.glass-wallpaper-canvas').width
+      }));
+      assert.equal(start.canvasWidth <= 390, true, 'mobile does not render a high-DPI framebuffer');
+      assert.equal(start.buttons, 0, 'mobile skips per-button lens passes');
+      assert.equal(start.layers, 0, 'mobile skips stacked lens passes');
+      assert.ok(start.lenses > 0 && start.controls > 0, 'mobile retains cards and input lenses');
+      const before = await sampleScene(mobile);
+      const fps = await renderRate(mobile);
+      const after = await sampleScene(mobile);
+      const delta = difference(before, after);
+      assert.ok(delta > .04, theme + ' moves in the mobile canvas');
+      assert.ok(fps >= 30 && fps <= 65, theme + ' uses a bounded mobile cadence: ' + fps);
+      mobileStats[theme] = { difference: delta, fps, width: start.canvasWidth };
+    }
+    await mobile.emulateMedia({ reducedMotion: 'reduce' });
+    await mobile.waitForTimeout(250);
+    const mobileIdle = await mobile.evaluate(() => GlassRenderer.getState());
+    await mobile.waitForTimeout(250);
+    assert.equal(mobileIdle.ambientMotion, false);
+    assert.equal(await mobile.evaluate(() => GlassRenderer.getState().draws), mobileIdle.draws);
+    const mobileRefracted = await sampleScene(mobile);
+    await mobile.evaluate(() => {
+      GlassRenderer.setIntensity(0);
+      GlassRenderer.setControlIntensity(0);
+    });
+    assert.ok(difference(mobileRefracted, await sampleScene(mobile)) > .04,
+      'mobile card and input optics visibly bend the real background');
+    await mobile.evaluate(() => {
+      const gl = document.querySelector('.glass-wallpaper-canvas').getContext('webgl');
+      gl.getExtension('WEBGL_lose_context').loseContext();
+    });
+    await mobile.waitForFunction(() => !document.documentElement.classList.contains('glass-gpu') &&
+      document.querySelector('.glass-input-optics'));
+    await mobile.close();
+
     const broken = await browser.newPage({ viewport: { width: 1100, height: 800 } });
     await broken.addInitScript(() => {
       localStorage.setItem('cet6_interface_style', 'glass');
@@ -157,6 +217,6 @@ const OUT = path.join(ROOT, '.gstack', 'water-motion');
     await broken.close();
 
     assert.deepEqual(errors, []);
-    console.log(`PASS: water flows at ${pacing.frames} fps (p95 ${pacing.p95.toFixed(1)}ms) on the GPU, the other glass themes drift subtly, and reduced motion freezes both interfaces; screenshots in ${OUT}`, ambient);
+    console.log(`PASS: water flows at ${pacing.frames} fps (p95 ${pacing.p95.toFixed(1)}ms) on the GPU, the other glass themes drift subtly, with bounded mobile rendering; screenshots in ${OUT}`, { ambient, mobileStats });
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
