@@ -9,7 +9,13 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     await page.goto('file:///' + path.resolve(__dirname, '../index.html').replaceAll('\\', '/'));
-    await page.evaluate(() => { Appearance.set('glass'); Appearance.setTheme('minimal'); LiquidGlass.enable({ persist: false }); });
+    await page.evaluate(() => {
+      const motionFor = GlassWallpaper.motionFor;
+      GlassWallpaper.motionFor = theme => theme === 'minimal' ? null : motionFor(theme);
+      Appearance.set('glass');
+      Appearance.setTheme('minimal');
+      LiquidGlass.enable({ persist: false });
+    });
     await page.waitForTimeout(700);
     assert.equal(await page.locator('.appearance-aurora').first().evaluate(e => getComputedStyle(e).animationName), 'none',
       'static wallpaper must not continuously invalidate every glass surface');

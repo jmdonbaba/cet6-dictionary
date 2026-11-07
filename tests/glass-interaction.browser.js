@@ -8,13 +8,36 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto('file:///' + path.resolve(__dirname, '../index.html').replaceAll('\\', '/'));
     await page.evaluate(() => {
+      GlassWallpaper.motionFor = () => null; // Isolate lens motion from wallpaper drift.
       Appearance.set('glass'); Appearance.setTheme('aurora'); LiquidGlass.enable({ persist: false });
       const card = document.createElement('div'); card.className = 'card interaction-fixture';
       card.style.cssText = 'position:fixed;left:400px;top:300px;width:500px;height:260px;z-index:8';
       card.innerHTML = '<span>清晰文字 · Glass</span>'; document.body.append(card);
     });
     await page.waitForTimeout(600);
+    await page.waitForFunction(() => GlassRenderer.getState().active && GlassRenderer.getState().draws > 0, null, { timeout: 10000 });
     assert.equal(await page.evaluate(() => typeof window.GlassInteraction), 'object', 'glass interaction must be installed');
+    const checkModalHover = async () => {
+      await page.evaluate(() => {
+        setVFavs(Array.from({ length: 45 }, (_, index) => ({ id: String(index), word: `fixture-${index}`, definitions: ['测试'] })));
+        renderVFavs();
+        openModal($modalVocabFav, true);
+        document.getElementById('wordFavPanel').scrollTop = 0;
+      });
+      const row = await page.locator('.vf-compact[data-vfidx="3"]').boundingBox();
+      const point = { x: row.x + 40, y: row.y + row.height / 2 };
+      await page.mouse.move(point.x, point.y);
+      await page.waitForFunction(() => GlassInteraction.target()?.closest('.vf-compact')?.dataset.vfidx === '3', null, { timeout: 1600 });
+      await page.mouse.wheel(0, 360);
+      await page.waitForFunction(({ x, y }) => {
+        const hit = document.elementFromPoint(x, y)?.closest('.vf-compact');
+        return hit && hit.dataset.vfidx !== '3' && GlassInteraction.target()?.closest('.vf-compact') === hit;
+      }, point, { timeout: 1600 }).catch(() => assert.fail('nested scrolling must retarget the optics without moving the pointer'));
+      await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !GlassInteraction.target()?.closest('.modal-card'), null, { timeout: 1600 })
+        .catch(() => assert.fail('closing the modal must release the hidden optical target'));
+      await page.mouse.move(1, 1);
+    };
     const pixels = () => page.evaluate(() => new Promise(resolve => {
       GlassRenderer.render(); requestAnimationFrame(() => {
         const source = document.querySelector('.glass-wallpaper-canvas');
@@ -68,6 +91,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const draws = await page.evaluate(()=>GlassRenderer.getState().draws);
     await page.waitForTimeout(250);
     assert.equal(await page.evaluate(()=>GlassRenderer.getState().draws),draws,'interaction must settle back to idle');
+    await checkModalHover();
     await page.evaluate(()=>LiquidGlass.setIntensity(0,{persist:false}));
     const zeroBefore=await pixels();
     await page.locator('.interaction-fixture').dispatchEvent('pointermove',{clientX:600,clientY:430,pointerType:'mouse',bubbles:true});
@@ -90,10 +114,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.waitForTimeout(950);
     assert.equal(await page.locator('[data-interactive]').count(),0,'native pressure field is released on leave');
     await page.keyboard.press('Escape');
+    await checkModalHover();
     await page.emulateMedia({ reducedMotion:'reduce' });
     await page.locator('.interaction-fixture').dispatchEvent('click',{clientX:600,clientY:430,bubbles:true,detail:1});
     assert.equal(await page.locator('.glass-jelly').count(),0,'reduced motion suppresses jelly');
     assert.deepEqual(errors,[]);
-    console.log('PASS: local hover deformation, click spring, sharp text, stable hit target, settling and reduced motion');
+    console.log('PASS: local hover deformation, nested modal scroll, click spring, sharp text, stable hit target, settling and reduced motion');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1});

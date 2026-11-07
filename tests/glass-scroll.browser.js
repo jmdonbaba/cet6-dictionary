@@ -6,7 +6,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  try{
   const page=await browser.newPage({viewport:{width:1440,height:900}});
   await page.goto('file:///'+path.resolve(__dirname,'../index.html').replaceAll('\\','/'));
-  await page.evaluate(()=>{Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false});
+  await page.evaluate(()=>{GlassWallpaper.motionFor=()=>null; // Isolate scroll-driven renders.
+   Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false});
    const holder=document.querySelector('#wordSearchModules');
    for(let i=0;i<100;i++){const card=document.createElement('div');card.className='card word-search-wrapper';card.style.height='380px';card.innerHTML='<div class="word-result" style="height:280px"><strong>word '+i+'</strong><button>收藏</button><input placeholder="输入单词"></div>';holder.append(card);}
   });

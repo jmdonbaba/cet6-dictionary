@@ -1,7 +1,7 @@
 /* Shared event-driven GPU wallpaper/card pass and scissored button lenses.
  * Text and controls stay in the DOM. No DOM capture, per-card render targets or
- * backdrop reads. The water wallpaper animates through the shader (following the
- * display refresh); every other wallpaper stays static. Native glass is the fallback.
+ * backdrop reads. Water follows the display refresh. The other themes drift at a
+ * lower idle cadence through the same shader. Native glass is the fallback.
  */
 (function () {
   'use strict';
@@ -19,6 +19,8 @@
   var water = null, waterLoading = false, waterFailed = false;
   var locations = {};
   var motionUntil = 0, waterAnimating = false;
+  var ambientAnimating = false, ambientTimer = 0, ambientElapsed = 0, ambientTick = null;
+  var motionQuery = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
   var controlCount=0,controlIntensity=1;
   var MAX_LENSES = 16;
   var vertex = 'attribute vec2 position; void main(){ gl_Position=vec4(position,0.,1.); }';
@@ -28,6 +30,7 @@
     'uniform sampler2D underGlass;',
     'uniform float uTime;',
     'uniform float waterMotion;',
+    'uniform vec4 ambientMotion;',
     'uniform float buttonLens;',
     'uniform float inputLens;',
     'uniform float overlayPass;',
@@ -58,7 +61,18 @@
     ' float shimmer=0.5+0.5*sin(uv.x*90.0+uv.y*70.0+t*2.4);',
     ' return mix(c1,c2,0.35)*(1.0+0.05*(shimmer-0.5));',
     '}',
-    'vec3 sampleAt(vec2 p){ vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999)); if(overlayPass>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb; if(waterMotion>.5)return waterAt(uv); return texture2D(wallpaper,uv).rgb; }',
+    'vec3 sampleAt(vec2 p){',
+    ' vec2 uv=clamp(p/viewport,vec2(.001),vec2(.999));',
+    ' if(overlayPass>.5)return texture2D(underGlass,vec2(uv.x,1.-uv.y)).rgb;',
+    ' if(waterMotion>.5)return waterAt(uv);',
+    ' if(ambientMotion.w>0.){',
+    '  vec2 light=uv-vec2(.5)-ambientMotion.xy;',
+    '  float wash=1.-smoothstep(.02,.62,dot(light,light));',
+    '  return texture2D(wallpaper,uv).rgb+vec3(wash*ambientMotion.w);',
+    ' }',
+    ' vec2 drift=ambientMotion.xy+ambientMotion.z*vec2(uv.y-.5,.5-uv.x);',
+    ' return texture2D(wallpaper,uv+4.*uv*(1.-uv)*drift).rgb;',
+    '}',
     'void main(){',
     ' vec2 pixel=vec2(gl_FragCoord.x,viewport.y-gl_FragCoord.y);',
     ' if(downsamplePass>.5){',
@@ -106,7 +120,7 @@
   ].join('\n');
 
   function motionAllowed() {
-    return !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    return !(motionQuery && motionQuery.matches);
   }
 
   function compile(type, code) {
@@ -156,7 +170,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','ambientMotion'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -205,15 +219,39 @@
   }
 
   function loadWater() {
-    if(water||waterLoading)return;waterLoading=true;
+    if(water||waterLoading||waterFailed)return;waterLoading=true;
     GlassWallpaper.waterReady().then(function(image){
       water=image;waterFailed=!image;waterLoading=false;theme='';requestRender();
     });
   }
 
+  function updateAmbient(now, motion) {
+    ambientAnimating = !!motion;
+    if (!motion) {
+      ambientElapsed = 0;
+      ambientTick = null;
+      gl.uniform4f(locations.ambientMotion, 0, 0, 0, 0);
+      return;
+    }
+    if (ambientTick !== null) {
+      now = Math.max(ambientTick, now);
+      ambientElapsed += (now - ambientTick) / 1000;
+    }
+    ambientTick = now;
+    // Ease in from the preview pixels, then vary the warp without uploading a new texture.
+    var amount = Math.min(1, ambientElapsed / 1.2);
+    var phase = ambientElapsed * 2 * Math.PI / motion.period;
+    gl.uniform4f(locations.ambientMotion,
+      motion.x * amount * Math.sin(phase),
+      motion.y * amount * Math.sin(phase + .9),
+      motion.bend * amount * Math.sin(phase * .85 + .55),
+      motion.glow * amount * (.76 + .24 * Math.sin(phase)));
+  }
+
   function draw(now) {
     frame = 0;
     if (!active || !programReady || document.hidden) return;
+    ambientAnimating = waterAnimating = false;
     if (root.dataset.interface !== 'glass' || innerWidth <= 720) { clearModal();root.classList.remove('glass-gpu'); return; }
     try {
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
@@ -222,8 +260,8 @@
       if(root.dataset.wallpaper==='water'&&!water&&!waterFailed){root.classList.remove('glass-gpu');loadWater();return;}
       originX=box.left;originY=box.top;
       if (width !== box.width || height !== box.height || pixelRatio !== (devicePixelRatio||1) || theme !== root.dataset.wallpaper) {
+        if (theme !== root.dataset.wallpaper) { ambientElapsed = 0; ambientTick = null; }
         width=box.width;height=box.height;pixelRatio=devicePixelRatio||1;theme=root.dataset.wallpaper;
-        if(theme==='water')loadWater();
         buildWallpaper();
       }
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
@@ -257,9 +295,11 @@
       // gl_FragCoord is in framebuffer pixels; viewport uniforms use the same space.
       lenses = count;
       gl.uniform2f(locations.viewport, canvas.width, canvas.height);
-      waterAnimating = theme === 'water' && motionAllowed();
+      var canAnimate = motionAllowed();
+      waterAnimating = theme === 'water' && !!water && canAnimate;
       gl.uniform1f(locations.uTime, (now || performance.now()) / 1000);
       gl.uniform1f(locations.waterMotion, waterAnimating ? 1 : 0);
+      updateAmbient(now, canAnimate && GlassWallpaper.motionFor(theme));
       var sx = canvas.width / width, sy = canvas.height / height;
       for (var i=0;i<count;i++) { rects[i*4]*=sx;rects[i*4+1]*=sy;rects[i*4+2]*=sx;rects[i*4+3]*=sy;shapes[i*2]*=sx;shapes[i*2+1]=sx; }
       gl.uniform4fv(locations['rects[0]'], rects); gl.uniform2fv(locations['shapes[0]'], shapes);
@@ -269,8 +309,8 @@
       drawModal(sx,sy,rects,shapes);
       draws++;
       if (!root.classList.contains('glass-gpu')) root.classList.add('glass-gpu');
-      if (performance.now() < motionUntil) requestRender();
-      if (waterAnimating) requestRender();
+      if (waterAnimating || performance.now() < motionUntil) requestRender();
+      else if (ambientAnimating) ambientTimer = setTimeout(requestRender, 32);
     } catch (error) { failed = true; disable(); if (window.LiquidGlass) window.LiquidGlass.refresh(); }
   }
 
@@ -324,7 +364,7 @@
     var right=Math.min(w,Math.ceil((r.right-originX)*tx+mx)),top=Math.min(h,Math.ceil(h-(r.top-originY)*ty+my));
     gl.scissor(x,y,Math.max(0,right-x),Math.max(0,top-y));
     // Cache the complete blurred backdrop for this finite turn. The refracting
-    // plates still move; water outside the popup keeps flowing normally.
+    // plates still move; the wallpaper outside the popup keeps moving normally.
     if(turning)gl.scissor(0,0,w,h);
     gl.uniform1f(locations.overlayPass,1);
     gl.viewport(0,0,w,h);gl.uniform2f(locations.viewport,w,h);
@@ -418,6 +458,7 @@
     gl.uniform4fv(locations['parentRects[0]'],rectangles);gl.uniform1fv(locations['parentRadii[0]'],radii);
   }
   function drawSurface(element,isButton,strength,sx,sy,rects,shapes) {
+    if (element.hasAttribute('data-favorites-merge-receiver')) return false;
     var r=element.getBoundingClientRect();
     if(r.width<8||r.height<8||r.bottom<=originY||r.top>=originY+height||r.right<=originX||r.left>=originX+width)return false;
     var style=getComputedStyle(element);
@@ -502,10 +543,27 @@
     requestRender();
   }
 
-  function requestRender() { if (active && !frame) frame = requestAnimationFrame(draw); }
+  function requestRender() {
+    if (!active || frame || document.hidden) return;
+    if (ambientTimer) clearTimeout(ambientTimer);
+    ambientTimer = 0;
+    frame = requestAnimationFrame(draw);
+  }
+  function cancelRender() {
+    if (frame) cancelAnimationFrame(frame);
+    if (ambientTimer) clearTimeout(ambientTimer);
+    frame = ambientTimer = 0;
+  }
+  function onVisibilityChange() {
+    if (document.hidden) {
+      cancelRender();
+      ambientTick = null;
+      ambientAnimating = waterAnimating = false;
+    } else requestRender();
+  }
   function flush() {
     if(!active||failed)return false;
-    if(frame)cancelAnimationFrame(frame);frame=0;
+    cancelRender();
     draw(performance.now());return !failed;
   }
   function enable(options) {
@@ -521,8 +579,10 @@
   function disable() {
     clearModal();
     active = false;
-    if (frame) cancelAnimationFrame(frame); frame = 0;
-    waterAnimating = false;
+    cancelRender();
+    ambientElapsed = 0;
+    ambientTick = null;
+    ambientAnimating = waterAnimating = false;
     root.classList.remove('glass-gpu');
     if (resizeObserver) resizeObserver.disconnect(); observed.clear();
   }
@@ -531,7 +591,8 @@
     disable();
     document.removeEventListener('scroll', requestRender, true);
     window.removeEventListener('resize', requestRender);
-    document.removeEventListener('visibilitychange', requestRender);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    motionQuery?.removeEventListener?.('change', requestRender);
     document.removeEventListener('focusin', onInputFocus);
     document.removeEventListener('focusout', onInputFocus);
     document.removeEventListener('animationstart',onMaterialAnimation);document.removeEventListener('animationend',onMaterialAnimation);
@@ -543,7 +604,8 @@
   }
   document.addEventListener('scroll', requestRender, { passive: true, capture: true });
   window.addEventListener('resize', requestRender, { passive: true });
-  document.addEventListener('visibilitychange', requestRender);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  motionQuery?.addEventListener?.('change', requestRender);
   function onInputFocus(event) {
     if(root.dataset.interface==='glass'&&event.target.matches(GlassOptics.inputs)){
       var now=performance.now();
@@ -564,6 +626,6 @@
     setLayerIntensity: function(value){layerIntensity=Math.max(0,Math.min(2,Number(value)||0));requestRender();},
     setButtonIntensity: function (value) { buttonIntensity = Math.max(0,Math.min(2,Number(value)||0)); requestRender(); },
     setIntensity: function (value) { intensity = value; requestRender(); },
-    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses:lenses+layerCount+buttonCount+controlCount,layers:layerCount,controls:controlCount,originX:originX,originY:originY,buttons: buttonCount, width: width, height: height, waterMotion: waterAnimating }; }
+    getState: function () { return { active: active && !failed, failed: failed, draws: draws, lenses:lenses+layerCount+buttonCount+controlCount,layers:layerCount,controls:controlCount,originX:originX,originY:originY,buttons: buttonCount, width: width, height: height, waterMotion: waterAnimating, ambientMotion: ambientAnimating }; }
   };
 })();

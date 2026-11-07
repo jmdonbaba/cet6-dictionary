@@ -7,7 +7,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto('file:///'+path.resolve(__dirname,'../index.html').replaceAll('\\','/'));
-  await page.evaluate(()=>{Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false});setVFavs([{id:'focus',word:'focus',meaning:'焦点'}]);renderVFavs()});
+  await page.evaluate(()=>{GlassWallpaper.motionFor=()=>null; // Keep the optical target fixed.
+   Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false});setVFavs([{id:'focus',word:'focus',meaning:'焦点'}]);renderVFavs()});
   await page.waitForTimeout(600);
   const style=selector=>page.locator(selector).first().evaluate(el=>{const s=getComputedStyle(el);return {fill:s.backgroundColor,image:s.backgroundImage,shadow:s.boxShadow,blur:s.backdropFilter,filter:s.filter,border:s.borderTopColor,outline:s.outlineStyle}});
   const pixels=selector=>page.evaluate(selector=>new Promise(resolve=>{
@@ -57,8 +58,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    const before=await style(selector),rest=await pixels(selector);
    await page.locator(selector).first().focus();await page.waitForTimeout(330);
    const focused=await style(selector),bent=await pixels(selector);
-   assert.deepEqual(focused,before,selector+': focus changes optics, not CSS fill, blur or text');
-   assert.equal(focused.blur,'none');assert.equal(focused.filter,'none');assert.equal(focused.outline,'none');
+   assert.deepEqual(focused,{...before,outline:'solid'},selector+': focus adds an outline while retaining the clear optical plate');
+   assert.equal(focused.blur,'none');assert.equal(focused.filter,'none');
    assert.ok(diff(rest,bent)>.08,selector+': real input refraction gets stronger, measured '+diff(rest,bent));
    await page.evaluate(()=>document.activeElement.blur());await page.waitForTimeout(350);
    assert.ok(diff(rest,await pixels(selector))<.03,selector+': blur restores the original optical field');

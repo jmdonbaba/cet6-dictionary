@@ -67,33 +67,59 @@ const root = path.resolve(__dirname, '..');
       scrollTo({ top: source.getBoundingClientRect().top + scrollY - innerHeight + 130, behavior: 'instant' });
     });
     await page.waitForFunction(() => document.querySelector('.favorites-handoff'));
-    const handoff = await page.locator('.favorites-handoff').evaluate(el => ({
-      interactive: getComputedStyle(el).pointerEvents,
-      duration: el.getAnimations()[0].effect.getTiming().duration
-    }));
-    assert.equal(handoff.interactive, 'none');
-    assert.ok(handoff.duration >= 250 && handoff.duration <= 600);
-    const landingError = await page.evaluate(async () => {
+    assert.equal(await page.locator('.favorites-handoff').evaluate(el => getComputedStyle(el).pointerEvents), 'none');
+    const motion = await page.evaluate(async () => {
       const ghost = document.querySelector('.favorites-handoff');
-      const animation = ghost.getAnimations()[0], start = performance.now(), top = scrollY;
+      const start = performance.now(), top = scrollY;
+      let landingError = Infinity, merged = false, curvedNeck = false;
       return new Promise(resolve => {
         function sample() {
           const elapsed = performance.now() - start;
           if (elapsed < 160) scrollTo({ top: top + elapsed * .5, behavior: 'instant' });
-          if (animation.currentTime >= 370) {
-            const a = ghost.getBoundingClientRect(), b = document.querySelector('#btnOpenVocabFav').getBoundingClientRect();
-            resolve(Math.hypot(a.x + a.width / 2 - b.x - b.width / 2, a.y + a.height / 2 - b.y - b.height / 2));
-          } else requestAnimationFrame(sample);
+          const receiver = document.querySelector('#btnOpenVocabFav');
+          const label = ghost.querySelector('.favorites-handoff-traveler');
+          const outline = ghost.querySelector('.favorites-handoff-outline')?.getAttribute('d') || '';
+          if (receiver.hasAttribute('data-favorites-merge-receiver')) {
+            merged = true;
+            const a = label.getBoundingClientRect(), b = receiver.getBoundingClientRect();
+            if (elapsed >= 360) landingError = Math.hypot(a.x + a.width / 2 - b.x - b.width / 2, a.y + a.height / 2 - b.y - b.height / 2);
+            const surface = ghost.getBoundingClientRect();
+            curvedNeck ||= (outline.match(/M/g) || []).length === 1 && outline.includes('Q') &&
+              (surface.width > b.width + 30 || surface.height > b.height + 30);
+          }
+          if (!ghost.isConnected || elapsed > 800) resolve({ landingError, merged, curvedNeck });
+          else requestAnimationFrame(sample);
         }
         requestAnimationFrame(sample);
       });
     });
-    assert.ok(landingError < 30, `the handoff follows the real entry while scrolling continues (${landingError}px)`);
+    assert.ok(motion.merged && motion.curvedNeck, `the approaching pill stretches a single rounded contour to the footer: ${JSON.stringify(motion)}`);
+    assert.ok(motion.landingError < 30, `the handoff follows the real entry while scrolling continues (${motion.landingError}px)`);
     await settle(false);
     assert.equal(await source.evaluate(el => el === document.activeElement), true, 'keyboard focus follows the visible entry');
     await page.waitForFunction(() => !document.querySelector('.favorites-handoff'));
-    await scrollToSource(false);
-    await page.waitForFunction(() => !document.querySelector('.favorites-handoff'));
+    assert.equal(await page.locator('[data-favorites-merge-receiver]').count(), 0);
+    const reveal = await page.evaluate(async () => {
+      scrollTo({ top: 0, behavior: 'instant' });
+      const start = performance.now();
+      let last;
+      return new Promise(resolve => {
+        function sample() {
+          const ghost = document.querySelector('.favorites-handoff');
+          const receiver = document.querySelector('#btnOpenFavoritesShortcut');
+          if (ghost && receiver.hasAttribute('data-favorites-merge-receiver')) {
+            const shape = ghost.querySelector('.favorites-handoff-outline').getBBox();
+            last = { width: shape.width - receiver.offsetWidth, height: shape.height - receiver.offsetHeight };
+          }
+          if ((last && !ghost) || performance.now() - start > 800) resolve(last);
+          else requestAnimationFrame(sample);
+        }
+        requestAnimationFrame(sample);
+      });
+    });
+    assert.ok(reveal && Math.abs(reveal.width) < 4 && Math.abs(reveal.height) < 4,
+      `the liquid contour settles into the floating button without a size jump: ${JSON.stringify(reveal)}`);
+    await settle(true);
     assert.equal(await snapshot(), before);
     console.log('PASS: entering/leaving the footer smoothly hands off the entry and keyboard focus');
 

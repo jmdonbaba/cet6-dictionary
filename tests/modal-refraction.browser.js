@@ -8,8 +8,9 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
   page.on('pageerror',error=>errors.push(error.message));
   await page.goto('file:///'+path.resolve(__dirname,'../index.html').replaceAll('\\','/'));
-  await page.evaluate(()=>{Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false})});
-  await page.waitForTimeout(600);
+  await page.evaluate(()=>{GlassWallpaper.motionFor=()=>null; // Isolate the modal's optical changes.
+   Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false})});
+  await page.waitForFunction(()=>document.documentElement.classList.contains('glass-gpu'));
   for(const id of ['modalSettings','modalVocabFav','modalRestorePage','modalImportChoice']){
    const immediate=await page.evaluate(id=>{
     openModal(document.getElementById(id),true);

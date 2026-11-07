@@ -6,7 +6,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  try{
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   await page.goto('file:///'+path.resolve(__dirname,'../index.html').replaceAll('\\','/'));
-  await page.evaluate(()=>{Appearance.set('glass');Appearance.setTheme('minimal');LiquidGlass.enable({persist:false})});
+  await page.evaluate(()=>{GlassWallpaper.motionFor=()=>null; // Keep the blur target fixed.
+   Appearance.set('glass');Appearance.setTheme('minimal');LiquidGlass.enable({persist:false})});
   await page.waitForTimeout(600);
   const result=await page.evaluate(()=>{
    GlassRenderer.setIntensity(0);GlassRenderer.setButtonIntensity(0);GlassRenderer.setLayerIntensity(0);GlassRenderer.flush();

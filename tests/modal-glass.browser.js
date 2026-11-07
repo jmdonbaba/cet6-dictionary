@@ -1,6 +1,5 @@
-// Real-browser regression: focused search fields boost the card lens instead of
-// drawing a border, and modals appear with their final native refraction in the
-// first painted frame (no flash / late colour shift). Inner rows are glass too.
+// Real-browser regression: focused search fields keep clear glass and a visible
+// focus indicator. Modals appear with their final refraction in the first paint.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -27,6 +26,7 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
       return {
         border: style.borderTopColor,
         outline: style.outlineStyle,
+        outlineWidth: style.outlineWidth,
         background: style.backgroundColor,
         backdrop: style.backdropFilter,
         focused: document.activeElement === element
@@ -38,7 +38,8 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     const inputFocus = await focusStyle('.word-search-input');
     assert.equal(inputFocus.focused, true);
     assert.equal(inputFocus.border, 'rgba(0, 0, 0, 0)', 'focused search input must not draw a border');
-    assert.equal(inputFocus.outline, 'none');
+    assert.equal(inputFocus.outline, 'solid', 'keyboard focus remains visible over glass');
+    assert.equal(inputFocus.outlineWidth, '2px');
     assert.equal(inputFocus.background, 'rgba(0, 0, 0, 0)', 'card search keeps a clear glass fill');
     assert.equal(inputFocus.backdrop, 'none', 'card search does not frost the card behind it');
     await page.screenshot({ path: path.join(OUT, 'search-focus.png') });
@@ -127,7 +128,22 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     assert.equal(restore.immediate.filter, 'none');
     assert.equal(restore.immediate.animation, 'none');
 
+    // A flat wallpaper and reduced transparency cannot show focus via optics.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setEmulatedMedia', { features: [
+      { name: 'prefers-reduced-transparency', value: 'reduce' },
+      { name: 'prefers-reduced-motion', value: 'reduce' }
+    ] });
+    await page.evaluate(() => Appearance.setTheme('minimal'));
+    await page.keyboard.press('Tab');
+    await page.locator('#mnemonicInput').focus();
+    const mobileFocus = await focusStyle('#mnemonicInput');
+    assert.equal(mobileFocus.focused, true);
+    assert.equal(mobileFocus.outline, 'solid', 'mobile focus survives without optical contrast');
+    assert.equal(mobileFocus.outlineWidth, '2px');
+
     assert.deepEqual(errors, []);
-    console.log('PASS: clear borderless card/modal fields, stable first-frame modal optics; screenshots in ' + OUT);
+    console.log('PASS: visible glass input focus, stable first-frame modal optics; screenshots in ' + OUT);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,5 +1,4 @@
-﻿// Real rendering regression: the water wallpaper must animate smoothly on the GPU,
-// while every other wallpaper stays idle and reduced motion freezes it.
+﻿// Real rendering regression for GPU wallpaper motion and its static fallbacks.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -15,7 +14,7 @@ const OUT = path.join(ROOT, '.gstack', 'water-motion');
     page.on('pageerror', e => errors.push(e.message));
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     await page.goto('file:///' + ROOT.replaceAll('\\', '/') + '/index.html');
-    await page.evaluate(() => { Appearance.set('glass'); Appearance.setTheme('water'); LiquidGlass.enable({ persist: false }); });
+    await page.evaluate(() => { Appearance.set('glass'); Appearance.setTheme('water'); LiquidGlass.enable(); });
     await page.waitForTimeout(900);
 
     const initial = await page.evaluate(() => GlassRenderer.getState());
@@ -50,13 +49,57 @@ const OUT = path.join(ROOT, '.gstack', 'water-motion');
       'the water wallpaper must actually move between frames');
     await page.screenshot({ path: path.join(OUT, 'glass-water-motion.png'), animations: 'disabled' });
 
-    // Static wallpapers must return to a fully idle GPU.
-    await page.evaluate(() => Appearance.setTheme('aurora'));
-    await page.waitForTimeout(500);
-    const idleA = await page.evaluate(() => GlassRenderer.getState().draws);
-    await page.waitForTimeout(400);
-    assert.equal(await page.evaluate(() => GlassRenderer.getState().draws), idleA,
-      'non-water wallpapers must not keep repainting');
+    const sampleScene = () => page.evaluate(() => {
+      const canvas = document.querySelector('.glass-wallpaper-canvas');
+      const copy = document.createElement('canvas');
+      copy.width = 96;
+      copy.height = 60;
+      const ctx = copy.getContext('2d');
+      GlassRenderer.flush();
+      ctx.drawImage(canvas, 0, 0, copy.width, copy.height);
+      return Array.from(ctx.getImageData(0, 0, copy.width, copy.height).data);
+    });
+    const difference = (a, b) => a.reduce((sum, value, index) => sum + Math.abs(value - b[index]), 0) / (a.length * .75);
+    const ambient = {};
+    for (const theme of ['aurora', 'peach', 'night', 'minimal']) {
+      await page.evaluate(value => Appearance.setTheme(value), theme);
+      await page.waitForTimeout(250);
+      const start = await page.evaluate(() => GlassRenderer.getState());
+      assert.equal(start.waterMotion, false, theme + ' must stop the water shader');
+      assert.equal(start.ambientMotion, true, theme + ' must enter ambient motion');
+      const before = await sampleScene();
+      await page.waitForTimeout(850);
+      const after = await sampleScene();
+      const draws = await page.evaluate(() => GlassRenderer.getState().draws) - start.draws;
+      ambient[theme] = { difference: difference(before, after), draws };
+      assert.ok(ambient[theme].difference > .04, theme + ' must visibly change its wallpaper pixels');
+      assert.ok(ambient[theme].difference < 6, theme + ' motion must stay subtle');
+      assert.ok(draws > 5 && draws < pacing.frames, theme + ' must use a lower idle cadence than water');
+    }
+
+    // A background tab stops the loop and resumes when it is visible again.
+    await page.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    const hidden = await page.evaluate(() => GlassRenderer.getState().draws);
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => GlassRenderer.getState().draws), hidden);
+    await page.evaluate(() => {
+      delete document.hidden;
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForFunction(() => GlassRenderer.getState().ambientMotion);
+
+    // Reduced motion makes all GPU wallpapers static.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.waitForTimeout(250);
+    const idleA = await page.evaluate(() => GlassRenderer.getState());
+    await page.waitForTimeout(250);
+    assert.equal(await page.evaluate(() => GlassRenderer.getState().draws), idleA.draws);
+    assert.equal(idleA.ambientMotion, false);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.waitForFunction(() => GlassRenderer.getState().ambientMotion);
 
     // Reduced motion freezes the water.
     await page.evaluate(() => Appearance.setTheme('water'));
@@ -90,7 +133,30 @@ const OUT = path.join(ROOT, '.gstack', 'water-motion');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.appearance-water'), '::after').animationName), 'none',
       'reduced motion must remove the classic flow animation');
 
+    const broken = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+    await broken.addInitScript(() => {
+      localStorage.setItem('cet6_interface_style', 'glass');
+      localStorage.setItem('cet6_theme_glass', 'water');
+      localStorage.setItem('cet6_liquid_glass', 'on');
+      const src = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        ...src,
+        set(value) {
+          src.set.call(this, value.startsWith('data:image/webp;') ? 'data:image/webp;base64,AA==' : value);
+        }
+      });
+    });
+    await broken.goto('file:///' + ROOT.replaceAll('\\', '/') + '/index.html');
+    await broken.waitForFunction(() => document.documentElement.classList.contains('glass-gpu'));
+    await broken.waitForTimeout(350);
+    const fallback = await broken.evaluate(() => GlassRenderer.getState());
+    await broken.waitForTimeout(250);
+    assert.equal(fallback.waterMotion, false, 'a missing water texture uses the static fallback');
+    assert.equal(await broken.evaluate(() => GlassRenderer.getState().draws), fallback.draws,
+      'a missing water texture must not retry the draw on each frame');
+    await broken.close();
+
     assert.deepEqual(errors, []);
-    console.log(`PASS: water flows at ${pacing.frames} fps (p95 ${pacing.p95.toFixed(1)}ms) on the GPU, static wallpapers stay idle, reduced motion freezes both interfaces; screenshots in ${OUT}`);
+    console.log(`PASS: water flows at ${pacing.frames} fps (p95 ${pacing.p95.toFixed(1)}ms) on the GPU, the other glass themes drift subtly, and reduced motion freezes both interfaces; screenshots in ${OUT}`, ambient);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

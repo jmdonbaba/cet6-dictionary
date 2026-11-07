@@ -9,14 +9,14 @@ const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const refraction = fs.readFileSync(path.join(root, 'glass-refraction.js'), 'utf8');
 const appearance = fs.readFileSync(path.join(root, 'appearance.js'), 'utf8');
 
-test('focused search fields drop the border and bend their glass card harder', () => {
+test('focused search fields keep clear glass with a visible focus indicator', () => {
   const focusRule = css.match(/html\[data-interface="glass"\] :is\(\.input-area input,[\s\S]*?\n\}/);
   assert.ok(focusRule, 'glass focus rule must exist');
   assert.match(focusRule[0], /border-color: transparent !important;/);
-  assert.match(focusRule[0], /outline: none !important;/);
   assert.doesNotMatch(focusRule[0], /background-color:|backdrop-filter:|box-shadow:/, 'focus keeps the clear input tint');
   assert.match(focusRule[0], /\.fav-search input/);
   assert.match(focusRule[0], /\.comparison-search/);
+  assert.match(css, /\.comparison-search\):focus-visible \{\s*outline: 2px solid var\(--glass-focus-ring, var\(--primary\)\);/);
   assert.match(renderer, /button\.matches\('input, textarea'\)/);
   assert.match(renderer, /GlassOptics\.inputStrength\(input,performance\.now\(\)\)/, 'the whole input background gets the focus lens');
 });

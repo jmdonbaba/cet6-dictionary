@@ -2,11 +2,19 @@
 (function(){
   'use strict';
   var waterPromise=null,water=null,preview=null,last='';
+  // Travel is a fraction of the viewport, and the period is in seconds.
+  var ambientThemes = {
+    aurora: { period: 24, x: .03, y: .026, bend: .035, glow: 0 },
+    peach: { period: 32, x: .025, y: .022, bend: .018, glow: 0 },
+    night: { period: 36, x: .024, y: .026, bend: .026, glow: 0 },
+    minimal: { period: 20, x: .24, y: .16, bend: 0, glow: .022 }
+  };
+  function motionFor(theme) { return ambientThemes[theme] || null; }
   function rgba(token,alpha){return 'rgba('+token+','+alpha+')';}
   function paint(ctx,width,height,theme,water){
     var palettes = {
       aurora: ['#f1f6ff','#f7f2ff','#eefbf8'], peach: ['#fff8f0','#fff1f2','#f7f3ff'],
-      night: ['#0b1026','#131a3a','#0b2130'], water: ['#a7e6df','#8fd8d2','#6fc9c4'],
+      night: ['#0b1026','#131a3a','#0b2130'], water: ['#78b5dc','#79b7dc','#86c3e5'],
       minimal: ['#eef0f8','#eef0f8','#eef0f8']
     };
     var palette = palettes[theme] || palettes.aurora;
@@ -65,5 +73,5 @@
     if(theme==='water')waterReady();
   }
   document.addEventListener('appearancechange',refresh);window.addEventListener('resize',refresh,{passive:true});
-  window.GlassWallpaper={paint:paint,refresh:refresh,waterReady:waterReady};
+  window.GlassWallpaper={paint:paint,refresh:refresh,waterReady:waterReady,motionFor:motionFor};
 })();

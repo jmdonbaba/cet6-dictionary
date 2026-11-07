@@ -7,7 +7,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('file:///'+path.resolve(__dirname,'../index.html').replaceAll('\\','/'));
   await page.evaluate(()=>document.startViewTransition=undefined); // Legacy fallback.
-  await page.evaluate(()=>{Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false});
+  await page.evaluate(()=>{GlassWallpaper.motionFor=()=>null; // Isolate control and card motion.
+   Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false});
    setVFavs(Array.from({length:12},(_,i)=>({id:'motion-'+i,word:'word'+i,meaning:'释义 '+i})));renderVFavs();
    openModal(document.getElementById('modalVocabFav'),true);
   });

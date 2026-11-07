@@ -50,21 +50,54 @@
 }
 .favorites-handoff {
   position: fixed;
+  inset: 0 auto auto 0;
   z-index: 31;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 96px;
-  height: 44px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card-bg);
   color: var(--text);
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
-  box-shadow: var(--shadow);
   pointer-events: none;
+}
+.favorites-handoff-surface, .favorites-handoff-rim { position: absolute; inset: 0; }
+.favorites-handoff-surface { background: var(--card-bg); }
+.favorites-handoff-rim { width: 100%; height: 100%; overflow: visible; }
+.favorites-handoff-outline { fill: none; stroke: var(--border); stroke-width: 1.25; }
+.favorites-handoff-rim.favorites-handoff-focused .favorites-handoff-outline { stroke: var(--primary); stroke-width: 2; }
+.favorites-handoff-traveler, .favorites-handoff-label { position: absolute; inset: 0 auto auto 0; white-space: nowrap; }
+html[data-interface="glass"] .favorites-handoff-surface {
+  background: linear-gradient(152deg, rgba(255, 255, 255, .37), rgba(255, 255, 255, .10) 60%, rgba(255, 255, 255, .23));
+  -webkit-backdrop-filter: blur(9px) saturate(1.24);
+  backdrop-filter: blur(9px) saturate(1.24);
+}
+html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-surface {
+  background: linear-gradient(152deg, rgba(48, 61, 102, .88), rgba(23, 32, 69, .87));
+}
+html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff { color: #f1f4ff; }
+html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-focused .favorites-handoff-outline { stroke: #c2ccff; }
+html[data-interface="glass"] .favorites-handoff-rim:not(.favorites-handoff-focused) .favorites-handoff-outline {
+  stroke: url(#favorites-handoff-rim-light);
+}
+/* The travelling material covers the receiver. Its native hit target and focus
+   stay in place until the shared contour settles back into the actual button. */
+:root button[data-favorites-merge-receiver] {
+  forced-color-adjust: none;
+  color: transparent !important;
+  background: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline-color: transparent !important;
+  transition-property: transform, visibility !important;
+}
+:root button[data-favorites-merge-receiver]::before,
+:root button[data-favorites-merge-receiver]::after { visibility: hidden !important; }
+@media (prefers-reduced-transparency: reduce) {
+  html[data-interface="glass"] .favorites-handoff-surface { background: var(--card-bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-surface { background: #273459; }
+}
+@media (forced-colors: active) {
+  .favorites-handoff { color: CanvasText !important; }
+  .favorites-handoff-surface { background: Canvas !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .favorites-handoff-outline { stroke: CanvasText !important; }
 }
 @media (max-width: 1240px) {
   .favorites-shortcuts { left: auto; right: max(24px, env(safe-area-inset-right)); }

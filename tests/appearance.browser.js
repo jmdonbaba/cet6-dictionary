@@ -21,7 +21,7 @@ const ROOT = path.join(__dirname, '..');
 const EDGE = process.env.EDGE_EXECUTABLE || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const THEMES = ['minimal', 'water', 'aurora', 'peach', 'night'];
 const THEME_LABELS = { minimal: '极简', aurora: '极光', peach: '蜜桃', night: '深空', water: '水波' };
-const THEME_COLORS = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
+const THEME_COLORS = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#79b7dc' };
 const PREFERRED_SHOT_DIR = path.join(ROOT, '.gstack', 'appearance');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -312,7 +312,7 @@ const portraitViewports = [1440, 1280, 390, 320];
 
     await page.keyboard.press('ArrowRight'); // minimal -> water
     await page.waitForFunction(() => document.documentElement.dataset.wallpaper === 'water');
-    await expectState('classic', 'water', '#8fd8d2');
+    await expectState('classic', 'water', '#79b7dc');
     assert.equal(await page.evaluate(() => document.querySelector('.theme-option.is-selected input').value), 'water');
     assert.match(await page.evaluate(() => document.getElementById('toast').textContent), /已切换主题：水波/);
     assert.deepEqual(await storedState(), { iface: null, classicTheme: 'water', glassTheme: null },
@@ -331,7 +331,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     assert.equal((await focused()).name, 'appearanceStyle', 'Shift+Tab returns to the interface radios');
     await page.keyboard.press('ArrowRight');
     await page.waitForFunction(() => document.documentElement.dataset.interface === 'glass');
-    await expectState('glass', 'water', '#8fd8d2');
+    await expectState('glass', 'water', '#79b7dc');
     assert.equal(await page.evaluate(() => localStorage.getItem('cet6_interface_style')), 'glass');
     assert.equal(await page.evaluate(() => document.querySelector('.theme-option.is-selected input').value), 'water',
       'switching interface applies the glass-specific remembered theme (default water)');
@@ -380,7 +380,7 @@ const portraitViewports = [1440, 1280, 390, 320];
       localStorage.setItem('cet6_theme_glass', 'neon');
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expectState('glass', 'water', '#8fd8d2');
+    await expectState('glass', 'water', '#79b7dc');
     console.log('PASS: interface + theme survive reload; invalid theme values fall back to water');
 
     // ------------------------------------- per-interface memory across switches
@@ -419,7 +419,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     await page.waitForFunction(() => document.documentElement.dataset.wallpaper === 'peach');
     await page.evaluate(() => window.Appearance.set('glass'));
     await page.waitForFunction(() => document.documentElement.dataset.interface === 'glass');
-    await expectState('glass', 'water', '#8fd8d2');
+    await expectState('glass', 'water', '#79b7dc');
     assert.deepEqual(await storedState(), { iface: 'glass', classicTheme: 'peach', glassTheme: 'neon' },
       'per-interface remember keys are untouched by switching');
     console.log('PASS: each interface remembers its own theme; classic + night lightens all page chrome');
@@ -431,40 +431,42 @@ const portraitViewports = [1440, 1280, 390, 320];
       await expectState('glass', theme, THEME_COLORS[theme]);
       const layers = await page.evaluate(() => {
         const backdrop = document.getElementById('appearanceBackdrop');
+        const backdropStyle = getComputedStyle(backdrop);
+        const canvas = backdrop.querySelector(document.documentElement.classList.contains('glass-gpu')
+          ? '.glass-wallpaper-canvas' : '.glass-preview-canvas');
+        const canvasStyle = canvas && getComputedStyle(canvas);
+        const canvasRect = canvas && canvas.getBoundingClientRect();
         return {
-          backdropDisplay: getComputedStyle(backdrop).display,
-          backdropPosition: getComputedStyle(backdrop).position,
-          backdropPointerEvents: getComputedStyle(backdrop).pointerEvents,
-          backdropZIndex: getComputedStyle(backdrop).zIndex,
-          auroraDisplay: getComputedStyle(document.querySelector('.appearance-aurora')).display,
-          waterDisplay: getComputedStyle(document.querySelector('.appearance-water')).display,
+          backdropDisplay: backdropStyle.display,
+          backdropPosition: backdropStyle.position,
+          backdropPointerEvents: backdropStyle.pointerEvents,
+          backdropZIndex: backdropStyle.zIndex,
+          canvasVisible: Boolean(canvasStyle && canvasStyle.display !== 'none' && canvasStyle.visibility === 'visible'
+            && Number(canvasStyle.opacity) > 0 && canvasRect.width > 0 && canvasRect.height > 0),
+          visibleDecorations: Array.from(backdrop.querySelectorAll('span'))
+            .filter(layer => getComputedStyle(layer).display !== 'none')
+            .map(layer => layer.className),
+          ribbonDisplay: getComputedStyle(backdrop, '::after').display,
           bodyBackground: getComputedStyle(document.body).backgroundColor,
           htmlBackground: getComputedStyle(document.documentElement).backgroundColor,
           themeOptions: document.querySelectorAll('.theme-option.is-selected').length
         };
       });
       assert.equal(layers.themeOptions, 1, `${theme} must leave exactly one checked theme option`);
+      assert.equal(layers.backdropDisplay, 'block', `${theme} shows the wallpaper backdrop`);
+      assert.equal(layers.backdropPosition, 'fixed');
+      assert.equal(layers.backdropPointerEvents, 'none', 'the wallpaper is click-through');
+      assert.ok(Number(layers.backdropZIndex) < 0, 'the wallpaper stays behind content');
+      assert.ok(layers.canvasVisible, `${theme} has a visible preview or GPU wallpaper canvas`);
+      assert.deepEqual(layers.visibleDecorations, [], `${theme} hides the CSS decoration while the canvas draws the wallpaper`);
+      assert.equal(layers.ribbonDisplay, 'none', `${theme} hides the CSS ribbons while the canvas draws the wallpaper`);
       if (theme === 'minimal') {
-        const gpu = await page.evaluate(() => LiquidGlass.getState().renderer === 'webgl');
-        assert.equal(layers.backdropDisplay, gpu ? 'block' : 'none', 'minimal uses a plain shared texture or hides decoration');
         // The fallback colour lives on <html> so the opaque body background cannot cover
         // the negative z-index glass ::before layer of the cards.
         assert.equal(layers.bodyBackground, 'rgba(0, 0, 0, 0)',
           'glass + minimal keeps the body transparent so the glass layer stays visible');
         assert.equal(layers.htmlBackground, 'rgb(238, 240, 248)',
           'glass + minimal paints the opaque fallback on the root element');
-      } else {
-        assert.equal(layers.backdropDisplay, 'block', `${theme} shows the decorative layer`);
-        assert.equal(layers.backdropPosition, 'fixed');
-        assert.equal(layers.backdropPointerEvents, 'none', 'the decorative layer is click-through');
-        assert.ok(Number(layers.backdropZIndex) < 0, 'the decorative layer stays behind content');
-        if (theme === 'water') {
-          assert.equal(layers.waterDisplay, 'block', 'water shows the caustics layer');
-          assert.equal(layers.auroraDisplay, 'none', 'water hides the aurora blobs');
-        } else {
-          assert.equal(layers.auroraDisplay, 'block', `${theme} shows the aurora blobs`);
-          assert.equal(layers.waterDisplay, 'none', `${theme} hides the caustics layer`);
-        }
       }
     }
     assert.ok(state.waterAssetRequests > 0, 'the water wallpaper requested assets/water-caustics.webp');

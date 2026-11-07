@@ -614,7 +614,7 @@
     clearTimeout(surfaceTimer);
     if (resizeObserver) resizeObserver.disconnect();
     if (mutationObserver) mutationObserver.disconnect();
-    window.removeEventListener('scroll', scheduleSurfaces);
+    window.removeEventListener('scroll', onScrollSurfaces, true);
     document.removeEventListener('focusin', onFocusSurfaces);
     document.removeEventListener('focusout', onFocusSurfaces);
 
@@ -703,6 +703,10 @@
       surfaceTimer = 0;
       syncSurfaces();
     }, 100);
+  }
+
+  function onScrollSurfaces() {
+    if (state.enabled && root().dataset.interface === 'glass' && !gpuActive()) scheduleSurfaces();
   }
 
   function syncSurfaces() {
@@ -910,14 +914,17 @@
     if (window.ResizeObserver) resizeObserver = new ResizeObserver(scheduleSurfaces);
     if (window.MutationObserver) {
       mutationObserver = new MutationObserver(function (records) {
-        if (records.some(function (record) { return record.target.namespaceURI !== NS; })) {
+        if (records.some(function (record) {
+          return record.target.namespaceURI !== NS && !record.target.closest?.('.favorites-handoff');
+        })) {
+          window.GlassInteraction?.refresh();
           if (gpuActive()) GlassRenderer.render();
           scheduleSurfaces();
         }
       });
       mutationObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'style'] });
     }
-    window.addEventListener('scroll', scheduleSurfaces, { passive: true });
+    window.addEventListener('scroll', onScrollSurfaces, { passive: true, capture: true });
     document.addEventListener('focusin', onFocusSurfaces);
     document.addEventListener('focusout', onFocusSurfaces);
 

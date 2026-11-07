@@ -47,7 +47,7 @@ const ruleBody = selectorPattern => {
 
 const themeValues = ['minimal', 'water', 'aurora', 'peach', 'night'];
 const themeLabels = { minimal: '极简', aurora: '极光', peach: '蜜桃', night: '深空', water: '水波' };
-const themeColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
+const themeColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#79b7dc' };
 
 test('settings entry is an accessible fixed control that turns absolute on narrow screens', () => {
   const buttonTag = body.match(/<button[^>]*id="btnOpenSettings"[^>]*>/);
@@ -268,7 +268,7 @@ test('background layer is wallpaper-driven and contains the aurora, water and no
       assert.match(palette, new RegExp(`--aurora-${token}:`), `${theme} missing --aurora-${token}`);
     }
   }
-  assert.match(ruleBody(/^html\[data-wallpaper="water"\]$/), /--wallpaper-base: linear-gradient\(160deg, #a7e6df 0%, #8fd8d2 42%, #6fc9c4 100%\);/);
+  assert.match(ruleBody(/^html\[data-wallpaper="water"\]$/), /--wallpaper-base: linear-gradient\(160deg, #78b5dc 0%, #79b7dc 42%, #86c3e5 100%\);/);
   assert.match(css, /rgba\(var\(--aurora-a\), 0\.7\)/, 'aurora blobs must consume the palette variables');
   assert.match(css, /rgba\(var\(--aurora-d\), 0\.44\)/);
 

@@ -306,7 +306,7 @@ button.settings-entry:active {
   background-image: url("assets/water-caustics.webp?v=8922591c3548");
   background-size: cover;
   background-position: center;
-  background-color: #8fd8d2;
+  background-color: #79b7dc;
 }
 .theme-option .appearance-option-copy { gap: 2px; }
 .theme-option .appearance-option-desc { font-size: 11.5px; line-height: 1.45; }
@@ -401,12 +401,12 @@ html[data-wallpaper="night"] {
   --aurora-d: 236, 72, 153;
 }
 html[data-wallpaper="water"] {
-  --wallpaper-base: linear-gradient(160deg, #a7e6df 0%, #8fd8d2 42%, #6fc9c4 100%);
+  --wallpaper-base: linear-gradient(160deg, #78b5dc 0%, #79b7dc 42%, #86c3e5 100%);
   --aurora-a: 255, 255, 255;
 
 }
 
-/* 水波主题用图片层（找不到图片时退回上面的青绿底色） */
+/* 水波主题用图片层，图片未就绪时沿用接近水波图的蓝色底色。 */
 html[data-wallpaper]:not([data-wallpaper="minimal"]) .appearance-aurora,
 html[data-wallpaper]:not([data-wallpaper="minimal"]) .appearance-water {
   position: absolute;
@@ -644,14 +644,18 @@ html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-/* The complete input plate strengthens its refraction on focus. Its tint and
-   sharp DOM text stay unchanged; the renderer owns the optical transition. */
+/* Preserve the clear plate and give keyboard focus a cue on flat backgrounds. */
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
-  .study-tool-form input, .key-area input, .comparison-search):focus,
+  .study-tool-form input, .key-area input, .comparison-search):focus {
+  border-color: transparent !important;
+}
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
   .study-tool-form input, .key-area input, .comparison-search):focus-visible {
-  border-color: transparent !important;
-  outline: none !important;
+  outline: 2px solid var(--glass-focus-ring, var(--primary));
+  outline-offset: 2px;
+}
+@media (prefers-reduced-transparency: no-preference) {
+  html[data-wallpaper="night"] { --glass-focus-ring: #c2ccff; }
 }
 html[data-interface="glass"] .word-search-wrapper:focus-within {
   box-shadow: var(--glass-shadow);

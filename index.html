@@ -8,7 +8,7 @@
 <style>
 /* Correct base color is available even while external styles are loading. */
 html[data-interface="glass"] { background-color: #eef0f8; }
-html[data-interface="glass"][data-wallpaper="water"] { background-color: #8fd8d2; }
+html[data-interface="glass"][data-wallpaper="water"] { background-color: #79b7dc; }
 html[data-interface="glass"][data-wallpaper="aurora"] { background-color: #eef0fb; }
 html[data-interface="glass"][data-wallpaper="peach"] { background-color: #fff7ed; }
 html[data-interface="glass"][data-wallpaper="night"] { background-color: #0b1026; }
@@ -807,7 +807,7 @@ try {
     }
   }
   var savedThemeColor = document.querySelector('meta[name="theme-color"]');
-  var wallpaperColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#8fd8d2' };
+  var wallpaperColors = { minimal: '#f8fafc', aurora: '#eef0fb', peach: '#fff7ed', night: '#0b1026', water: '#79b7dc' };
   if (savedThemeColor) savedThemeColor.setAttribute('content', wallpaperColors[savedTheme] || '#f8fafc');
 } catch (error) {
   document.documentElement.dataset.interface = 'classic';
@@ -815,9 +815,9 @@ try {
 }
 </script>
 <link rel="stylesheet" href="study-tools.css?v=ff3dde0a4752">
-<link rel="stylesheet" href="favorites-shortcut.css?v=3111c3966e68">
-<link rel="stylesheet" href="appearance.css?v=25b83778e137">
-<script src="glass-wallpaper.js?v=8377738be2ba"></script>
+<link rel="stylesheet" href="favorites-shortcut.css?v=2d754a01bd5d">
+<link rel="stylesheet" href="appearance.css?v=5a9e53637e3c">
+<script src="glass-wallpaper.js?v=2af390e4a5e0"></script>
 </head>
 <body>
 <div class="appearance-backdrop" id="appearanceBackdrop" aria-hidden="true">
@@ -1093,12 +1093,12 @@ try {
 <script src="study-tools.js?v=d3d633f3b42c"></script>
 <script src="card-motion.js?v=fb1895f08638"></script>
 <script src="study-tools-ui.js?v=087ee85f7e44"></script>
-<script src="appearance.js?v=282b62a9c95f"></script>
+<script src="appearance.js?v=bfdfa4f5ddee"></script>
 <script src="glass-optics.js?v=242c18884651"></script>
-<script src="glass-renderer.js?v=31e2cb403de9"></script>
-<script src="glass-refraction.js?v=73e5bdef55ce"></script>
-<script src="glass-interaction.js?v=5183b003826e"></script>
-<script src="favorites-shortcut.js?v=153a92ec8de7"></script>
+<script src="glass-renderer.js?v=1ab3800dc3a3"></script>
+<script src="glass-refraction.js?v=bbf282d03d47"></script>
+<script src="glass-interaction.js?v=ca8022786359"></script>
+<script src="favorites-shortcut.js?v=30a64272e801"></script>
 <script>
 // 液态折射只在支持「磨砂 + SVG 位移」的 Chromium 里生效（模块自行检测），
 // 每张可见卡片独立校准折射带，文字不参与滤镜。

@@ -8,6 +8,7 @@
   var desired = { element:null, x:0, y:0, level:0 };
   var pulse = { element:null, x:0, y:0, level:0, start:0 };
   var frame = 0, previous = 0, pressed = null;
+  var pointerPresent = false, hitTestPending = false;
   var decorations = new Map();
 
   function enabled() {
@@ -25,9 +26,22 @@
     if (window.LiquidGlass && LiquidGlass.interact) LiquidGlass.interact(hover,pulse);
   }
   function request() { if (!frame) frame = requestAnimationFrame(tick); }
+  function setTarget(target) {
+    desired.element = surface(target);
+    desired.level = desired.element ? (desired.element === pressed ? 1.5 : 1) : 0;
+  }
+  function refresh() {
+    if (!pointerPresent || !enabled()) return;
+    hitTestPending = true;
+    request();
+  }
   function tick(now) {
     frame = 0;
     if (!enabled() || document.hidden) { reset(); return; }
+    if (hitTestPending) {
+      hitTestPending = false;
+      setTarget(document.elementFromPoint(desired.x, desired.y));
+    }
     var dt = previous ? Math.min(.05,(now-previous)/1000) : 1/60;
     previous = now;
     if (desired.element && desired.element !== hover.element) {
@@ -51,12 +65,19 @@
   }
   function move(event) {
     if (!enabled() || event.pointerType==='touch') return;
-    desired.element=surface(event.target);desired.x=event.clientX;desired.y=event.clientY;
-    desired.level=desired.element ? (desired.element===pressed ? 1.5 : 1) : 0;
+    pointerPresent = true;
+    hitTestPending = false;
+    desired.x = event.clientX;
+    desired.y = event.clientY;
+    setTarget(event.target);
     request();
   }
   function leave(event) {
-    if (!event.relatedTarget) { desired.element=null;desired.level=0;pressed=null;request(); }
+    if (event.relatedTarget) return;
+    pointerPresent = hitTestPending = false;
+    desired.element = pressed = null;
+    desired.level = 0;
+    if (enabled()) request();
   }
   function removeDecoration(element) {
     clearTimeout(decorations.get(element)); decorations.delete(element);
@@ -83,15 +104,12 @@
   }
   function reset() {
     if (frame) cancelAnimationFrame(frame);frame=0;previous=0;pressed=null;
+    pointerPresent = hitTestPending = false;
     hover.element=desired.element=pulse.element=null;hover.level=desired.level=pulse.level=0;
     decorations.forEach(function (_,element){removeDecoration(element);});render();
   }
   function down(event) { if(enabled()){pressed=surface(event.target);move(event);} }
   function up() { pressed=null;desired.level=desired.element ? 1 : 0;if(enabled())request(); }
-  function scroll() {
-    if (!hover.element || !enabled()) return;
-    desired.element=surface(document.elementFromPoint(desired.x,desired.y));desired.level=desired.element?1:0;request();
-  }
   function read(element) {
     if (hover.element!==element && pulse.element!==element) return {hover:[0,0,1,0],pulse:[0,0,1,0]};
     var r=element.getBoundingClientRect();
@@ -107,16 +125,17 @@
     document.removeEventListener('pointerdown',down);document.removeEventListener('pointerup',up);
     document.removeEventListener('pointercancel',up);document.removeEventListener('click',click);
     document.removeEventListener('appearancechange',reset);document.removeEventListener('visibilitychange',reset);
-    window.removeEventListener('blur',reset);window.removeEventListener('scroll',scroll);
+    window.removeEventListener('blur',reset);window.removeEventListener('scroll',refresh,true);
     motion.removeEventListener('change',reset);transparency.removeEventListener('change',reset);
   }
   document.addEventListener('pointermove',move,{passive:true});document.addEventListener('pointerout',leave,{passive:true});
   document.addEventListener('pointerdown',down,{passive:true});document.addEventListener('pointerup',up,{passive:true});
   document.addEventListener('pointercancel',up,{passive:true});document.addEventListener('click',click,{passive:true});
   document.addEventListener('appearancechange',reset);document.addEventListener('visibilitychange',reset);
-  window.addEventListener('blur',reset);window.addEventListener('scroll',scroll,{passive:true});
+  window.addEventListener('blur',reset);
+  window.addEventListener('scroll',refresh,{passive:true,capture:true});
   motion.addEventListener('change',reset);transparency.addEventListener('change',reset);
-  window.GlassInteraction={ read:read, reset:reset, destroy:destroy,
+  window.GlassInteraction={ read:read, reset:reset, destroy:destroy, refresh:refresh,
     target:function(){return hover.element || pulse.element;},
     matches:function(element){return hover.element===element || pulse.element===element;},
     getState:function(){return {hover:hover.level,spring:pulse.level,running:!!frame};}

@@ -30,7 +30,7 @@
     aurora: '#eef0fb',
     peach: '#fff7ed',
     night: '#0b1026',
-    water: '#8fd8d2'
+    water: '#79b7dc'
   };
   var root = document.documentElement;
   var currentStyle = CLASSIC;
