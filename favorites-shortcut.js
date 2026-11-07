@@ -6,7 +6,7 @@ window.FavoritesShortcut = (() => {
   let ghost, frame = 0, pulse, journey;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const duration = 540;
-  const merged = 'data-favorites-merge-receiver';
+  const covered = 'data-favorites-handoff-cover';
   // Marching-squares cases, with edges numbered clockwise from the top.
   const edges = [[], [3, 0], [0, 1], [3, 1], [1, 2], null, [0, 2], [3, 2],
     [2, 3], [0, 2], null, [1, 2], [1, 3], [0, 1], [3, 0], []];
@@ -14,7 +14,8 @@ window.FavoritesShortcut = (() => {
   function cancelMotion() {
     cancelAnimationFrame(frame); frame = 0;
     if (pulse) { pulse.cancel(); pulse = null; }
-    journey?.receiver.removeAttribute(merged);
+    journey?.receiver.removeAttribute(covered);
+    if (journey?.receiver === source) button.removeAttribute(covered);
     journey = null;
     ghost?.remove(); ghost = null;
   }
@@ -108,7 +109,7 @@ window.FavoritesShortcut = (() => {
     const vertices = contour.filter(([x, y], i) => {
       const [ax, ay] = contour[(i + contour.length - 1) % contour.length];
       const [bx, by] = contour[(i + 1) % contour.length];
-      return Math.abs((x - ax) * (by - ay) - (y - ay) * (bx - ax)) > .12 * Math.hypot(bx - ax, by - ay);
+      return Math.abs((x - ax) * (by - ay) - (y - ay) * (bx - ax)) > .035 * Math.hypot(bx - ax, by - ay);
     });
     if (vertices.length < 3) return '';
     const coordinate = (x, y) => `${x.toFixed(2)} ${y.toFixed(2)}`;
@@ -151,7 +152,7 @@ window.FavoritesShortcut = (() => {
     let outline = blend < .6 ? roundedOutline(to, area) : gap < 22 ? joinedOutline(pill, to, area, blend) : '';
     const attached = Boolean(outline);
     if (!attached) { area = bounds(pill); outline = roundedOutline(pill, area); }
-    if (motion.receiver.hasAttribute(merged) !== attached) motion.receiver.toggleAttribute(merged, attached);
+    if (motion.receiver.hasAttribute(covered) !== attached) motion.receiver.toggleAttribute(covered, attached);
     ghost.style.transform = `translate(${area.left}px, ${area.top}px)`;
     ghost.style.width = `${area.width}px`; ghost.style.height = `${area.height}px`;
     motion.surface.style.clipPath = `path('${outline}')`;
@@ -198,6 +199,7 @@ window.FavoritesShortcut = (() => {
       surface: ghost.querySelector('.favorites-handoff-surface'), rim: ghost.querySelector('.favorites-handoff-rim'),
       outline: ghost.querySelector('.favorites-handoff-outline'), traveler: ghost.querySelector('.favorites-handoff-traveler') };
     document.body.append(ghost);
+    if (receiver === source) button.setAttribute(covered, '');
     paint(journey.started);
     window.GlassRenderer?.animateFor(duration + 30);
   }

@@ -458,7 +458,7 @@
     gl.uniform4fv(locations['parentRects[0]'],rectangles);gl.uniform1fv(locations['parentRadii[0]'],radii);
   }
   function drawSurface(element,isButton,strength,sx,sy,rects,shapes) {
-    if (element.hasAttribute('data-favorites-merge-receiver')) return false;
+    if (element.hasAttribute('data-favorites-handoff-cover')) return false;
     var r=element.getBoundingClientRect();
     if(r.width<8||r.height<8||r.bottom<=originY||r.top>=originY+height||r.right<=originX||r.left>=originX+width)return false;
     var style=getComputedStyle(element);

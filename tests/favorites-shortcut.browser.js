@@ -68,6 +68,8 @@ const root = path.resolve(__dirname, '..');
     });
     await page.waitForFunction(() => document.querySelector('.favorites-handoff'));
     assert.equal(await page.locator('.favorites-handoff').evaluate(el => getComputedStyle(el).pointerEvents), 'none');
+    assert.equal(await shortcut.evaluate(el => getComputedStyle(el).color), 'rgba(0, 0, 0, 0)',
+      'the travelling label takes over from the compact entry without leaving a duplicate behind');
     const motion = await page.evaluate(async () => {
       const ghost = document.querySelector('.favorites-handoff');
       const start = performance.now(), top = scrollY;
@@ -79,7 +81,7 @@ const root = path.resolve(__dirname, '..');
           const receiver = document.querySelector('#btnOpenVocabFav');
           const label = ghost.querySelector('.favorites-handoff-traveler');
           const outline = ghost.querySelector('.favorites-handoff-outline')?.getAttribute('d') || '';
-          if (receiver.hasAttribute('data-favorites-merge-receiver')) {
+          if (receiver.hasAttribute('data-favorites-handoff-cover')) {
             merged = true;
             const a = label.getBoundingClientRect(), b = receiver.getBoundingClientRect();
             if (elapsed >= 360) landingError = Math.hypot(a.x + a.width / 2 - b.x - b.width / 2, a.y + a.height / 2 - b.y - b.height / 2);
@@ -98,7 +100,7 @@ const root = path.resolve(__dirname, '..');
     await settle(false);
     assert.equal(await source.evaluate(el => el === document.activeElement), true, 'keyboard focus follows the visible entry');
     await page.waitForFunction(() => !document.querySelector('.favorites-handoff'));
-    assert.equal(await page.locator('[data-favorites-merge-receiver]').count(), 0);
+    assert.equal(await page.locator('[data-favorites-handoff-cover]').count(), 0);
     const reveal = await page.evaluate(async () => {
       scrollTo({ top: 0, behavior: 'instant' });
       const start = performance.now();
@@ -107,7 +109,7 @@ const root = path.resolve(__dirname, '..');
         function sample() {
           const ghost = document.querySelector('.favorites-handoff');
           const receiver = document.querySelector('#btnOpenFavoritesShortcut');
-          if (ghost && receiver.hasAttribute('data-favorites-merge-receiver')) {
+          if (ghost && receiver.hasAttribute('data-favorites-handoff-cover')) {
             const shape = ghost.querySelector('.favorites-handoff-outline').getBBox();
             last = { width: shape.width - receiver.offsetWidth, height: shape.height - receiver.offsetHeight };
           }
@@ -167,7 +169,7 @@ const root = path.resolve(__dirname, '..');
         });
       }, sourceVisible);
       const visibleFrames = frames.filter(frame => frame.opacity > .05);
-      assert.ok(visibleFrames.length > 3);
+      assert.ok(sourceVisible || visibleFrames.length > 3, 'the revealed compact button fades in over multiple frames');
       assert.ok(visibleFrames.every(frame => frame.left >= 8 && frame.right <= 382), `mobile ${sourceVisible ? 'hide' : 'reveal'} stays inside the viewport throughout its transition: ${JSON.stringify(visibleFrames)}`);
     }
     await page.locator('#favoritesShortcuts').screenshot({ path: path.join(process.env.TEMP, 'cet6-favorites-shortcuts-mobile.png') });

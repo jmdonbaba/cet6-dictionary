@@ -77,9 +77,9 @@ html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-focused 
 html[data-interface="glass"] .favorites-handoff-rim:not(.favorites-handoff-focused) .favorites-handoff-outline {
   stroke: url(#favorites-handoff-rim-light);
 }
-/* The travelling material covers the receiver. Its native hit target and focus
-   stay in place until the shared contour settles back into the actual button. */
-:root button[data-favorites-merge-receiver] {
+/* The travelling material replaces each covered button's paint. The native
+   hit target and focus stay in place while the shared contour moves. */
+:root button[data-favorites-handoff-cover] {
   forced-color-adjust: none;
   color: transparent !important;
   background: none !important;
@@ -88,8 +88,8 @@ html[data-interface="glass"] .favorites-handoff-rim:not(.favorites-handoff-focus
   outline-color: transparent !important;
   transition-property: transform, visibility !important;
 }
-:root button[data-favorites-merge-receiver]::before,
-:root button[data-favorites-merge-receiver]::after { visibility: hidden !important; }
+:root button[data-favorites-handoff-cover]::before,
+:root button[data-favorites-handoff-cover]::after { visibility: hidden !important; }
 @media (prefers-reduced-transparency: reduce) {
   html[data-interface="glass"] .favorites-handoff-surface { background: var(--card-bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
   html[data-interface="glass"][data-wallpaper="night"] .favorites-handoff-surface { background: #273459; }
