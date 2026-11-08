@@ -55,6 +55,7 @@
     'uniform vec4 recoil;',
     'uniform vec4 magnetic[16];',
     'uniform vec2 magneticScale[16];',
+    'uniform vec4 otherMagnetic;',
     GlassOptics.glsl,
     'float sdf(vec2 p, vec2 h, float r){vec2 q=abs(p)-h+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}',
     'vec2 magneticOffset(vec2 p, vec4 field, vec2 scale){',
@@ -99,7 +100,10 @@
     ' }',
     ' vec2 overlayPull=vec2(0.);',
     ' if(overlayPass>.5){',
-    '  if(magneticActive)overlayPull=magneticPull(pixel,magnetic[0],magneticScale[0]);',
+    '  if(magneticActive){',
+    '   overlayPull=magneticPull(pixel,magnetic[0],magneticScale[0]);',
+    '   if(any(notEqual(otherMagnetic.zw,vec2(0.))))overlayPull+=magneticPull(pixel,otherMagnetic,magneticScale[0]);',
+    '  }',
     '  if(sdf(pixel-overlayPull-rects[0].xy-rects[0].zw*.5,rects[0].zw*.5,shapes[0].x)>=0.)discard;',
     '  for(int j=0;j<4;j++){if(j>=parentCount)break;if(sdf(pixel-parentRects[j].xy-parentRects[j].zw*.5,parentRects[j].zw*.5,parentRadii[j])>=0.)discard;}',
     ' }',
@@ -185,7 +189,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','magneticActive','touch','recoil','magnetic[0]','magneticScale[0]','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','ambientMotion'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','magneticActive','touch','recoil','magnetic[0]','magneticScale[0]','otherMagnetic','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','ambientMotion'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -566,14 +570,20 @@
     gl.uniform1i(locations.count,1);
     setTouch(element,0,element,0,sx,sy);setParents(element,sx,sy);
     var edge=window.GlassInteraction?.readEdge(element);
-    setMagneticActive(!!edge?.depth);
-    if(edge?.depth){
+    var other=edge?.other;
+    var bent=!!(edge?.depth||other?.depth);
+    setMagneticActive(bent);
+    if(bent){
       storeMagnetic(edge,r,0,sx,sy);
       gl.uniform4f(locations['magnetic[0]'],magneticFields[0],magneticFields[1],magneticFields[2],magneticFields[3]);
       gl.uniform2f(locations['magneticScale[0]'],magneticScales[0],magneticScales[1]);
+      if(other?.depth){
+        gl.uniform4f(locations.otherMagnetic,(r.left+edge.borderX+other.x-originX)*sx,(r.top+edge.borderY+other.y-originY)*sy,
+          other.nx*other.depth*sx,other.ny*other.depth*sy);
+      } else gl.uniform4f(locations.otherMagnetic,0,0,0,0);
     }
     gl.uniform4fv(locations['rects[0]'],rects);gl.uniform2fv(locations['shapes[0]'],shapes);
-    var pad=edge ? Math.abs(edge.depth)+1 : 0;
+    var pad=bent ? Math.abs(edge.depth)+Math.abs(other?.depth || 0)+1 : 0;
     var x=Math.max(0,Math.floor((r.left-originX-pad)*sx)),y=Math.max(0,Math.floor(canvas.height-(r.bottom-originY+pad)*sy));
     var right=Math.min(canvas.width,Math.ceil((r.right-originX+pad)*sx)),top=Math.min(canvas.height,Math.ceil(canvas.height-(r.top-originY-pad)*sy));
     gl.scissor(x,y,Math.max(0,right-x),Math.max(0,top-y));gl.drawArrays(gl.TRIANGLES,0,3);return true;

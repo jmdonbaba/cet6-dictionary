@@ -344,6 +344,17 @@ const portraitViewports = [1440, 1280, 390, 320];
     assert.equal((await focused()).id, 'mouseAttraction', 'the glass switch participates in settings keyboard navigation');
     assert.equal(await page.getByRole('switch', { name: '鼠标吸引' }).isChecked(), true);
     await page.keyboard.press('Tab');
+    assert.equal((await focused()).id, 'glassOutline', 'the outline switch follows attraction in keyboard navigation');
+    const outline = page.getByRole('switch', { name: '流光轮廓' });
+    assert.equal(await outline.isChecked(), false);
+    await page.keyboard.press('Space');
+    assert.equal(await page.evaluate(() => localStorage.getItem('cet6_glass_outline')), 'on');
+    assert.equal(await page.locator('html').getAttribute('data-glass-outline'), 'true');
+    const spreads = await page.evaluate(() => ['.word-search-submit', '.word-search-wrapper', '#modalSettings'].map(selector =>
+      parseFloat(getComputedStyle(document.querySelector(selector)).getPropertyValue('--glass-rim-spread'))));
+    assert.ok(spreads[0] < spreads[1] && spreads[1] < spreads[2], 'the glow covers a broader area on larger glass');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Tab');
     assert.equal((await focused()).name, 'wallpaperTheme');
     await page.keyboard.press('ArrowRight'); // water -> aurora
     await page.keyboard.press('ArrowRight'); // aurora -> peach

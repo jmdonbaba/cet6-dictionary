@@ -1478,7 +1478,8 @@ html.glass-gpu[data-interface="glass"] .modal-card[data-glass-edge] .glass-modal
   width: calc(100% + 40px);
 }
 .glass-edge-field-replaced { visibility: hidden; }
-.glass-edge-focus-rim {
+.glass-edge-focus-rim,
+.glass-edge-surface-rim {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1488,14 +1489,69 @@ html.glass-gpu[data-interface="glass"] .modal-card[data-glass-edge] .glass-modal
   opacity: 0;
   transition: opacity 160ms ease;
 }
+.glass-edge-surface-rim {
+  display: none;
+  inset: -20px;
+  width: calc(100% + 40px);
+  height: calc(100% + 40px);
+  clip-path: var(--glass-edge-clip);
+}
+html[data-interface="glass"][data-glass-outline="true"] .glass-edge-surface-rim {
+  display: block;
+  opacity: .66;
+}
+html[data-glass-outline="true"] .glass-edge-focus-rim { opacity: .56; }
 :focus + .glass-edge-field .glass-edge-focus-rim { opacity: 1; }
-.glass-edge-focus-rim use {
+:is(.glass-edge-focus-rim, .glass-edge-surface-rim) use {
   stroke: url(#glass-input-rim-light);
-  stroke-width: 2.3px;
-  filter: blur(.45px) drop-shadow(0 0 2.8px rgba(182, 213, 242, .58));
+  stroke-width: var(--glass-live-rim-width, 2.3px);
+  filter: blur(.45px) drop-shadow(0 0 var(--glass-live-rim-spread, 2.8px) rgba(182, 213, 242, .58));
 }
 @media (prefers-reduced-motion: reduce) {
-  .glass-edge-focus-rim { transition: none; }
+  .glass-edge-focus-rim, .glass-edge-surface-rim { transition: none; }
+}
+
+/* Resting glass uses the inset material. Moving glass uses its actual contour. */
+html[data-interface="glass"][data-glass-outline="true"] :where(
+  .card, .modal-card, .btn-fav-nav, button, .ws-mode-slider, .mobile-tool-tabs,
+  .input-area input, .word-search-input, .fav-search input, .study-tool-form input,
+  .key-area input, .comparison-search, .word-result, .word-search-result:has(> .study-content),
+  .vf-detail, .vf-compact, .comparison-fav, .page-record-item, .appearance-option, .theme-option,
+  .more-menu, .study-export-menu, .fav-search-dropdown, .ws-search-dropdown, .toast
+) {
+  --glass-rim-line: .8px;
+  --glass-rim-spread: 3px;
+  --glass-rest-rim:
+    inset 0 0 0 var(--glass-rim-line) rgba(209, 229, 247, .32),
+    inset 0 1px var(--glass-rim-spread) rgba(222, 238, 250, .46),
+    inset 0 -1px var(--glass-rim-spread) rgba(190, 207, 241, .28);
+}
+html[data-interface="glass"][data-glass-outline="true"] .card {
+  --glass-rim-line: 1.25px;
+  --glass-rim-spread: 5px;
+}
+html[data-interface="glass"][data-glass-outline="true"] .modal-card {
+  --glass-rim-line: 1.6px;
+  --glass-rim-spread: 7px;
+}
+html[data-interface="glass"][data-glass-outline="true"] :is(.card, .modal-card, .btn-fav-nav):not([data-glass-edge])::before {
+  box-shadow: var(--glass-rest-rim), var(--glass-edge);
+}
+html[data-interface="glass"][data-glass-outline="true"] button:not(
+  .btn-fav-nav, .ws-mode-toggle button, .mobile-tool-tabs button, [data-glass-edge]
+) {
+  --glass-button-shadow: var(--glass-rest-rim);
+}
+html[data-interface="glass"][data-glass-outline="true"] :is(
+  .ws-mode-slider, .word-result, .word-search-result:has(> .study-content), .vf-detail, .vf-compact,
+  .comparison-fav, .page-record-item, .appearance-option, .theme-option, .more-menu,
+  .study-export-menu, .fav-search-dropdown, .ws-search-dropdown, .toast
+):not([data-glass-edge]),
+html[data-interface="glass"][data-glass-outline="true"] :is(
+  .input-area input, .word-search-input, .fav-search input, .study-tool-form input, .key-area input, .comparison-search
+):not([data-glass-edge], :focus),
+html[data-interface="glass"][data-glass-outline="true"] .mobile-tool-tabs::before {
+  box-shadow: var(--glass-rest-rim);
 }
 
 /* 深空主题的浅色文字覆盖放在最后，确保优先级高于玻璃界面的通用文字色 */

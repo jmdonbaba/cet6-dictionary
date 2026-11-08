@@ -26,6 +26,36 @@
     return t * t * t * (10 + t * (6 * t - 15));
   }
 
+  function attractionForce(signed, short) {
+    var gap = Math.abs(signed);
+    return Math.sign(signed) * Math.min(11.5 * smooth(gap / 5) * smooth(1 - gap / 98), short * .31);
+  }
+
+  function splitInputRims(shape, x, y, short) {
+    var r = shape.radius, h = shape.height;
+    var anchorX = Math.max(r, Math.min(shape.width - r, x));
+    var blend = smooth((Math.min(x, shape.width - x) - r) / 22);
+    var nearestBottom = shape.y > h / 2;
+    function rim(bottom) {
+      var at = bottom ? h : 0;
+      var ny = bottom ? 1 : -1;
+      var pull = attractionForce((y - at) * ny, short) * blend;
+      if (bottom === nearestBottom) {
+        return { x:shape.x + (anchorX - shape.x) * blend, y:shape.y + (at - shape.y) * blend,
+          nx:shape.nx * (1 - blend), ny:shape.ny + (ny - shape.ny) * blend, pull:pull + shape.pull * (1 - blend) };
+      }
+      return { x:anchorX, y:at, nx:0, ny:ny, pull:pull };
+    }
+    var top = rim(false), bottom = rim(true);
+    // Leave enough room for text when both long edges pull inward.
+    var inward = Math.max(0, -top.pull) + Math.max(0, -bottom.pull);
+    if (inward > h * .38 && top.pull < 0 && bottom.pull < 0) {
+      top.pull *= h * .38 / inward;
+      bottom.pull *= h * .38 / inward;
+    }
+    return Object.assign(shape, top, { other:bottom });
+  }
+
   function edgeNear(element, x, y, press) {
     var bounds = element.getBoundingClientRect();
     if (bounds.width < 10 || bounds.height < 10 ||
@@ -67,12 +97,11 @@
     // fades before reaching the glass on the opposite side.
     var spanLimit = large ? 120 : 148;
     var spanX = Math.min(spanLimit, width * .88), spanY = Math.min(spanLimit, height * .88);
-    // Use the same distance envelope inside and outside each surface. Only
-    // very small shapes need a physical limit, and the sign blends at the rim.
-    var force = 11.5 * smooth(gap / 5) * smooth(1 - gap / reach);
-    var pull = Math.sign(signed) * Math.min(force, short * .31);
-    return { element:element, borderX:borderX, borderY:borderY, width:width, height:height, radius:radius, spanX:spanX, spanY:spanY, x:cx + nx * radius,
-      y:cy + ny * radius, nx:nx, ny:ny, gap:gap, pull:pull };
+    var shape = { element:element, borderX:borderX, borderY:borderY, width:width, height:height, radius:radius,
+      spanX:spanX, spanY:spanY, x:cx + nx * radius, y:cy + ny * radius, nx:nx, ny:ny,
+      pull:attractionForce(signed, short) };
+    return width > height * 1.4 && element.matches(GlassOptics.inputs)
+      ? splitInputRims(shape, x - left, y - top, short) : shape;
   }
 
   function attractionEnabled() { return root.dataset.mouseAttraction !== 'false'; }
@@ -126,7 +155,9 @@
       (visibilityObserver ? visible : registered).forEach(function (element) {
         if (modal ? !modal.contains(element) : element.closest('.modal-card')) return;
         var candidate = edgeNear(element, desired.x, desired.y);
-        if (candidate && Math.abs(candidate.pull) > .035) edgeTargets.set(element, candidate);
+        if (candidate && (Math.abs(candidate.pull) > .035 || Math.abs(candidate.other?.pull || 0) > .035)) {
+          edgeTargets.set(element, candidate);
+        }
       });
     }
     var focused = focusedInput();
@@ -140,6 +171,7 @@
           target.x = current.x; target.y = current.y;
           target.nx = current.nx; target.ny = current.ny;
         }
+        if (target.other) target.other = Object.assign({}, current?.other || target.other, { pull:0 });
         target.pull = 0;
         edgeTargets.set(focused, target);
       }
@@ -155,15 +187,21 @@
   function edgePath(shape) {
     var w = shape.width, h = shape.height, r = shape.radius;
     var spanX = shape.spanX, spanY = shape.spanY;
+    var rims = shape.other ? [shape, shape.other] : [shape];
     var path = '';
     function point(x, y, tx, ty) {
-      var dx = (x - shape.x) / spanX, dy = (y - shape.y) / spanY;
-      // The cubic envelope goes flat in both slope and curvature at its boundary.
-      var u = Math.max(0, 1 - dx * dx - dy * dy);
-      var amount = shape.depth * u * u * u;
-      var slope = -6 * shape.depth * u * u * (dx * tx / spanX + dy * ty / spanY);
-      return [x + edgePad + shape.nx * amount, y + edgePad + shape.ny * amount,
-        tx + shape.nx * slope, ty + shape.ny * slope];
+      var px = x + edgePad, py = y + edgePad, sx = tx, sy = ty;
+      for (var rim of rims) {
+        if (!rim.depth) continue;
+        var dx = (x - rim.x) / spanX, dy = (y - rim.y) / spanY;
+        // The cubic envelope goes flat in slope and curvature at its boundary.
+        var u = Math.max(0, 1 - dx * dx - dy * dy);
+        var amount = rim.depth * u * u * u;
+        var slope = -6 * rim.depth * u * u * (dx * tx / spanX + dy * ty / spanY);
+        px += rim.nx * amount; py += rim.ny * amount;
+        sx += rim.nx * slope; sy += rim.ny * slope;
+      }
+      return [px, py, sx, sy];
     }
     function xy(x, y) { return x.toFixed(2) + ' ' + y.toFixed(2); }
     function curve(at, start, end) {
@@ -179,10 +217,16 @@
     }
     function side(x, y, dx, dy, length) {
       var at = function (s) { return point(x + dx * s, y + dy * s, dx, dy); };
-      var center = (shape.x - x) * dx + (shape.y - y) * dy;
-      var cross = dx ? (y - shape.y) / spanY : (x - shape.x) / spanX;
-      var reach = (dx ? spanX : spanY) * Math.sqrt(Math.max(0, 1 - cross * cross));
-      var start = Math.max(0, center - reach), end = Math.min(length, center + reach);
+      var start = length, end = 0;
+      for (var rim of rims) {
+        if (!rim.depth) continue;
+        var center = (rim.x - x) * dx + (rim.y - y) * dy;
+        var cross = dx ? (y - rim.y) / spanY : (x - rim.x) / spanX;
+        if (Math.abs(cross) >= 1) continue;
+        var reach = (dx ? spanX : spanY) * Math.sqrt(1 - cross * cross);
+        start = Math.min(start, Math.max(0, center - reach));
+        end = Math.max(end, Math.min(length, center + reach));
+      }
       if (start < end) {
         if (start) path += 'L' + xy.apply(null, at(start));
         curve(at, start, end);
@@ -210,6 +254,7 @@
     element.removeAttribute('data-glass-edge-position');
     ['clip','fill','sheen','frost'].forEach(function (name) { element.style.removeProperty('--glass-edge-' + name); });
     edge.path?.parentNode.remove();
+    edge.rim?.remove();
     edge.fieldPlate?.remove();
     if (edge.fieldHost && !edge.fieldHost.querySelector(':scope > .glass-edge-field')) {
       edge.fieldHost.classList.remove('glass-edge-field-host', 'glass-edge-field-position');
@@ -265,18 +310,24 @@
     fieldPlate.style.setProperty('--glass-edge-clip', url);
     fieldPlate.style.filter = nativeField?.style.filter || '';
     if (nativeField) fieldPlate.style.backdropFilter = getComputedStyle(nativeField).backdropFilter;
-    var rim = document.createElementNS(ns, 'svg');
-    rim.setAttribute('class', 'glass-edge-focus-rim');
-    rim.setAttribute('aria-hidden', 'true');
-    var mark = document.createElementNS(ns, 'use');
-    mark.setAttribute('href', '#' + edge.path.id);
-    rim.appendChild(mark);
-    fieldPlate.appendChild(rim);
+    mountRim(edge, fieldPlate, 'glass-edge-focus-rim');
     fieldHost.classList.add('glass-edge-field-host');
     if (getComputedStyle(fieldHost).position === 'static') fieldHost.classList.add('glass-edge-field-position');
     element.after(fieldPlate);
     nativeField?.classList.add('glass-edge-field-replaced');
     element.setAttribute('data-glass-edge', 'field');
+  }
+
+  function mountRim(edge, parent, className) {
+    var ns = edge.path.namespaceURI;
+    var rim = document.createElementNS(ns, 'svg');
+    rim.setAttribute('class', className);
+    rim.setAttribute('aria-hidden', 'true');
+    var mark = document.createElementNS(ns, 'use');
+    mark.setAttribute('href', '#' + edge.path.id);
+    rim.appendChild(mark);
+    parent.appendChild(rim);
+    edge.rim = rim;
   }
 
   function fitField(edge) {
@@ -296,6 +347,17 @@
 
   function paintEdge(edge, reposition) {
     if (!edge.path) { mountEdge(edge); reposition = true; }
+    if (root.dataset.glassOutline === 'true' && !edge.rim) {
+      mountRim(edge, edge.element, 'glass-edge-surface-rim');
+    }
+    if (edge.rim) {
+      var thickness = Math.min(5, 1.45 + Math.sqrt(edge.width * edge.height) / 190);
+      if (edge.rimThickness !== thickness) {
+        edge.rim.style.setProperty('--glass-live-rim-width', thickness.toFixed(2) + 'px');
+        edge.rim.style.setProperty('--glass-live-rim-spread', (1.4 + thickness * .6).toFixed(2) + 'px');
+        edge.rimThickness = thickness;
+      }
+    }
     var path = edgePath(edge);
     if (edge.outline !== path) {
       edge.path.setAttribute('d', path);
@@ -304,13 +366,9 @@
     if (edge.fieldPlate && reposition) fitField(edge);
   }
 
-  function advanceEdge(edge, target, dt, easing, reposition) {
-    var previousDepth = edge.depth;
+  function advanceRim(edge, target, dt, easing) {
     var pull = target ? target.pull : 0;
     if (target) {
-      edge.borderX = target.borderX; edge.borderY = target.borderY;
-      edge.width = target.width; edge.height = target.height; edge.radius = target.radius;
-      edge.spanX = target.spanX; edge.spanY = target.spanY;
       edge.x += (target.x - edge.x) * easing; edge.y += (target.y - edge.y) * easing;
       edge.nx += (target.nx - edge.nx) * easing; edge.ny += (target.ny - edge.ny) * easing;
     }
@@ -324,11 +382,31 @@
     edge.depth = pull + displacement;
     var moving = Math.abs(displacement) > .035 || Math.abs(edge.velocity) > .6 ||
       Boolean(target && Math.hypot(target.x - edge.x, target.y - edge.y) > .15);
-    if (!moving) {
-      if (!target) { clearEdge(edge); return edge.press && edgeTargets.has(edge.element); }
-      Object.assign(edge, target, { depth:pull, velocity:0 });
+    if (!moving && target) {
+      edge.x = target.x; edge.y = target.y; edge.nx = target.nx; edge.ny = target.ny;
+      edge.depth = pull; edge.velocity = 0;
     }
-    if (!edge.path || reposition || moving || edge.depth !== previousDepth) paintEdge(edge, reposition);
+    return moving;
+  }
+
+  function advanceEdge(edge, target, dt, easing, reposition) {
+    var previousDepth = edge.depth, previousOther = edge.other?.depth;
+    if (target) {
+      edge.borderX = target.borderX; edge.borderY = target.borderY;
+      edge.width = target.width; edge.height = target.height; edge.radius = target.radius;
+      edge.spanX = target.spanX; edge.spanY = target.spanY;
+      if (target.other && !edge.other) edge.other = Object.assign({ depth:0, velocity:0 }, target.other);
+    }
+    var moving = advanceRim(edge, target, dt, easing);
+    if (edge.other) {
+      var otherMoving = advanceRim(edge.other, target?.other, dt, easing);
+      if (!target?.other && !otherMoving) edge.other = null;
+      moving = moving || otherMoving;
+    }
+    if (!moving && !target) { clearEdge(edge); return edge.press && edgeTargets.has(edge.element); }
+    if (!edge.path || reposition || moving || edge.depth !== previousDepth || edge.other?.depth !== previousOther) {
+      paintEdge(edge, reposition);
+    }
     return moving;
   }
 
@@ -338,7 +416,11 @@
     if (edgePending) { edgePending = false; updateEdgeTargets(modal); }
     var moving = false;
     edgeTargets.forEach(function (target, element) {
-      if (!edges.has(element)) edges.set(element, Object.assign({ depth:0, velocity:0 }, target));
+      if (!edges.has(element)) {
+        var edge = Object.assign({ depth:0, velocity:0 }, target);
+        if (target.other) edge.other = Object.assign({ depth:0, velocity:0 }, target.other);
+        edges.set(element, edge);
+      }
     });
     edges.forEach(function (edge, element) {
       if (!element.isConnected || element.closest(unstableCard) || (!edge.press && !attractionEnabled() && !edgeTargets.get(element)?.focus) ||

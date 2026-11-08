@@ -176,6 +176,20 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     assert.ok(shoulder[0] > .2 && Math.abs(shoulder[1]) < .05,
       `the bend fades through a long shoulder before joining the straight edge: ${shoulder}`);
+    await page.mouse.move(fieldBox.x + fieldBox.width / 2, fieldBox.y + fieldBox.height / 2);
+    await page.waitForTimeout(500);
+    const twoRims = await field.evaluate(el => {
+      const shape = GlassInteraction.readEdge(el);
+      const id = el.style.getPropertyValue('--glass-edge-clip').match(/#([^)]*)/)[1];
+      const path = document.getElementById(id).querySelector('path');
+      const ys = [];
+      for (let i = 0, length = path.getTotalLength(); i < length; i++) {
+        const point = path.getPointAtLength(i);
+        if (Math.abs(point.x - (shape.width / 2 + 20)) < 1.1) ys.push(point.y);
+      }
+      return [Math.min(...ys) - 20, shape.height + 20 - Math.max(...ys)];
+    });
+    assert.ok(twoRims.every(depth => depth > 1), `both rims bend inward at once: ${twoRims}`);
     await page.evaluate(() => {
       const card = document.createElement('div');
       card.id = 'distanceCard';

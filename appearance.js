@@ -13,7 +13,10 @@
 
   var STORAGE_KEY = 'cet6_interface_style';
   var THEME_PREFIX = 'cet6_theme_';
-  var ATTRACTION_KEY = 'cet6_mouse_attraction';
+  var glassSwitches = [
+    { id:'mouseAttraction', key:'cet6_mouse_attraction', defaultOn:true },
+    { id:'glassOutline', key:'cet6_glass_outline', defaultOn:false }
+  ];
   var CLASSIC = 'classic';
   var GLASS = 'glass';
   var STYLES = [CLASSIC, GLASS];
@@ -36,19 +39,19 @@
   var root = document.documentElement;
   var currentStyle = CLASSIC;
   var currentTheme = DEFAULT_THEMES[CLASSIC];
-  var attraction = true;
-
-  function applyAttraction(value) {
-    attraction = value;
-    root.dataset.mouseAttraction = String(value);
-    var control = document.getElementById('mouseAttraction');
+  function applyGlassSwitch(setting, value) {
+    root.dataset[setting.id] = String(value);
+    var control = document.getElementById(setting.id);
     if (control) control.checked = value;
     window.GlassInteraction?.refresh();
   }
 
-  function readAttraction() {
-    try { return window.localStorage.getItem(ATTRACTION_KEY) !== 'off'; }
-    catch (error) { return true; }
+  function readGlassSwitch(setting) {
+    try {
+      var saved = window.localStorage.getItem(setting.key);
+      if (saved === 'on' || saved === 'off') return saved === 'on';
+    } catch (error) { /* 读取失败时使用默认设置。 */ }
+    return setting.defaultOn;
   }
 
   function normalize(style) {
@@ -118,11 +121,12 @@
       var option = radio.closest ? radio.closest('.theme-option') : null;
       if (option) option.classList.toggle('is-selected', selected);
     });
-    var attractionSetting = document.getElementById('mouseAttractionSetting');
-    if (attractionSetting) {
-      attractionSetting.hidden = currentStyle !== GLASS;
-      document.getElementById('mouseAttraction').checked = attraction;
-    }
+    glassSwitches.forEach(function (setting) {
+      var row = document.getElementById(setting.id + 'Setting');
+      if (row) row.hidden = currentStyle !== GLASS;
+      var control = document.getElementById(setting.id);
+      if (control) control.checked = root.dataset[setting.id] === 'true';
+    });
   }
 
   function updateThemeColor() {
@@ -268,24 +272,29 @@
         if (radio.checked) applyThemeOption(radio.value, { announce: true });
       });
     });
-    document.getElementById('mouseAttraction')?.addEventListener('change', function (event) {
-      applyAttraction(event.target.checked);
-      try { window.localStorage.setItem(ATTRACTION_KEY, attraction ? 'on' : 'off'); }
-      catch (error) { /* 本次使用仍然生效。 */ }
+    glassSwitches.forEach(function (setting) {
+      document.getElementById(setting.id)?.addEventListener('change', function (event) {
+        var checked = event.target.checked;
+        applyGlassSwitch(setting, checked);
+        try { window.localStorage.setItem(setting.key, checked ? 'on' : 'off'); }
+        catch (error) { /* 本次使用仍然生效。 */ }
+      });
     });
 
     syncControls();
 
     // 同一浏览器的另一个标签页切换界面/主题，或站点数据被清空时保持同步。
     window.addEventListener('storage', function (event) {
-      if (event.key === null || event.key === ATTRACTION_KEY) applyAttraction(readAttraction());
+      glassSwitches.forEach(function (setting) {
+        if (event.key === null || event.key === setting.key) applyGlassSwitch(setting, readGlassSwitch(setting));
+      });
       if (event.key !== null && event.key !== STORAGE_KEY && event.key.indexOf(THEME_PREFIX) !== 0) return;
       paint(readStoredStyle());
     });
   }
 
   // 首帧前内联脚本已经设过一次；这里补齐选中态与监听器。
-  applyAttraction(readAttraction());
+  glassSwitches.forEach(function (setting) { applyGlassSwitch(setting, readGlassSwitch(setting)); });
   paint(readStoredStyle());
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initSettings);
