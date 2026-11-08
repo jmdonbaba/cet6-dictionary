@@ -312,8 +312,8 @@ test('glass keeps refraction behind sharp text and uses borderless reflections',
   const surfaces = ruleBody(/^html\[data-interface="glass"\] \.card, html\[data-interface="glass"\] \.modal-card, html\[data-interface="glass"\] \.btn-fav-nav$/);
   assert.match(surfaces, /background: transparent;/);
   assert.match(surfaces, /border: 1px solid transparent;/);
-  assert.match(surfaces, /box-shadow: var\(--glass-shadow\);/,
-    'the outer drop shadow stays on the element so the refraction filter cannot ghost it');
+  assert.match(ruleBody(/^html\[data-interface="glass"\] \.card$/), /box-shadow: none;/,
+    'the fixed card box does not cast a separate outline');
   assert.match(surfaces, /backdrop-filter: none;/);
   assert.match(surfaces, /-webkit-backdrop-filter: none;/,
     'the big surfaces themselves must not blur; the ::before layer does it');
@@ -341,9 +341,10 @@ test('glass keeps refraction behind sharp text and uses borderless reflections',
     'the modal glass layer keeps its inner highlight');
 
   // Soft localized reflections replace the continuous painted outline.
-  const reflection = ruleBody(/^html\[data-interface="glass"\] \.card::after, html\[data-interface="glass"\] \.modal-card::after, html\[data-interface="glass"\] \.btn-fav-nav::after$/);
+  const reflection = ruleBody(/^html\[data-interface="glass"\] \.modal-card::after, html\[data-interface="glass"\] \.btn-fav-nav::after$/);
   assert.match(reflection, /pointer-events: none;/);
-  assert.match(reflection, /radial-gradient/);
+  assert.match(reflection, /background: var\(--glass-reflections\);/);
+  assert.match(ruleBody(/^html\[data-interface="glass"\] \.card::before$/), /var\(--glass-reflections\), var\(--glass-tint\)/);
   assert.doesNotMatch(reflection, /conic-gradient|mask-composite|border:/);
   assert.match(glassLayer, /clip-path: inset/);
 

@@ -341,6 +341,10 @@ html[data-interface="glass"] {
     rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.04) 34%,
     rgba(255, 255, 255, 0.01) 58%, rgba(255, 255, 255, 0.04) 82%,
     rgba(255, 255, 255, 0.12) 100%);
+  --glass-reflections:
+    radial-gradient(ellipse 38% 9% at var(--glass-light-x, 24%) 0%, rgba(255, 255, 255, 0.42), transparent 100%),
+    radial-gradient(ellipse 9% 36% at 0% var(--glass-light-y, 20%), rgba(255, 255, 255, 0.16), transparent 100%),
+    radial-gradient(ellipse 26% 6% at 80% 100%, rgba(255, 255, 255, 0.2), transparent 100%);
   --glass-rim: rgba(255, 255, 255, 0.56);
   --glass-shadow: 0 24px 60px -28px rgba(31, 17, 66, 0.48), 0 6px 18px -10px rgba(31, 17, 66, 0.22);
 }
@@ -527,15 +531,14 @@ html[data-wallpaper]:not([data-wallpaper="minimal"]) .appearance-noise {
 /* ---------------------------------------------------------------------------
    5. 玻璃表面：低雾度透明玻璃 + 边缘折射/色散
    --------------------------------------------------------------------------- */
-/* 大表面：元素本身透明，玻璃层放在 ::before（z-index:-1）上，内容永远压在玻璃之上；
-   外投影留在元素自身，避免开启折射后被位图滤镜一起推移成重影。
+/* 大表面：元素本身透明，玻璃层放在 ::before（z-index:-1）上，内容永远压在玻璃之上。
+   卡片的底色和反光共用一层，避免变形时留下原来位置的轮廓。
    注意 .study-toolbox 自带 position: sticky，不能在这里改成 relative。 */
 html[data-interface="glass"] .card,
 html[data-interface="glass"] .modal-card,
 html[data-interface="glass"] .btn-fav-nav {
   background: transparent;
   border: 1px solid transparent;
-  box-shadow: var(--glass-shadow);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -566,10 +569,18 @@ html[data-interface="glass"] .btn-fav-nav::before {
 }
 html[data-interface="glass"] .card {
   border-radius: var(--radius);
+  box-shadow: none;
+}
+html[data-interface="glass"] .card::before { background-image: var(--glass-reflections), var(--glass-tint); }
+.glass-edge-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+html[data-interface="glass"] .card[data-glass-edge]::before {
+  inset: -12px;
+  clip-path: url(#glass-edge-contour);
 }
 html[data-interface="glass"] .btn-fav-nav::before { clip-path: inset(0 round 18px); }
 html[data-interface="glass"] .btn-fav-nav {
   border-radius: 18px;
+  box-shadow: var(--glass-shadow);
   color: var(--text);
   font-weight: 650;
 }
@@ -657,10 +668,6 @@ html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-sea
 @media (prefers-reduced-transparency: no-preference) {
   html[data-wallpaper="night"] { --glass-focus-ring: #c2ccff; }
 }
-html[data-interface="glass"] .word-search-wrapper:focus-within {
-  box-shadow: var(--glass-shadow);
-}
-
 /* 小表面：直接磨砂，不再单独分层 */
 html[data-interface="glass"] .page-actions .btn-sm,
 html[data-interface="glass"] .page-jump-btn,
@@ -720,7 +727,6 @@ html[data-interface="glass"] ::selection {
 
 /* Localized reflections have soft falloff: no continuous outline or rainbow ring.
    The RGB filter below provides color dispersion from the actual background. */
-html[data-interface="glass"] .card::after,
 html[data-interface="glass"] .modal-card::after,
 html[data-interface="glass"] .btn-fav-nav::after {
   content: "";
@@ -728,11 +734,7 @@ html[data-interface="glass"] .btn-fav-nav::after {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background:
-    radial-gradient(ellipse 38% 9% at var(--glass-light-x, 24%) 0%, rgba(255, 255, 255, 0.65), transparent 100%),
-    radial-gradient(ellipse 9% 36% at 0% var(--glass-light-y, 20%), rgba(255, 255, 255, 0.24), transparent 100%),
-    radial-gradient(ellipse 26% 6% at 80% 100%, rgba(255, 255, 255, 0.3), transparent 100%);
-  opacity: 0.65;
+  background: var(--glass-reflections);
 }
 
 /* Every visible surface uses its own measured rounded displacement map. */

@@ -488,7 +488,6 @@ const portraitViewports = [1440, 1280, 390, 320];
       const card = document.querySelector('.card');
       const cardStyle = getComputedStyle(card);
       const glassLayer = getComputedStyle(card, '::before');
-      const ring = getComputedStyle(card, '::after');
       const small = document.querySelector('#btnSavePage');
       const smallStyle = getComputedStyle(small);
       return {
@@ -501,22 +500,21 @@ const portraitViewports = [1440, 1280, 390, 320];
         gpu: window.LiquidGlass.getState().renderer === 'webgl',
         glassBackground: glassLayer.backgroundImage,
         glassContent: glassLayer.content,
-        ringContent: ring.content,
-        ringMask: ring.maskComposite || ring.webkitMaskComposite,
+        extraLayer: getComputedStyle(card, '::after').content,
         smallBackdrop: smallStyle.backdropFilter || smallStyle.webkitBackdropFilter
       };
     });
     assert.equal(glassStyles.cardBackground, 'rgba(0, 0, 0, 0)', 'the big surface itself is transparent');
     assert.equal(glassStyles.cardBackdrop, 'none', 'the big surface itself does not blur');
-    assert.notEqual(glassStyles.cardShadow, 'none', 'the drop shadow stays on the element');
+    assert.equal(glassStyles.cardShadow, 'none', 'the fixed card box does not cast a separate outline');
     assert.equal(glassStyles.cardRadius, '22px');
     assert.equal(glassStyles.glassZ, '-1', 'the glass layer sits behind the card content');
     if (glassStyles.gpu) assert.equal(glassStyles.glassBackdrop, 'none', 'GPU glass avoids redundant backdrop reads');
     else assert.match(glassStyles.glassBackdrop, /blur\(2px\)/);
     assert.match(glassStyles.glassBackground, /linear-gradient/);
+    assert.match(glassStyles.glassBackground, /radial-gradient/, 'reflections are part of the card material');
     assert.notEqual(glassStyles.glassContent, 'none');
-    assert.notEqual(glassStyles.ringContent, 'none', 'the edge dispersion ring is rendered');
-    assert.match(glassStyles.ringMask, /add/);
+    assert.equal(glassStyles.extraLayer, 'none', 'the card has no independent reflection plate');
     assert.equal(glassStyles.smallBackdrop, 'none', 'buttons reuse the glass behind them without additional backdrop passes');
 
     // Water wallpaper: caustics layer + optional liquid refraction on supported Chromium.
@@ -535,7 +533,7 @@ const portraitViewports = [1440, 1280, 390, 320];
     } else {
       console.log('SKIP: liquid refraction not auto-enabled in this environment (supported module? checked at runtime)');
     }
-    console.log('PASS: glass architecture = transparent surface + ::before frost + ::after reflections + direct frost on small surfaces');
+    console.log('PASS: transparent card with a single frosted and reflective material layer');
 
     // Regression diagnostics (non-fatal while the implementation is being tuned).
     const stickyPosition = await page.evaluate(() => getComputedStyle(document.querySelector('.study-toolbox')).position);

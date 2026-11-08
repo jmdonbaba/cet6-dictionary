@@ -54,6 +54,54 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     const hovered = await pixels();
     const difference = (a,b) => a.reduce((n,v,i) => n+(i%4===3?0:Math.abs(v-b[i])),0)/(a.length*.75);
     assert.ok(difference(before,hovered) > .2, 'hover must change real local background refraction');
+
+    await page.evaluate(() => {
+      const card = document.createElement('div');
+      card.className = 'card magnetic-fixture';
+      card.style.cssText = 'position:fixed;left:1110px;top:300px;width:230px;height:260px;z-index:8';
+      document.body.append(card);
+    });
+    const magneticCard = page.locator('.magnetic-fixture');
+    const magneticBox = await magneticCard.boundingBox();
+    const edge = magneticBox.x + magneticBox.width;
+    const centerY = magneticBox.y + magneticBox.height / 2;
+    const nearPointer = { x: edge + 10, y: centerY };
+    const probes = [nearPointer, { x: edge - 4, y: centerY }];
+    const initialHits = await page.evaluateHandle(points => points.map(({ x, y }) => document.elementFromPoint(x, y)), probes);
+    assert.deepEqual(await initialHits.evaluate(hits => hits.map(hit => Boolean(hit?.closest('.magnetic-fixture')))), [false, true],
+      'magnetic probes straddle the real card edge');
+    const outsidePixels = async () => {
+      // Read the composited page. A DOM-only check cannot prove that glass is drawn outside the card.
+      const clip = { x: Math.round(edge) + 2, y: Math.round(magneticBox.y) + 20, width: 8, height: Math.round(magneticBox.height) - 40 };
+      const screenshot = await page.screenshot({ clip });
+      return page.evaluate(async ({ png, nearY }) => {
+        const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${png}`)).blob());
+        const ctx = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+        return {
+          near: Array.from(ctx.getImageData(0, nearY, bitmap.width, 32).data),
+          far: Array.from(ctx.getImageData(0, 0, bitmap.width, 32).data)
+        };
+      }, { png: screenshot.toString('base64'), nearY: Math.round(centerY - clip.y) - 16 });
+    };
+    await page.mouse.move(1430, 700);
+    await page.waitForTimeout(450);
+    const restingEdge = await outsidePixels();
+    await page.mouse.move(nearPointer.x, nearPointer.y);
+    await page.waitForTimeout(450);
+    const pulledEdge = await outsidePixels();
+    const nearChange = difference(restingEdge.near, pulledEdge.near);
+    assert.ok(nearChange > .5, `a pointer 10px outside the card must visibly pull the local glass edge (RGB change ${nearChange})`);
+    assert.ok(difference(restingEdge.far, pulledEdge.far) < .2, 'glass away from the pointer remains still');
+    assert.deepEqual(await magneticCard.boundingBox(), magneticBox, 'magnetic paint does not resize or move the card');
+    assert.ok(await initialHits.evaluate((hits, points) => hits.every((hit, index) => hit === document.elementFromPoint(points[index].x, points[index].y)), probes),
+      'the visual edge does not change the card or surrounding hit targets');
+    await initialHits.dispose();
+    await page.mouse.move(1430, 700);
+    await page.waitForTimeout(950);
+    assert.ok(difference(restingEdge.near, (await outsidePixels()).near) < .2, 'the outside glass edge returns to rest after the pointer leaves');
+    await magneticCard.evaluate(card => card.remove());
+
     await page.evaluate(()=>Appearance.setTheme('minimal'));await page.waitForTimeout(300);
     const flatBefore=await pixels();
     await page.locator('.interaction-fixture').dispatchEvent('pointermove',{clientX:600,clientY:430,pointerType:'mouse',bubbles:true});
@@ -64,13 +112,25 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.locator('.interaction-fixture').dispatchEvent('pointermove',{clientX:600,clientY:430,pointerType:'mouse',bubbles:true});
     await page.waitForTimeout(350);
     const box = await page.locator('.interaction-fixture').boundingBox();
+    const restingClip = await page.locator('.interaction-fixture').evaluate(card => getComputedStyle(card, '::before').clipPath);
     const [compressed,rebound] = await page.evaluate(async () => {
       const capture = () => new Promise(resolve => {
         GlassRenderer.render();requestAnimationFrame(() => {
           const source=document.querySelector('.glass-wallpaper-canvas'),copy=document.createElement('canvas');
           copy.width=source.width;copy.height=source.height;const ctx=copy.getContext('2d');ctx.drawImage(source,0,0);
           const box=source.getBoundingClientRect(),sx=source.width/box.width,sy=source.height/box.height;
-          resolve(Array.from(ctx.getImageData(Math.round((555-box.left)*sx),Math.round((385-box.top)*sy),Math.round(90*sx),Math.round(90*sy)).data));
+          const card = document.querySelector('.interaction-fixture');
+          const { x, y, width, height } = card.getBoundingClientRect();
+          const style = getComputedStyle(card, '::before');
+          const material = { content: style.content, background: style.backgroundImage, scale: style.scale,
+            transform: style.transform, animation: style.animationName };
+          const clipId = style.clipPath.match(/#([^"')]+)/)?.[1];
+          const contour = clipId ? document.getElementById(clipId)?.querySelector('path')?.getAttribute('d') : style.clipPath;
+          resolve({
+            pixels: Array.from(ctx.getImageData(Math.round((555-box.left)*sx),Math.round((385-box.top)*sy),Math.round(90*sx),Math.round(90*sy)).data),
+            material, contour, bounds: { x, y, width, height }, clickTarget: document.elementFromPoint(600, 430) === card,
+            separateRim: getComputedStyle(card, '::after').content, fixedShadow: getComputedStyle(card).boxShadow
+          });
         });
       });
       const waitForPhase = predicate => new Promise((resolve,reject) => {
@@ -83,11 +143,40 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       await waitForPhase(()=>GlassInteraction.getState().spring<-.2);const second=await capture();
       return [first,second];
     });
-    assert.ok(difference(compressed,rebound) > .2, 'click must produce a changing spring refraction');
-    assert.deepEqual(await page.locator('.interaction-fixture').boundingBox(),box,'hit target does not wobble with the optical surface');
+    assert.ok(difference(compressed.pixels,rebound.pixels) > .2, 'click must produce a changing spring refraction');
+    for (const phase of [compressed, rebound]) {
+      assert.notEqual(phase.material.content, 'none', 'the card material remains drawn through the spring');
+      assert.notEqual(phase.material.background, 'none', 'the material layer carries the reflections');
+      assert.equal(phase.separateRim, 'none', 'card reflections are not drawn as a separate edge layer');
+      assert.equal(phase.fixedShadow, 'none', 'the old card boundary does not paint a stationary seam');
+      assert.ok(phase.material.scale === 'none' && phase.material.transform === 'none' && phase.material.animation === 'none',
+        `card material follows the contour through the spring: ${JSON.stringify(phase.material)}`);
+      assert.ok(phase.contour && phase.contour !== 'none', 'click temporarily reshapes the actual card contour');
+      assert.deepEqual(phase.bounds, box, 'hit target does not wobble with the optical surface');
+      assert.equal(phase.clickTarget, true, 'a card still receives the click at its original position');
+    }
+    assert.notEqual(compressed.contour, rebound.contour, 'compression and rebound deform the same contour in different ways');
     assert.equal(await page.locator('.interaction-fixture span').evaluate(e=>getComputedStyle(e).filter),'none');
+
+    await page.locator('.interaction-fixture').evaluate(card => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn-sm native-spring-fixture';
+      button.textContent = 'Button spring';
+      card.append(button);
+    });
+    const springButton = page.locator('.native-spring-fixture');
+    const idleAnimation = await springButton.evaluate(button => getComputedStyle(button, '::after').animationName);
+    await springButton.click();
+    const activeAnimation = await springButton.evaluate(button => getComputedStyle(button, '::after').animationName);
+    assert.notEqual(activeAnimation, idleAnimation, 'ordinary buttons retain their click spring');
+    assert.notEqual(activeAnimation, 'none', 'the button spring paints an animated layer');
+    await springButton.evaluate(button => button.remove());
+
     await page.locator('.interaction-fixture').dispatchEvent('pointerout', { relatedTarget:null,bubbles:true });
     await page.waitForTimeout(1100);
+    assert.equal(await page.locator('.interaction-fixture').evaluate(card => getComputedStyle(card, '::before').clipPath), restingClip,
+      'the shared click contour returns to rest');
     const draws = await page.evaluate(()=>GlassRenderer.getState().draws);
     await page.waitForTimeout(250);
     assert.equal(await page.evaluate(()=>GlassRenderer.getState().draws),draws,'interaction must settle back to idle');
@@ -119,6 +208,6 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.locator('.interaction-fixture').dispatchEvent('click',{clientX:600,clientY:430,bubbles:true,detail:1});
     assert.equal(await page.locator('.glass-jelly').count(),0,'reduced motion suppresses jelly');
     assert.deepEqual(errors,[]);
-    console.log('PASS: local hover deformation, nested modal scroll, click spring, sharp text, stable hit target, settling and reduced motion');
+    console.log('PASS: local hover deformation, magnetic outside edge, nested modal scroll, click spring, sharp text, stable hit target, settling and reduced motion');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exitCode=1});

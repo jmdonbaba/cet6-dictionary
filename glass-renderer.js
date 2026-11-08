@@ -49,8 +49,11 @@
     'uniform float lensBand;',
     'uniform int touchIndex;',
     'uniform int recoilIndex;',
+    'uniform int magneticIndex;',
     'uniform vec4 touch;',
     'uniform vec4 recoil;',
+    'uniform vec4 magnetic;',
+    'uniform vec2 magneticScale;',
     GlassOptics.glsl,
     'float sdf(vec2 p, vec2 h, float r){vec2 q=abs(p)-h+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}',
     'vec3 waterAt(vec2 uv){',
@@ -92,6 +95,10 @@
     '  if(i>=count)break;',
     '  vec4 rect=rects[i]; vec2 halfSize=rect.zw*.5;',
     '  vec2 p=pixel-rect.xy-halfSize; float radius=shapes[i].x;',
+    '  if(overlayPass<.5 && i==magneticIndex){',
+    '   float falloff=1.-smoothstep(0.,1.,length((pixel-magnetic.xy)*magneticScale));',
+    '   p-=magnetic.zw*falloff;',
+    '  }',
     '  float d=sdf(p,halfSize,radius);',
     '  if(d<0.){',
     '   float unit=shapes[i].y;',
@@ -167,7 +174,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','touch','recoil','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','ambientMotion'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','magneticIndex','touch','recoil','magnetic','magneticScale','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','ambientMotion'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -267,6 +274,7 @@
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
       var count = 0;
       var hoverElement=null,hoverIndex=-1,recoilElement=null,recoilIndex=-1;
+      var edge=window.GlassInteraction?.readEdge(), edgeIndex=-1, edgeBox=null;
       document.querySelectorAll(selector).forEach(function (element) {
         if (count >= lensLimit || element.matches('.modal-card, button')) return;
         if (resizeObserver && !observed.has(element)) { resizeObserver.observe(element); observed.add(element); }
@@ -275,6 +283,7 @@
         if (getComputedStyle(element).visibility === 'hidden') return;
         rects.set([r.left-originX,r.top-originY,r.width,r.height],count*4);
         shapes.set([materialRadius(element,r),0],count*2);
+        if(edge?.element===element){edgeIndex=count;edgeBox=r;}
         if (window.GlassInteraction && GlassInteraction.matches(element)) {
           var effect=GlassInteraction.read(element);
           if(effect.hover[3]){hoverElement=element;hoverIndex=count;}
@@ -283,7 +292,14 @@
         count++;
       });
       observed.forEach(function (element) { if (!element.isConnected) { resizeObserver.unobserve(element); observed.delete(element); } });
-      setTouch(hoverElement,hoverIndex,recoilElement,recoilIndex,canvas.width/width,canvas.height/height);
+      var sx = canvas.width / width, sy = canvas.height / height;
+      setTouch(hoverElement,hoverIndex,recoilElement,recoilIndex,sx,sy);
+      gl.uniform1i(locations.magneticIndex,edgeIndex);
+      if(edgeIndex>=0){
+        gl.uniform4f(locations.magnetic,(edgeBox.left+edge.borderX+edge.x-originX)*sx,(edgeBox.top+edge.borderY+edge.y-originY)*sy,
+          edge.nx*edge.depth*sx,edge.ny*edge.depth*sy);
+        gl.uniform2f(locations.magneticScale,1/(edge.span*sx),1/(edge.span*sy));
+      }
       gl.disable(gl.SCISSOR_TEST);
       gl.uniform1f(locations.overlayPass,0);
       gl.uniform1i(locations.parentCount,0);
@@ -300,7 +316,6 @@
       gl.uniform1f(locations.uTime, (now || performance.now()) / 1000);
       gl.uniform1f(locations.waterMotion, waterAnimating ? 1 : 0);
       updateAmbient(now, canAnimate && GlassWallpaper.motionFor(theme));
-      var sx = canvas.width / width, sy = canvas.height / height;
       for (var i=0;i<count;i++) { rects[i*4]*=sx;rects[i*4+1]*=sy;rects[i*4+2]*=sx;rects[i*4+3]*=sy;shapes[i*2]*=sx;shapes[i*2+1]=sx; }
       gl.uniform4fv(locations['rects[0]'], rects); gl.uniform2fv(locations['shapes[0]'], shapes);
       gl.drawArrays(gl.TRIANGLES,0,3);
