@@ -1489,27 +1489,13 @@ html.glass-gpu[data-interface="glass"] .modal-card[data-glass-edge] .glass-modal
   transition: opacity 160ms ease;
 }
 :focus + .glass-edge-field .glass-edge-focus-rim { opacity: 1; }
-.glass-edge-rim-track {
+.glass-edge-focus-rim use {
   stroke: url(#glass-input-rim-light);
   stroke-width: 2.5px;
   filter: drop-shadow(0 0 1.5px rgba(233, 243, 255, .55));
 }
-.glass-edge-rim-glint {
-  stroke: rgba(255, 255, 255, .94);
-  stroke-width: 2.8px;
-  stroke-dasharray: 19 81;
-  stroke-linecap: round;
-  opacity: 0;
-}
-:focus + .glass-edge-field .glass-edge-rim-glint { animation: glass-focus-sweep 680ms ease-out; }
-@keyframes glass-focus-sweep {
-  from { stroke-dashoffset: 76; opacity: 0; }
-  27% { opacity: .75; }
-  to { stroke-dashoffset: -24; opacity: 0; }
-}
 @media (prefers-reduced-motion: reduce) {
   .glass-edge-focus-rim { transition: none; }
-  :focus + .glass-edge-field .glass-edge-rim-glint { animation: none; }
 }
 
 /* 深空主题的浅色文字覆盖放在最后，确保优先级高于玻璃界面的通用文字色 */

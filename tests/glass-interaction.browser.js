@@ -165,6 +165,17 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       null, { timeout: 1400 });
     assert.equal(await field.getAttribute('data-glass-edge'), 'field');
     assert.deepEqual(await field.boundingBox(), fieldBox, 'the input frame bends around its fixed text field');
+    const shoulder = await field.evaluate(el => {
+      const shape = GlassInteraction.readEdge(el);
+      const id = el.style.getPropertyValue('--glass-edge-clip').match(/#([^)]*)/)[1];
+      const path = document.getElementById(id).querySelector('path');
+      const points = Array.from({ length: Math.ceil(path.getTotalLength()) }, (_, i) => path.getPointAtLength(i));
+      const topAt = offset => points.filter(p => Math.abs(p.x - (shape.x + 20 + offset)) < 1.1)
+        .reduce((top, p) => Math.min(top, p.y), Infinity) - 20;
+      return [topAt(65), topAt(170)];
+    });
+    assert.ok(shoulder[0] > .2 && Math.abs(shoulder[1]) < .05,
+      `the bend fades through a long shoulder before joining the straight edge: ${shoulder}`);
     await page.locator('#btnOpenSettings').click();
     const attraction = page.getByRole('switch', { name: '鼠标吸引' });
     await page.locator('#mouseAttractionSetting .appearance-switch-track').click();

@@ -40,6 +40,7 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     assert.equal(inputFocus.outline, 'none', 'focused glass has no outer focus ring');
     const rim = page.locator('.word-search-input + .glass-edge-field .glass-edge-focus-rim');
     assert.equal(await rim.isVisible(), true, 'focus paints a light rim on the glass itself');
+    assert.equal(await rim.locator('use').count(), 1, 'focus paints a single stationary rim');
     assert.match(await rim.locator('use').first().evaluate(el => getComputedStyle(el).stroke), /glass-input-rim-light/);
     assert.equal(inputFocus.background, 'rgba(0, 0, 0, 0)', 'card search keeps a clear glass fill');
     assert.equal(inputFocus.backdrop, 'none', 'card search does not frost the card behind it');

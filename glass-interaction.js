@@ -66,9 +66,12 @@
     if (!press && gap >= reach) return null;
     var nx = dx / distance, ny = dy / distance;
     var amplitude = large ? 16 : Math.min(6.5, short * .17);
-    var span = Math.min(108, short * .82, Math.max(width, height) * .52);
+    // A long side gives the curve room to flatten. Its narrow axis still
+    // fades before reaching the glass on the opposite side.
+    var spanLimit = large ? 120 : 148;
+    var spanX = Math.min(spanLimit, width * .88), spanY = Math.min(spanLimit, height * .88);
     var pull = amplitude * signed / Math.hypot(signed, amplitude * 1.12) * smooth(1 - gap / reach);
-    return { element:element, borderX:borderX, borderY:borderY, width:width, height:height, radius:radius, span:span, x:cx + nx * radius,
+    return { element:element, borderX:borderX, borderY:borderY, width:width, height:height, radius:radius, spanX:spanX, spanY:spanY, x:cx + nx * radius,
       y:cy + ny * radius, nx:nx, ny:ny, gap:gap, pull:pull };
   }
 
@@ -151,18 +154,20 @@
 
   function edgePath(shape) {
     var w = shape.width, h = shape.height, r = shape.radius;
+    var spanX = shape.spanX, spanY = shape.spanY;
     var path = '';
     function point(x, y, tx, ty) {
-      var dx = x - shape.x, dy = y - shape.y, d = Math.hypot(dx, dy);
-      var u = Math.max(0, 1 - d / shape.span);
-      var amount = shape.depth * smooth(u);
-      var slope = d ? -shape.depth * 30 * u * u * (1 - u) ** 2 * (dx * tx + dy * ty) / (d * shape.span) : 0;
+      var dx = (x - shape.x) / spanX, dy = (y - shape.y) / spanY;
+      // The cubic envelope goes flat in both slope and curvature at its boundary.
+      var u = Math.max(0, 1 - dx * dx - dy * dy);
+      var amount = shape.depth * u * u * u;
+      var slope = -6 * shape.depth * u * u * (dx * tx / spanX + dy * ty / spanY);
       return [x + edgePad + shape.nx * amount, y + edgePad + shape.ny * amount,
         tx + shape.nx * slope, ty + shape.ny * slope];
     }
     function xy(x, y) { return x.toFixed(2) + ' ' + y.toFixed(2); }
     function curve(at, start, end) {
-      var steps = Math.max(1, Math.ceil((end - start) / Math.min(10, shape.span / 4)));
+      var steps = Math.max(1, Math.ceil((end - start) / Math.min(12, spanX / 4, spanY / 4)));
       var length = (end - start) / steps, k = length / 3;
       var a = at(start);
       for (var i = 1; i <= steps; i++) {
@@ -175,7 +180,9 @@
     function side(x, y, dx, dy, length) {
       var at = function (s) { return point(x + dx * s, y + dy * s, dx, dy); };
       var center = (shape.x - x) * dx + (shape.y - y) * dy;
-      var start = Math.max(0, center - shape.span), end = Math.min(length, center + shape.span);
+      var cross = dx ? (y - shape.y) / spanY : (x - shape.x) / spanX;
+      var reach = (dx ? spanX : spanY) * Math.sqrt(Math.max(0, 1 - cross * cross));
+      var start = Math.max(0, center - reach), end = Math.min(length, center + reach);
       if (start < end) {
         if (start) path += 'L' + xy.apply(null, at(start));
         curve(at, start, end);
@@ -229,7 +236,6 @@
     clip.id = 'glass-edge-contour-' + (++contourSerial);
     edge.path = document.createElementNS(ns, 'path');
     edge.path.id = clip.id + '-shape';
-    edge.path.setAttribute('pathLength', '100');
     clip.appendChild(edge.path);
     contours.appendChild(clip);
     var url = 'url(#' + clip.id + ')';
@@ -262,12 +268,9 @@
     var rim = document.createElementNS(ns, 'svg');
     rim.setAttribute('class', 'glass-edge-focus-rim');
     rim.setAttribute('aria-hidden', 'true');
-    ['track', 'glint'].forEach(function (part) {
-      var mark = document.createElementNS(ns, 'use');
-      mark.setAttribute('class', 'glass-edge-rim-' + part);
-      mark.setAttribute('href', '#' + edge.path.id);
-      rim.appendChild(mark);
-    });
+    var mark = document.createElementNS(ns, 'use');
+    mark.setAttribute('href', '#' + edge.path.id);
+    rim.appendChild(mark);
     fieldPlate.appendChild(rim);
     fieldHost.classList.add('glass-edge-field-host');
     if (getComputedStyle(fieldHost).position === 'static') fieldHost.classList.add('glass-edge-field-position');
@@ -306,7 +309,8 @@
     var pull = target ? target.pull : 0;
     if (target) {
       edge.borderX = target.borderX; edge.borderY = target.borderY;
-      edge.width = target.width; edge.height = target.height; edge.radius = target.radius; edge.span = target.span;
+      edge.width = target.width; edge.height = target.height; edge.radius = target.radius;
+      edge.spanX = target.spanX; edge.spanY = target.spanY;
       edge.x += (target.x - edge.x) * easing; edge.y += (target.y - edge.y) * easing;
       edge.nx += (target.nx - edge.nx) * easing; edge.ny += (target.ny - edge.ny) * easing;
     }
@@ -352,7 +356,7 @@
     var shape = edgeNear(element, x, y, true);
     if (!shape) return;
     var edge = edges.get(element);
-    var depth = edge && Math.hypot(edge.x - shape.x, edge.y - shape.y) < edge.span ? edge.depth : 0;
+    var depth = edge && Math.hypot((edge.x - shape.x) / edge.spanX, (edge.y - shape.y) / edge.spanY) < 1 ? edge.depth : 0;
     edges.set(element, Object.assign(edge || {}, shape, { depth:depth, velocity:-280, press:true }));
   }
 

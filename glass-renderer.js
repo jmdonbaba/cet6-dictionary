@@ -59,8 +59,8 @@
     'float sdf(vec2 p, vec2 h, float r){vec2 q=abs(p)-h+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}',
     'vec2 magneticOffset(vec2 p, vec4 field, vec2 scale){',
     ' vec2 delta=(p-field.xy)*scale;',
-    ' float u=1.-clamp(length(delta),0.,1.);',
-    ' return field.zw*u*u*u*(10.+u*(6.*u-15.));',
+    ' float u=max(0.,1.-dot(delta,delta));',
+    ' return field.zw*u*u*u;',
     '}',
     'vec2 magneticPull(vec2 p, vec4 field, vec2 scale){',
     ' vec2 delta=abs((p-field.xy)*scale);',
@@ -275,8 +275,8 @@
     magneticFields[i+1]=(box.top+edge.borderY+edge.y-originY)*sy;
     magneticFields[i+2]=edge.nx*edge.depth*sx;
     magneticFields[i+3]=edge.ny*edge.depth*sy;
-    magneticScales[j]=1/(edge.span*sx);
-    magneticScales[j+1]=1/(edge.span*sy);
+    magneticScales[j]=1/(edge.spanX*sx);
+    magneticScales[j+1]=1/(edge.spanY*sy);
   }
 
   function draw(now) {
@@ -630,7 +630,7 @@
   }
 
   function onMaterialAnimation(event) {
-    if(!active||event.pseudoElement||event.animationName==='glass-focus-sweep'||event.target.closest('.modal-card')||!event.target.closest('.card, '+GlassOptics.layers))return;
+    if(!active||event.pseudoElement||event.target.closest('.modal-card')||!event.target.closest('.card, '+GlassOptics.layers))return;
     if(event.type==='animationstart')motionUntil=Math.max(motionUntil,performance.now()+450);
     requestRender();
   }
