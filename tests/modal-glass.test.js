@@ -16,8 +16,9 @@ test('focused search fields keep clear glass with a visible focus indicator', ()
   assert.doesNotMatch(focusRule[0], /background-color:|backdrop-filter:|box-shadow:/, 'focus keeps the clear input tint');
   assert.match(focusRule[0], /\.fav-search input/);
   assert.match(focusRule[0], /\.comparison-search/);
-  assert.match(css, /\.comparison-search\):focus-visible \{\s*outline: 2px solid var\(--glass-focus-ring, var\(--primary\)\);/);
-  assert.match(renderer, /button\.matches\('input, textarea'\)/);
+  assert.match(focusRule[0], /outline: none !important;/);
+  assert.match(renderer, /:not\(\.modal-card \*, \.ws-mode-toggle button, input, textarea\)/,
+    'inputs render in their own optical pass');
   assert.match(renderer, /GlassOptics\.inputStrength\(input,performance\.now\(\)\)/, 'the whole input background gets the focus lens');
 });
 

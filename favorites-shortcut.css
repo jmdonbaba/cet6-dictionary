@@ -8,6 +8,7 @@
 }
 .favorites-shortcuts .unfavorited-jump-btn {
   position: static;
+  inset: auto;
   flex: 0 0 44px;
 }
 .favorites-shortcut-slot {

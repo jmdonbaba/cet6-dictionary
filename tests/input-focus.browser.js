@@ -10,7 +10,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.evaluate(()=>{GlassWallpaper.motionFor=()=>null; // Keep the optical target fixed.
    Appearance.set('glass');Appearance.setTheme('aurora');LiquidGlass.enable({persist:false});setVFavs([{id:'focus',word:'focus',meaning:'焦点'}]);renderVFavs()});
   await page.waitForTimeout(600);
-  const style=selector=>page.locator(selector).first().evaluate(el=>{const s=getComputedStyle(el);return {fill:s.backgroundColor,image:s.backgroundImage,shadow:s.boxShadow,blur:s.backdropFilter,filter:s.filter,border:s.borderTopColor,outline:s.outlineStyle}});
+  const style=selector=>page.locator(selector).first().evaluate(el=>{const s=getComputedStyle(el),material=el.nextElementSibling?.matches('.glass-edge-field')?getComputedStyle(el.nextElementSibling):s;return {fill:material.backgroundColor,image:material.backgroundImage,blur:s.backdropFilter,filter:s.filter,border:s.borderTopColor,outline:s.outlineStyle}});
   const pixels=selector=>page.evaluate(selector=>new Promise(resolve=>{
    GlassRenderer.render();requestAnimationFrame(()=>{
     const input=document.querySelector(selector),source=input.closest('.modal-card')?.querySelector('.glass-modal-canvas')||document.querySelector('.glass-wallpaper-canvas');
@@ -58,11 +58,21 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
    const before=await style(selector),rest=await pixels(selector);
    await page.locator(selector).first().focus();await page.waitForTimeout(330);
    const focused=await style(selector),bent=await pixels(selector);
-   assert.deepEqual(focused,{...before,outline:'solid'},selector+': focus adds an outline while retaining the clear optical plate');
+   assert.deepEqual(focused,{...before,outline:'none'},selector+': the lens strengthens without an outer focus ring');
    assert.equal(focused.blur,'none');assert.equal(focused.filter,'none');
    assert.ok(diff(rest,bent)>.08,selector+': real input refraction gets stronger, measured '+diff(rest,bent));
    await page.evaluate(()=>document.activeElement.blur());await page.waitForTimeout(350);
    assert.ok(diff(rest,await pixels(selector))<.03,selector+': blur restores the original optical field');
+   if(selector.endsWith('Search') || selector==='#favSearchInput'){
+    const box=await page.locator(selector).boundingBox();
+    await page.mouse.move(box.x+box.width/2,box.y+7);
+    await page.waitForFunction(selector=>GlassInteraction.readEdge(document.querySelector(selector))?.depth<-.5,selector);
+    await page.locator(selector).focus();
+    assert.equal((await style(selector)).outline,'none');
+    await page.mouse.move(1,1);
+    await page.evaluate(()=>document.activeElement.blur());
+    await page.waitForFunction(selector=>!GlassInteraction.readEdge(document.querySelector(selector)),selector);
+   }
   }
   await page.waitForTimeout(500);const draws=await page.evaluate(()=>GlassRenderer.getState().draws);
   await page.waitForTimeout(300);assert.equal(await page.evaluate(()=>GlassRenderer.getState().draws),draws,'settled focus does not keep repainting');

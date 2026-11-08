@@ -9,6 +9,7 @@
   var canvas, gl, program, texture, buttonTexture, source, buffer;
   var parallelCompile=null, programReady=false, compileTimer=0;
   var modalElement = null, modalCanvas = null;
+  var modalCandidates = null, modalObserver = null;
   var modalBlurTexture = null, modalBlurOutput = null, modalFramebuffer = null, modalBlurWidth = 0, modalBlurHeight = 0;
   var modalBlurFrozen=false,modalBlurScene='';
   var active = false, failed = false, frame = 0, intensity = 1, lensScale = 1, lensBand = 63;
@@ -49,17 +50,22 @@
     'uniform float lensBand;',
     'uniform int touchIndex;',
     'uniform int recoilIndex;',
-    'uniform int magneticIndex;',
+    'uniform bool magneticActive;',
     'uniform vec4 touch;',
     'uniform vec4 recoil;',
-    'uniform vec4 magnetic;',
-    'uniform vec2 magneticScale;',
+    'uniform vec4 magnetic[16];',
+    'uniform vec2 magneticScale[16];',
     GlassOptics.glsl,
     'float sdf(vec2 p, vec2 h, float r){vec2 q=abs(p)-h+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;}',
-    'vec2 magneticOffset(vec2 p){',
-    ' vec2 delta=(p-magnetic.xy)*magneticScale;',
+    'vec2 magneticOffset(vec2 p, vec4 field, vec2 scale){',
+    ' vec2 delta=(p-field.xy)*scale;',
     ' float u=1.-clamp(length(delta),0.,1.);',
-    ' return magnetic.zw*u*u*u*(10.+u*(6.*u-15.));',
+    ' return field.zw*u*u*u*(10.+u*(6.*u-15.));',
+    '}',
+    'vec2 magneticPull(vec2 p, vec4 field, vec2 scale){',
+    ' vec2 delta=abs((p-field.xy)*scale);',
+    ' if(max(delta.x,delta.y)>=1.4)return vec2(0.);',
+    ' return magneticOffset(p-magneticOffset(p,field,scale),field,scale);',
     '}',
     'vec3 waterAt(vec2 uv){',
     ' float t=uTime;',
@@ -91,13 +97,10 @@
     '  blurred+=(sampleAt(pixel+blurDirection*3.2307692308)+sampleAt(pixel-blurDirection*3.2307692308))*.0702702703;',
     '  gl_FragColor=vec4(blurred,1.);return;',
     ' }',
-    ' vec2 pull=vec2(0.);',
-    ' if(magneticIndex>=0){',
-    '  vec2 delta=abs((pixel-magnetic.xy)*magneticScale);',
-    '  if(max(delta.x,delta.y)<1.4)pull=magneticOffset(pixel-magneticOffset(pixel));',
-    ' }',
+    ' vec2 overlayPull=vec2(0.);',
     ' if(overlayPass>.5){',
-    '  if(sdf(pixel-pull-rects[0].xy-rects[0].zw*.5,rects[0].zw*.5,shapes[0].x)>=0.)discard;',
+    '  if(magneticActive)overlayPull=magneticPull(pixel,magnetic[0],magneticScale[0]);',
+    '  if(sdf(pixel-overlayPull-rects[0].xy-rects[0].zw*.5,rects[0].zw*.5,shapes[0].x)>=0.)discard;',
     '  for(int j=0;j<4;j++){if(j>=parentCount)break;if(sdf(pixel-parentRects[j].xy-parentRects[j].zw*.5,parentRects[j].zw*.5,parentRadii[j])>=0.)discard;}',
     ' }',
     ' vec3 color=sampleAt(pixel);',
@@ -105,7 +108,8 @@
     '  if(i>=count)break;',
     '  vec4 rect=rects[i]; vec2 halfSize=rect.zw*.5;',
     '  vec2 p=pixel-rect.xy-halfSize; float radius=shapes[i].x;',
-    '  if(i==magneticIndex)p-=pull;',
+    '  if(overlayPass>.5)p-=overlayPull;',
+    '  else if(magneticActive && magneticScale[i].x>0.)p-=magneticPull(pixel,magnetic[i],magneticScale[i]);',
     '  float d=sdf(p,halfSize,radius);',
     '  if(d<0.){',
     '   float unit=shapes[i].y;',
@@ -181,7 +185,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','magneticIndex','touch','recoil','magnetic','magneticScale','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','ambientMotion'].forEach(function (name) {
+      ['wallpaper','underGlass','buttonLens','inputLens','viewport','rects[0]','shapes[0]','count','intensity','lensBand','touchIndex','recoilIndex','magneticActive','touch','recoil','magnetic[0]','magneticScale[0]','overlayPass','blurDirection','downsamplePass','parentRects[0]','parentRadii[0]','parentCount','uTime','waterMotion','ambientMotion'].forEach(function (name) {
         locations[name] = gl.getUniformLocation(program, name);
       });
       gl.uniform1i(locations.wallpaper, 0);
@@ -259,14 +263,20 @@
       motion.bend * amount * Math.sin(phase * .85 + .55));
   }
 
-  var frameEdge = null, magneticIndex = -2;
-  function setMagnetic(edge, box, index, sx, sy) {
-    if (magneticIndex !== index) gl.uniform1i(locations.magneticIndex, index);
-    magneticIndex = index;
-    if (index < 0) return;
-    gl.uniform4f(locations.magnetic,(box.left+edge.borderX+edge.x-originX)*sx,(box.top+edge.borderY+edge.y-originY)*sy,
-      edge.nx*edge.depth*sx,edge.ny*edge.depth*sy);
-    gl.uniform2f(locations.magneticScale,1/(edge.span*sx),1/(edge.span*sy));
+  var magneticActive;
+  var magneticFields = new Float32Array(MAX_LENSES*4), magneticScales = new Float32Array(MAX_LENSES*2);
+  function setMagneticActive(active) {
+    if (magneticActive !== active) gl.uniform1i(locations.magneticActive, Number(active));
+    magneticActive = active;
+  }
+  function storeMagnetic(edge, box, index, sx, sy) {
+    var i=index*4,j=index*2;
+    magneticFields[i]=(box.left+edge.borderX+edge.x-originX)*sx;
+    magneticFields[i+1]=(box.top+edge.borderY+edge.y-originY)*sy;
+    magneticFields[i+2]=edge.nx*edge.depth*sx;
+    magneticFields[i+3]=edge.ny*edge.depth*sy;
+    magneticScales[j]=1/(edge.span*sx);
+    magneticScales[j+1]=1/(edge.span*sy);
   }
 
   function draw(now) {
@@ -291,9 +301,9 @@
       var rects = new Float32Array(MAX_LENSES * 4), shapes = new Float32Array(MAX_LENSES * 2);
       var count = 0;
       var hoverElement=null,hoverIndex=-1,recoilElement=null,recoilIndex=-1;
-      frameEdge=window.GlassInteraction?.readEdge();
-      magneticIndex=-2;
-      var edgeIndex=-1, edgeBox=null;
+      var sx=canvas.width/width,sy=canvas.height/height,activeEdges=false;
+      magneticActive=undefined;
+      magneticScales.fill(0);
       document.querySelectorAll(selector).forEach(function (element) {
         if (count >= lensLimit || element.matches('.modal-card, button')) return;
         if (resizeObserver && !observed.has(element)) { resizeObserver.observe(element); observed.add(element); }
@@ -302,7 +312,8 @@
         if (getComputedStyle(element).visibility === 'hidden') return;
         rects.set([r.left-originX,r.top-originY,r.width,r.height],count*4);
         shapes.set([materialRadius(element,r),0],count*2);
-        if(frameEdge?.element===element){edgeIndex=count;edgeBox=r;}
+        var edge=window.GlassInteraction?.readEdge(element);
+        if(edge?.depth){storeMagnetic(edge,r,count,sx,sy);activeEdges=true;}
         if (window.GlassInteraction && GlassInteraction.matches(element)) {
           var effect=GlassInteraction.read(element);
           if(effect.hover[3]){hoverElement=element;hoverIndex=count;}
@@ -311,9 +322,12 @@
         count++;
       });
       observed.forEach(function (element) { if (!element.isConnected) { resizeObserver.unobserve(element); observed.delete(element); } });
-      var sx = canvas.width / width, sy = canvas.height / height;
       setTouch(hoverElement,hoverIndex,recoilElement,recoilIndex,sx,sy);
-      setMagnetic(frameEdge,edgeBox,edgeIndex,sx,sy);
+      setMagneticActive(activeEdges);
+      if(activeEdges){
+        gl.uniform4fv(locations['magnetic[0]'],magneticFields);
+        gl.uniform2fv(locations['magneticScale[0]'],magneticScales);
+      }
       gl.disable(gl.SCISSOR_TEST);
       gl.uniform1f(locations.overlayPass,0);
       gl.uniform1i(locations.parentCount,0);
@@ -358,6 +372,7 @@
     if(modalCanvas)modalCanvas.remove();
     if(modalElement)modalElement.classList.remove('glass-modal-gpu');
     modalCanvas=modalElement=null;
+    modalCandidates=null;modalObserver?.disconnect();modalObserver=null;
     if(modalBlurTexture)gl.deleteTexture(modalBlurTexture);
     if(modalBlurOutput)gl.deleteTexture(modalBlurOutput);
     if(modalFramebuffer)gl.deleteFramebuffer(modalFramebuffer);
@@ -431,6 +446,10 @@
       modalCanvas=document.createElement('canvas');
       modalCanvas.className='glass-modal-canvas';modalCanvas.setAttribute('aria-hidden','true');
       element.prepend(modalCanvas);element.classList.add('glass-modal-gpu');
+      modalObserver=new MutationObserver(function(records){
+        if(modalLayoutChanged(records)){modalCandidates=null;requestRender();}
+      });
+      modalObserver.observe(element,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});
     }
     // Refract the blurred background, then present this plate above the overlay.
     // Text stays sharp on its own DOM layer above the completed optics.
@@ -438,24 +457,24 @@
     copyComposite();gl.enable(gl.SCISSOR_TEST);
     blurModalBackdrop(element,sx,sy);
     drawSurface(element,false,1,sx,sy,rects,shapes);
+    var candidates=visibleModalSurfaces(element);
     if(layerIntensity){
-      var selector=GlassOptics.modalLayers+', '+GlassOptics.layers;
-      drawLayerGroups(element.querySelectorAll(':is('+selector+'):not([hidden], [hidden] *)'),selector,sx,sy,rects,shapes);
+      drawLayerGroups(candidates.layers,candidates.layerSelector,sx,sy,rects,shapes);
     }
     if(buttonIntensity||controlIntensity){
       copyComposite();
-      if(controlIntensity)element.querySelectorAll(GlassOptics.inputs).forEach(function(input){
+      if(controlIntensity)candidates.inputs.forEach(function(input){
         drawSurface(input,true,controlIntensity*GlassOptics.inputStrength(input,performance.now()),sx,sy,rects,shapes);
       });
       copyComposite();
-      element.querySelectorAll(':is(button, '+GlassOptics.controls+'):not([hidden], [hidden] *)').forEach(function(button){
+      candidates.buttons.forEach(function(button){
         if(button.matches('input, textarea, .ws-mode-toggle button'))return;
         var strength=button.matches(GlassOptics.controls)?controlIntensity:buttonIntensity;
         if(strength)drawSurface(button,true,strength,sx,sy,rects,shapes);
       });
     }
     gl.disable(gl.SCISSOR_TEST);
-    var r=element.getBoundingClientRect(),pad=frameEdge?.element===element ? 20 : 0;
+    var r=element.getBoundingClientRect(),pad=window.GlassInteraction?.readEdge(element) ? 20 : 0;
     var w=Math.max(1,Math.round((r.width+pad*2)*sx)),h=Math.max(1,Math.round((r.height+pad*2)*sy));
     var turning=!!element.querySelector('.vf-detail.is-flipping');
     var bufferHeight=turning?Math.max(h,Math.ceil(height*sy*.8)):h;
@@ -465,12 +484,46 @@
     // instead of reallocating and clearing the graphics buffer every frame.
     var modalStyle=getComputedStyle(element),scaleY=r.height/parseFloat(modalStyle.height),scaleX=r.width/parseFloat(modalStyle.width);
     var cssHeight=bufferHeight/sy/scaleY+'px';
-    var clip=pad ? 'url(#glass-edge-contour)' :
+    var clip=pad ? 'var(--glass-edge-clip)' :
       'inset(0 0 '+Math.max(0,(bufferHeight-h)/sy/scaleY)+'px 0 round '+materialRadius(element,r)/Math.min(scaleX,scaleY)+'px)';
     if(modalCanvas.style.height!==cssHeight)modalCanvas.style.height=cssHeight;
     if(modalCanvas._glassClip!==clip){modalCanvas.style.clipPath=clip;modalCanvas._glassClip=clip;}
     var ctx=modalCanvas.getContext('2d');ctx.clearRect(0,0,w,bufferHeight);
     ctx.drawImage(canvas,(r.left-originX-pad)*sx,(r.top-originY-pad)*sy,(r.width+pad*2)*sx,(r.height+pad*2)*sy,0,0,w,h);
+  }
+  function modalLayoutChanged(records) {
+    function layoutNode(node) {
+      return node.nodeType===1 && node.namespaceURI!=='http://www.w3.org/2000/svg' &&
+        !node.matches('.glass-modal-canvas, .glass-edge-field, .glass-input-optics');
+    }
+    return records.some(function(record){
+      return record.type==='attributes' ? layoutNode(record.target) :
+        [...record.addedNodes,...record.removedNodes].some(layoutNode);
+    });
+  }
+  function visibleModalSurfaces(element) {
+    if(modalLayoutChanged(modalObserver.takeRecords()))modalCandidates=null;
+    var panes=modalCandidates?.panes || Array.from(element.querySelectorAll('.modal-body, [role="tabpanel"]'));
+    var layout=panes.map(function(pane){return [pane.scrollTop,pane.scrollLeft,pane.clientWidth,pane.clientHeight].join(':');}).join('/');
+    if(modalCandidates && modalCandidates.layout===layout)return modalCandidates;
+    var layerSelector=GlassOptics.modalLayers+', '+GlassOptics.layers;
+    var bounds=new Map();
+    function visible(node){
+      var r=node.getBoundingClientRect();
+      if(r.width<8||r.height<8)return false;
+      var pane=node.closest('.modal-body, [role="tabpanel"]') || element;
+      if(!bounds.has(pane))bounds.set(pane,pane.getBoundingClientRect());
+      var clip=bounds.get(pane);
+      // A small margin covers a glass edge in motion. The shader still
+      // clips the actual samples to the scrolling pane and its parents.
+      return r.bottom>=clip.top-20 && r.top<=clip.bottom+20 && r.right>=clip.left-20 && r.left<=clip.right+20;
+    }
+    function select(selector){
+      return Array.from(element.querySelectorAll(':is('+selector+'):not([hidden], [hidden] *)')).filter(visible);
+    }
+    modalCandidates={panes:panes,layout:layout,layerSelector:layerSelector,
+      layers:select(layerSelector),inputs:select(GlassOptics.inputs),buttons:select('button, '+GlassOptics.controls)};
+    return modalCandidates;
   }
   function materialRadius(element,r) {
     var radius=getComputedStyle(element).borderTopLeftRadius;
@@ -512,8 +565,13 @@
     gl.uniform1f(locations.intensity,intensity*lensScale*strength);
     gl.uniform1i(locations.count,1);
     setTouch(element,0,element,0,sx,sy);setParents(element,sx,sy);
-    var edge=frameEdge?.element===element ? frameEdge : null;
-    setMagnetic(edge,r,edge ? 0 : -1,sx,sy);
+    var edge=window.GlassInteraction?.readEdge(element);
+    setMagneticActive(!!edge?.depth);
+    if(edge?.depth){
+      storeMagnetic(edge,r,0,sx,sy);
+      gl.uniform4f(locations['magnetic[0]'],magneticFields[0],magneticFields[1],magneticFields[2],magneticFields[3]);
+      gl.uniform2f(locations['magneticScale[0]'],magneticScales[0],magneticScales[1]);
+    }
     gl.uniform4fv(locations['rects[0]'],rects);gl.uniform2fv(locations['shapes[0]'],shapes);
     var pad=edge ? Math.abs(edge.depth)+1 : 0;
     var x=Math.max(0,Math.floor((r.left-originX-pad)*sx)),y=Math.max(0,Math.floor(canvas.height-(r.bottom-originY+pad)*sy));
@@ -546,14 +604,13 @@
   function drawButtons(sx,sy,rects,shapes,mobile) {
     buttonCount=0;controlCount=0;if(!controlIntensity&&(mobile||!buttonIntensity))return;
     copyComposite();gl.enable(gl.SCISSOR_TEST);
-    if(controlIntensity)document.querySelectorAll(GlassOptics.inputs).forEach(function(input){
-      if(!input.closest('.modal-card')&&drawSurface(input,true,controlIntensity*GlassOptics.inputStrength(input,performance.now()),sx,sy,rects,shapes))controlCount++;
+    if(controlIntensity)document.querySelectorAll(':is('+GlassOptics.inputs+'):not(.modal-card *)').forEach(function(input){
+      if(drawSurface(input,true,controlIntensity*GlassOptics.inputStrength(input,performance.now()),sx,sy,rects,shapes))controlCount++;
     });
     if (mobile) { gl.disable(gl.SCISSOR_TEST); return; }
     // Clear buttons inside a search box sample its completed input plate.
     copyComposite();
-    document.querySelectorAll('button, '+GlassOptics.controls).forEach(function(button){
-      if(button.closest('.modal-card')||button.matches('.ws-mode-toggle button')||button.matches('input, textarea'))return;
+    document.querySelectorAll(':is(button, '+GlassOptics.controls+'):not(.modal-card *, .ws-mode-toggle button, input, textarea)').forEach(function(button){
       var control=button.matches(GlassOptics.controls),strength=control?controlIntensity:buttonIntensity;
       // Focused inputs/sliders bend their whole silhouette harder instead of
       // drawing a CSS focus border; the boost is visible even without hover.
@@ -573,7 +630,7 @@
   }
 
   function onMaterialAnimation(event) {
-    if(!active||event.pseudoElement||event.target.closest('.modal-card')||!event.target.closest('.card, '+GlassOptics.layers))return;
+    if(!active||event.pseudoElement||event.animationName==='glass-focus-sweep'||event.target.closest('.modal-card')||!event.target.closest('.card, '+GlassOptics.layers))return;
     if(event.type==='animationstart')motionUntil=Math.max(motionUntil,performance.now()+450);
     requestRender();
   }

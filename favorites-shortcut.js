@@ -232,7 +232,7 @@ window.FavoritesShortcut = (() => {
     ghost.style.setProperty('--handoff-compact-color', compact.getPropertyValue('--glass-button-fill'));
     ghost.style.setProperty('--handoff-compact-sheen', compact.getPropertyValue('--glass-button-sheen'));
     ghost.style.setProperty('--handoff-footer-color', plate.backgroundColor);
-    ghost.style.setProperty('--handoff-footer-sheen', `${footer.getPropertyValue('--glass-button-sheen')}, ${plate.backgroundImage}`);
+    ghost.style.setProperty('--handoff-footer-sheen', plate.backgroundImage);
     const receiverStyle = receiver === source ? footer : compact;
     label.textContent = receiver.textContent.trim();
     label.style.fontSize = receiverStyle.fontSize;

@@ -29,14 +29,15 @@
     focusStates.set(element,{from:state?focusLevel(element,now):1-target,to:target,start:now,duration:immediate?0:focusDuration});
   }
   function inputStrength(element,now) { return .32+1.12*focusLevel(element,now); }
+  var inputs = '.word-search-input, .input-area input, .study-tool-form :is(input, textarea), .fav-search input, .key-area input, .comparison-search';
   var optics={profile:profile,inputProfile:inputProfile,offset:offset,extent:extent,amplitude:amplitude,
     setFocus:setFocus,focusLevel:focusLevel,inputStrength:inputStrength,focusDuration:focusDuration,
     // A complete result is one plate above the outer card. Its forms, examples
     // and memory sections share that field instead of bending it independently.
     layers:'.word-result, .word-search-wrapper:not(.mnemonic-card) > .word-search-result:has(> .study-content), .vf-detail, .comparison-fav',
     modalLayers:'.appearance-option, .theme-option, .vf-compact, .page-record-item, .comparison-fav',
-    controls:'.ws-mode-slider, .input-area input, .study-tool-form input, .fav-search input, .key-area input, .comparison-search',
-    inputs:'.input-area input, .study-tool-form input, .fav-search input, .key-area input, .comparison-search',
+    controls:'.ws-mode-slider, '+inputs,
+    inputs:inputs,
     glsl:'float edgeProfile(float u){u=clamp(u,0.,1.);float v=1.-u*u*u*(u*(u*6.-15.)+10.);return v*v; } float inputProfile(float u){float v=1.-clamp(u,0.,1.);return v*v*v; } vec2 edgeOffset(vec2 p,vec2 h,float b){return sign(p)*vec2(edgeProfile((h.x-abs(p.x))/b),edgeProfile((h.y-abs(p.y))/b));} vec2 inputOffset(vec2 p,vec2 h,float b){return sign(p)*vec2(inputProfile((h.x-abs(p.x))/b),inputProfile((h.y-abs(p.y))/b));}'
   };
   if(typeof module==='object'&&module.exports)module.exports=optics;

@@ -610,10 +610,14 @@ html[data-interface="glass"] .card {
   box-shadow: none;
 }
 html[data-interface="glass"] .card::before { background-image: var(--glass-reflections), var(--glass-tint); }
-html[data-interface="glass"] .btn-fav-nav::before { clip-path: inset(0 round 18px); }
+html[data-interface="glass"] .btn-fav-nav::before {
+  clip-path: inset(0 round var(--glass-footer-radius, 18px));
+  background-image: var(--glass-button-sheen, none), var(--glass-reflections), var(--glass-tint);
+}
 html[data-interface="glass"] .btn-fav-nav {
-  border-radius: 18px;
-  box-shadow: var(--glass-shadow);
+  border-radius: var(--glass-footer-radius, 18px);
+  background: transparent !important;
+  box-shadow: none !important;
   color: var(--text);
   font-weight: 650;
 }
@@ -688,18 +692,19 @@ html[data-interface="glass"] .modal-card :is(.page-record-item, .vf-compact, .vf
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
-/* Preserve the clear plate and give keyboard focus a cue on flat backgrounds. */
+/* Focus strengthens the lens without an outline outside the glass. */
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
   .study-tool-form input, .key-area input, .comparison-search):focus {
   border-color: transparent !important;
+  outline: none !important;
+}
+html[data-interface="glass"]:not(.glass-refraction) :is(.input-area input, .word-search-input, .fav-search input,
+  .study-tool-form input, .key-area input, .comparison-search):focus {
+  background-color: rgba(255, 255, 255, .16);
 }
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
-  .study-tool-form input, .key-area input, .comparison-search):focus-visible {
-  outline: 2px solid var(--glass-focus-ring, var(--primary));
-  outline-offset: 2px;
-}
-@media (prefers-reduced-transparency: no-preference) {
-  html[data-wallpaper="night"] { --glass-focus-ring: #c2ccff; }
+  .study-tool-form input, .key-area input, .comparison-search):focus:not([data-glass-edge="field"]) {
+  box-shadow: inset 0 0 0 1px rgba(243, 248, 255, .72), inset 0 1px 5px rgba(224, 235, 255, .35);
 }
 /* 小表面：直接磨砂，不再单独分层 */
 html[data-interface="glass"] .page-actions .btn-sm,
@@ -760,8 +765,7 @@ html[data-interface="glass"] ::selection {
 
 /* Localized reflections have soft falloff: no continuous outline or rainbow ring.
    The RGB filter below provides color dispersion from the actual background. */
-html[data-interface="glass"] .modal-card::after,
-html[data-interface="glass"] .btn-fav-nav::after {
+html[data-interface="glass"] .modal-card::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1213,7 +1217,7 @@ html[data-interface="glass"] .mobile-tool-tabs::before {
 }
 html[data-interface="glass"] :is(.input-area input, .study-tool-form input, .fav-search input, .key-area input, .comparison-search) {
   background-color: transparent;
-  background-image: linear-gradient(155deg, rgba(255,255,255,.12), transparent 45%, rgba(255,255,255,.025));
+  background-image: linear-gradient(155deg, rgba(255,255,255,.19), rgba(255,255,255,.035) 48%, rgba(255,255,255,.075));
   border-color: transparent;
   box-shadow: inset 0 1px 2px -1px rgba(255,255,255,.4);
   backdrop-filter: none;
@@ -1323,7 +1327,7 @@ html[data-interface="glass"] .glass-jelly::after {
   html[data-wallpaper="water"] .appearance-water { animation: none; }
 }
 @media (max-width: 460px) {
-  html[data-interface="glass"] .btn-fav-nav { border-radius: 16px; }
+  html[data-interface="glass"] .btn-fav-nav { --glass-footer-radius: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1445,7 +1449,7 @@ html[data-interface="glass"] [data-glass-edge="control"]::before,
   z-index: -1;
   pointer-events: none;
   border-radius: 0;
-  clip-path: url(#glass-edge-contour);
+  clip-path: var(--glass-edge-clip);
 }
 html[data-interface="glass"] [data-glass-edge="control"]::before {
   inset: -20px;
@@ -1460,9 +1464,9 @@ html[data-interface="glass"] button[data-glass-edge="control"]::before {
 }
 html[data-interface="glass"] [data-glass-edge="plate"]::before {
   inset: -20px;
-  clip-path: url(#glass-edge-contour);
+  clip-path: var(--glass-edge-clip);
 }
-html[data-interface="glass"] :is(.modal-card, .btn-fav-nav)[data-glass-edge="plate"]::before {
+html[data-interface="glass"] .modal-card[data-glass-edge="plate"]::before {
   background-image: var(--glass-reflections), var(--glass-tint);
 }
 html[data-interface="glass"] :is(.modal-card, .btn-fav-nav)[data-glass-edge="plate"]::after { content: none; }
@@ -1474,6 +1478,39 @@ html.glass-gpu[data-interface="glass"] .modal-card[data-glass-edge] .glass-modal
   width: calc(100% + 40px);
 }
 .glass-edge-field-replaced { visibility: hidden; }
+.glass-edge-focus-rim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  fill: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+:focus + .glass-edge-field .glass-edge-focus-rim { opacity: 1; }
+.glass-edge-rim-track {
+  stroke: url(#glass-input-rim-light);
+  stroke-width: 2.5px;
+  filter: drop-shadow(0 0 1.5px rgba(233, 243, 255, .55));
+}
+.glass-edge-rim-glint {
+  stroke: rgba(255, 255, 255, .94);
+  stroke-width: 2.8px;
+  stroke-dasharray: 19 81;
+  stroke-linecap: round;
+  opacity: 0;
+}
+:focus + .glass-edge-field .glass-edge-rim-glint { animation: glass-focus-sweep 680ms ease-out; }
+@keyframes glass-focus-sweep {
+  from { stroke-dashoffset: 76; opacity: 0; }
+  27% { opacity: .75; }
+  to { stroke-dashoffset: -24; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass-edge-focus-rim { transition: none; }
+  :focus + .glass-edge-field .glass-edge-rim-glint { animation: none; }
+}
 
 /* 深空主题的浅色文字覆盖放在最后，确保优先级高于玻璃界面的通用文字色 */
 /* 深空主题下页面上的文字改用浅色（卡片内部仍是浅玻璃 + 深色文字） */

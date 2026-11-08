@@ -26,7 +26,6 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
       return {
         border: style.borderTopColor,
         outline: style.outlineStyle,
-        outlineWidth: style.outlineWidth,
         background: style.backgroundColor,
         backdrop: style.backdropFilter,
         focused: document.activeElement === element
@@ -38,8 +37,10 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     const inputFocus = await focusStyle('.word-search-input');
     assert.equal(inputFocus.focused, true);
     assert.equal(inputFocus.border, 'rgba(0, 0, 0, 0)', 'focused search input must not draw a border');
-    assert.equal(inputFocus.outline, 'solid', 'keyboard focus remains visible over glass');
-    assert.equal(inputFocus.outlineWidth, '2px');
+    assert.equal(inputFocus.outline, 'none', 'focused glass has no outer focus ring');
+    const rim = page.locator('.word-search-input + .glass-edge-field .glass-edge-focus-rim');
+    assert.equal(await rim.isVisible(), true, 'focus paints a light rim on the glass itself');
+    assert.match(await rim.locator('use').first().evaluate(el => getComputedStyle(el).stroke), /glass-input-rim-light/);
     assert.equal(inputFocus.background, 'rgba(0, 0, 0, 0)', 'card search keeps a clear glass fill');
     assert.equal(inputFocus.backdrop, 'none', 'card search does not frost the card behind it');
     await page.screenshot({ path: path.join(OUT, 'search-focus.png') });
@@ -140,8 +141,8 @@ const OUT = path.join(ROOT, '.gstack', 'modal-glass');
     await page.locator('#mnemonicInput').focus();
     const mobileFocus = await focusStyle('#mnemonicInput');
     assert.equal(mobileFocus.focused, true);
-    assert.equal(mobileFocus.outline, 'solid', 'mobile focus survives without optical contrast');
-    assert.equal(mobileFocus.outlineWidth, '2px');
+    assert.equal(mobileFocus.outline, 'none');
+    assert.notEqual(mobileFocus.background, 'rgba(0, 0, 0, 0)', 'without refraction focus is indicated by a fill inside the glass');
 
     assert.deepEqual(errors, []);
     console.log('PASS: visible glass input focus, stable first-frame modal optics; screenshots in ' + OUT);

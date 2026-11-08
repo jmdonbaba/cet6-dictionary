@@ -11,20 +11,15 @@
   var pointerPresent = false, hitTestPending = false;
   var decorations = new Map();
   var edgePad = 20; // Matches the decorative layers' CSS inset.
-  var edgePointer = false, edgePending = false, hit = null;
-  var edgeTarget = null, edge = null, edgePress = false, contour = null;
-  var fieldPlate = null, fieldHost = null, nativeField = null;
-  var unstableCard = '[inert], [hidden], .is-flipping, .is-resizing, .glass-jelly, [data-favorites-handoff-cover]';
+  var edgePointer = false, edgePending = false;
+  var edges = new Map(), edgeTargets = new Map(), contours = null, contourSerial = 0;
+  var registered = new Set(), visible = new Set(), visibilityObserver, topologyObserver, topologyDirty = true;
+  var unstableCard = '[inert], [hidden], :disabled, .is-flipping, .is-resizing, .glass-jelly, [data-favorites-handoff-cover]';
   var mainPlates = '.card, .modal-card, .btn-fav-nav';
-  var controls = 'button:not(:disabled, .ws-mode-toggle button, .mobile-tool-tabs button), .ws-mode-slider, ' +
+  var controls = 'button:not(.ws-mode-toggle button, .mobile-tool-tabs button), .ws-mode-slider, ' +
     GlassOptics.inputs + ', ' + GlassOptics.layers + ', ' + GlassOptics.modalLayers +
     ', .more-menu, .study-export-menu, .fav-search-dropdown, .ws-search-dropdown, .toast';
   var magneticSurfaces = mainPlates + ', ' + controls;
-  var probeOffsets = [16, 35, 56, 92].flatMap(function (step) {
-    var diagonal = step * Math.SQRT1_2;
-    return [[step,0],[-step,0],[0,step],[0,-step],[diagonal,diagonal],[-diagonal,diagonal],
-      [diagonal,-diagonal],[-diagonal,-diagonal]];
-  });
 
   function smooth(value) {
     var t = Math.max(0, Math.min(1, value));
@@ -32,8 +27,10 @@
   }
 
   function edgeNear(element, x, y, press) {
-    if (!element || element.closest(unstableCard)) return null;
     var bounds = element.getBoundingClientRect();
+    if (bounds.width < 10 || bounds.height < 10 ||
+        (!press && (x < bounds.left - 98 || x > bounds.right + 98 || y < bounds.top - 98 || y > bounds.bottom + 98)) ||
+        element.closest(unstableCard)) return null;
     var style = getComputedStyle(element);
     if (style.visibility !== 'visible' || Number(style.opacity) === 0) return null;
     var borderX = parseFloat(style.borderLeftWidth), borderY = parseFloat(style.borderTopWidth);
@@ -79,32 +76,77 @@
   function canBend() {
     return !LiquidGlass.supported || Number(root.style.getPropertyValue('--glass-refract-scale')) > 0;
   }
-  function nearestEdge() {
-    if (!attractionEnabled() || !edgePointer || pressed || !canBend()) return null;
-    var x = desired.x, y = desired.y;
-    var modal = document.querySelector('.modal-card.active');
-    var seen = new Set(), nearest = null;
-    function consider(element) {
-      if (!element || seen.has(element) || (modal && !modal.contains(element))) return;
-      seen.add(element);
-      var candidate = edgeNear(element, x, y);
-      if (candidate && (!nearest || candidate.gap < nearest.gap)) nearest = candidate;
-    }
-    function inspect(element) {
-      consider(element?.closest?.('.ws-mode-toggle')?.querySelector('.ws-mode-slider'));
-      var surface = element?.closest?.(magneticSurfaces);
-      while (surface && !seen.has(surface) && (!modal || modal.contains(surface))) {
-        consider(surface);
-        surface = surface.parentElement?.closest(magneticSurfaces);
+  function requestEdgeRefresh() {
+    if (!edgePointer || !attractionEnabled()) return;
+    edgePending = true;
+    request();
+  }
+  function trackSurfaces() {
+    if (!topologyObserver) {
+      if (window.IntersectionObserver) {
+        visibilityObserver = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting && registered.has(entry.target)) visible.add(entry.target);
+            else visible.delete(entry.target);
+          });
+          requestEdgeRefresh();
+        });
       }
+      topologyObserver = new MutationObserver(function (records) {
+        var changed = records.some(function (record) {
+          return [...record.addedNodes, ...record.removedNodes].some(function (node) {
+            return node.matches?.(magneticSurfaces) || node.querySelector?.(magneticSurfaces);
+          });
+        });
+        if (changed) { topologyDirty = true; requestEdgeRefresh(); }
+      });
+      topologyObserver.observe(document.body, { childList:true, subtree:true });
     }
-    inspect(hit);
-    // Check nearby painted surfaces, not every element in a long results list.
-    for (var offset of probeOffsets) {
-      if (nearest && nearest.gap < 9) break;
-      inspect(document.elementFromPoint(x + offset[0], y + offset[1]));
+    if (!topologyDirty) return;
+    topologyDirty = false;
+    var next = new Set(document.querySelectorAll(magneticSurfaces));
+    registered.forEach(function (element) {
+      if (!next.has(element)) { visibilityObserver?.unobserve(element); visible.delete(element); }
+    });
+    next.forEach(function (element) {
+      if (!registered.has(element)) visibilityObserver?.observe(element);
+    });
+    registered = next;
+  }
+  function updateEdgeTargets(modal) {
+    edgeTargets.clear();
+    if (!canBend()) return;
+    if (attractionEnabled() && edgePointer) {
+      trackSurfaces();
+      // Only measure viewport-visible surfaces. Every eligible edge uses its
+      // own distance, independently of the element receiving pointer events.
+      (visibilityObserver ? visible : registered).forEach(function (element) {
+        if (modal ? !modal.contains(element) : element.closest('.modal-card')) return;
+        var candidate = edgeNear(element, desired.x, desired.y);
+        if (candidate && Math.abs(candidate.pull) > .035) edgeTargets.set(element, candidate);
+      });
     }
-    return nearest;
+    var focused = focusedInput();
+    if (focused && (modal ? modal.contains(focused) : !focused.closest('.modal-card'))) {
+      var target = edgeTargets.get(focused);
+      if (!target) {
+        target = edgeNear(focused, 0, 0, true);
+        if (!target) return;
+        var current = edges.get(focused);
+        if (current) {
+          target.x = current.x; target.y = current.y;
+          target.nx = current.nx; target.ny = current.ny;
+        }
+        target.pull = 0;
+        edgeTargets.set(focused, target);
+      }
+      target.focus = true;
+    }
+  }
+
+  function focusedInput() {
+    var active = document.activeElement;
+    return active?.matches(GlassOptics.inputs) ? active : null;
   }
 
   function edgePath(shape) {
@@ -155,23 +197,43 @@
     return path + 'Z';
   }
 
-  function clearEdge() {
-    if (edge) {
-      var element = edge.element;
-      element.removeAttribute('data-glass-edge');
-      element.removeAttribute('data-glass-edge-position');
-      element.style.removeProperty('--glass-edge-fill');
-      element.style.removeProperty('--glass-edge-sheen');
-      element.style.removeProperty('--glass-edge-frost');
+  function clearEdge(edge) {
+    var element = edge.element;
+    element.removeAttribute('data-glass-edge');
+    element.removeAttribute('data-glass-edge-position');
+    ['clip','fill','sheen','frost'].forEach(function (name) { element.style.removeProperty('--glass-edge-' + name); });
+    edge.path?.parentNode.remove();
+    edge.fieldPlate?.remove();
+    if (edge.fieldHost && !edge.fieldHost.querySelector(':scope > .glass-edge-field')) {
+      edge.fieldHost.classList.remove('glass-edge-field-host', 'glass-edge-field-position');
     }
-    fieldPlate?.remove();
-    fieldHost?.classList.remove('glass-edge-field-host', 'glass-edge-field-position');
-    nativeField?.classList.remove('glass-edge-field-replaced');
-    fieldPlate = fieldHost = nativeField = null;
-    edge = null; edgePress = false;
+    edge.nativeField?.classList.remove('glass-edge-field-replaced');
+    edges.delete(element);
   }
 
-  function mountEdge(element) {
+  function mountEdge(edge) {
+    var element = edge.element;
+    var ns = 'http://www.w3.org/2000/svg';
+    if (!contours) {
+      var svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('class', 'glass-edge-defs');
+      svg.innerHTML = '<defs><linearGradient id="glass-input-rim-light" x1="10%" y1="0%" x2="90%" y2="100%">' +
+        '<stop stop-color="#fff" stop-opacity=".92"/><stop offset=".3" stop-color="#d7eaff" stop-opacity=".45"/>' +
+        '<stop offset=".64" stop-color="#e4dcff" stop-opacity=".53"/><stop offset="1" stop-color="#fff" stop-opacity=".86"/>' +
+        '</linearGradient></defs>';
+      contours = svg.querySelector('defs');
+      document.body.appendChild(svg);
+    }
+    var clip = document.createElementNS(ns, 'clipPath');
+    clip.id = 'glass-edge-contour-' + (++contourSerial);
+    edge.path = document.createElementNS(ns, 'path');
+    edge.path.id = clip.id + '-shape';
+    edge.path.setAttribute('pathLength', '100');
+    clip.appendChild(edge.path);
+    contours.appendChild(clip);
+    var url = 'url(#' + clip.id + ')';
+    element.style.setProperty('--glass-edge-clip', url);
     if (element.matches(mainPlates)) {
       element.setAttribute('data-glass-edge', 'plate');
       return;
@@ -187,23 +249,35 @@
       element.setAttribute('data-glass-edge', 'control');
       return;
     }
-    fieldHost = element.parentElement;
-    nativeField = LiquidGlass.inputPlate(element);
-    fieldPlate = document.createElement('span');
+    var fieldHost = edge.fieldHost = element.parentElement;
+    var nativeField = edge.nativeField = LiquidGlass.inputPlate(element);
+    var fieldPlate = edge.fieldPlate = document.createElement('span');
     fieldPlate.className = 'glass-edge-field';
     fieldPlate.setAttribute('aria-hidden', 'true');
     fieldPlate.style.backgroundColor = style.backgroundColor;
     fieldPlate.style.backgroundImage = style.backgroundImage;
+    fieldPlate.style.setProperty('--glass-edge-clip', url);
     fieldPlate.style.filter = nativeField?.style.filter || '';
     if (nativeField) fieldPlate.style.backdropFilter = getComputedStyle(nativeField).backdropFilter;
+    var rim = document.createElementNS(ns, 'svg');
+    rim.setAttribute('class', 'glass-edge-focus-rim');
+    rim.setAttribute('aria-hidden', 'true');
+    ['track', 'glint'].forEach(function (part) {
+      var mark = document.createElementNS(ns, 'use');
+      mark.setAttribute('class', 'glass-edge-rim-' + part);
+      mark.setAttribute('href', '#' + edge.path.id);
+      rim.appendChild(mark);
+    });
+    fieldPlate.appendChild(rim);
     fieldHost.classList.add('glass-edge-field-host');
     if (getComputedStyle(fieldHost).position === 'static') fieldHost.classList.add('glass-edge-field-position');
-    fieldHost.appendChild(fieldPlate);
+    element.after(fieldPlate);
     nativeField?.classList.add('glass-edge-field-replaced');
     element.setAttribute('data-glass-edge', 'field');
   }
 
-  function fitField() {
+  function fitField(edge) {
+    var fieldHost = edge.fieldHost, fieldPlate = edge.fieldPlate;
     var r = edge.element.getBoundingClientRect(), p = fieldHost.getBoundingClientRect();
     var sx = p.width / (fieldHost.offsetWidth || p.width), sy = p.height / (fieldHost.offsetHeight || p.height);
     var x = (r.left - p.left) / sx - fieldHost.clientLeft + fieldHost.scrollLeft;
@@ -217,29 +291,18 @@
     fieldPlate._geometry = geometry;
   }
 
-  function paintEdge() {
-    if (!contour) {
-      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('aria-hidden', 'true');
-      svg.setAttribute('class', 'glass-edge-defs');
-      svg.innerHTML = '<defs><clipPath id="glass-edge-contour"><path/></clipPath></defs>';
-      contour = svg.querySelector('path');
-      document.body.appendChild(svg);
+  function paintEdge(edge, reposition) {
+    if (!edge.path) { mountEdge(edge); reposition = true; }
+    var path = edgePath(edge);
+    if (edge.outline !== path) {
+      edge.path.setAttribute('d', path);
+      edge.outline = path;
     }
-    contour.setAttribute('d', edgePath(edge));
-    if (!edge.element.hasAttribute('data-glass-edge')) mountEdge(edge.element);
-    if (fieldPlate) fitField();
+    if (edge.fieldPlate && reposition) fitField(edge);
   }
 
-  function animateEdge(dt, easing) {
-    if (edgePending) { edgePending = false; edgeTarget = nearestEdge(); }
-    var modal = edge && document.querySelector('.modal-card.active');
-    if (edge && (!edge.element.isConnected || edge.element.closest(unstableCard) || (!edgePress && !attractionEnabled()) ||
-        (modal && !modal.contains(edge.element)) || (edge.element.closest('.modal-card') && !modal) ||
-        !canBend())) clearEdge();
-    if (!edge && edgeTarget) edge = Object.assign({ depth:0, velocity:0 }, edgeTarget);
-    if (!edge) return false;
-    var target = !edgePress && edgeTarget?.element === edge.element ? edgeTarget : null;
+  function advanceEdge(edge, target, dt, easing, reposition) {
+    var previousDepth = edge.depth;
     var pull = target ? target.pull : 0;
     if (target) {
       edge.borderX = target.borderX; edge.borderY = target.borderY;
@@ -248,23 +311,39 @@
       edge.nx += (target.nx - edge.nx) * easing; edge.ny += (target.ny - edge.ny) * easing;
     }
     // Analytic damped spring keeps the same rebound across refresh rates.
-    var handingOff = !target && !edgePress && edgeTarget;
-    var decay = edgePress || !target ? (handingOff ? 18 : 10.5) : 17;
-    var frequency = handingOff ? 31 : 24;
+    var decay = target?.pull ? 17 : 10.5;
+    var frequency = 24;
     var a = edge.depth - pull, b = (edge.velocity + decay * a) / frequency;
     var cos = Math.cos(frequency * dt), sin = Math.sin(frequency * dt), damping = Math.exp(-decay * dt);
     var displacement = damping * (a * cos + b * sin);
     edge.velocity = -decay * displacement + damping * frequency * (b * cos - a * sin);
-    var next = pull + displacement;
-    if (handingOff && edge.depth * next <= 0) { clearEdge(); return true; }
-    edge.depth = next;
+    edge.depth = pull + displacement;
     var moving = Math.abs(displacement) > .035 || Math.abs(edge.velocity) > .6 ||
       Boolean(target && Math.hypot(target.x - edge.x, target.y - edge.y) > .15);
     if (!moving) {
-      if (!target) { clearEdge(); return Boolean(edgeTarget); }
+      if (!target) { clearEdge(edge); return edge.press && edgeTargets.has(edge.element); }
       Object.assign(edge, target, { depth:pull, velocity:0 });
     }
-    paintEdge();
+    if (!edge.path || reposition || moving || edge.depth !== previousDepth) paintEdge(edge, reposition);
+    return moving;
+  }
+
+  function animateEdges(dt, easing) {
+    var reposition = edgePending;
+    var modal = document.querySelector('.modal-card.active');
+    if (edgePending) { edgePending = false; updateEdgeTargets(modal); }
+    var moving = false;
+    edgeTargets.forEach(function (target, element) {
+      if (!edges.has(element)) edges.set(element, Object.assign({ depth:0, velocity:0 }, target));
+    });
+    edges.forEach(function (edge, element) {
+      if (!element.isConnected || element.closest(unstableCard) || (!edge.press && !attractionEnabled() && !edgeTargets.get(element)?.focus) ||
+          (modal ? !modal.contains(element) : element.closest('.modal-card')) || !canBend()) {
+        clearEdge(edge);
+        return;
+      }
+      moving = advanceEdge(edge, edge.press ? null : edgeTargets.get(element), dt, easing, reposition) || moving;
+    });
     return moving;
   }
 
@@ -272,10 +351,9 @@
     if (!Number(root.style.getPropertyValue('--glass-refract-scale'))) return;
     var shape = edgeNear(element, x, y, true);
     if (!shape) return;
-    var depth = edge?.element === element && Math.hypot(edge.x - shape.x, edge.y - shape.y) < edge.span ? edge.depth : 0;
-    if (edge?.element !== element) clearEdge();
-    edge = Object.assign({ depth:depth, velocity:-280 }, shape);
-    edgePress = true;
+    var edge = edges.get(element);
+    var depth = edge && Math.hypot(edge.x - shape.x, edge.y - shape.y) < edge.span ? edge.depth : 0;
+    edges.set(element, Object.assign(edge || {}, shape, { depth:depth, velocity:-280, press:true }));
   }
 
   function enabled() {
@@ -295,18 +373,21 @@
   }
   function request() { if (!frame) frame = requestAnimationFrame(tick); }
   function setTarget(target) {
-    hit = target;
     desired.element = edgePointer && !attractionEnabled() ? null : surface(target);
     desired.level = desired.element ? (desired.element === pressed ? 1.5 : 1) : 0;
   }
   function refresh() {
     if (!enabled()) {
-      if (edge || hover.element || pulse.element) reset();
+      if (edges.size || hover.element || pulse.element) reset();
       return;
     }
-    if (!pointerPresent) return;
-    hitTestPending = edgePending = true;
+    if (!pointerPresent && !focusedInput()) return;
+    hitTestPending = pointerPresent;
+    edgePending = true;
     request();
+  }
+  function focusChanged(event) {
+    if (event.target.matches(GlassOptics.inputs) && enabled()) { edgePending = true; request(); }
   }
   function tick(now) {
     frame = 0;
@@ -333,14 +414,19 @@
     var t = (now-pulse.start)/1000;
     if (pulse.element && t<.75) { pulse.level=Math.exp(-8*t)*Math.cos(22*t);moving=true; }
     else { pulse.element=null;pulse.level=0; }
-    moving = animateEdge(dt, easing) || moving;
+    moving = animateEdges(dt, easing) || moving;
     render();
     if (moving) request(); else previous=0;
   }
   function move(event) {
     if (!enabled()) return;
     if (event.pointerType==='touch') {
-      edgePointer = edgePending = false; edgeTarget = null; clearEdge(); return;
+      edgePointer = edgePending = false;
+      edgeTargets.clear();
+      edges.forEach(clearEdge);
+      edgePending = true;
+      request();
+      return;
     }
     pointerPresent = true;
     edgePointer = event.pointerType === 'mouse';
@@ -354,7 +440,7 @@
   function leave(event) {
     if (event.relatedTarget) return;
     pointerPresent = hitTestPending = false;
-    edgePointer = edgePending = false; edgeTarget = null;
+    edgePointer = false; edgePending = Boolean(focusedInput()); edgeTargets.clear();
     desired.element = pressed = null;
     desired.level = 0;
     if (enabled()) request();
@@ -379,7 +465,10 @@
       request();
       return;
     }
-    if (edge?.element === element) { clearEdge(); edgeTarget = null; }
+    var edge = edges.get(element);
+    if (edge) clearEdge(edge);
+    edgeTargets.delete(element);
+    if (element.matches('.btn-fav-nav')) { request(); return; }
     removeDecoration(element);
     if (getComputedStyle(element).position==='static') element.classList.add('glass-jelly-positioned');
     element.style.setProperty('--glass-press-x',Math.max(0,Math.min(100,(pulse.x-r.left)/r.width*100))+'%');
@@ -393,7 +482,10 @@
   function reset() {
     if (frame) cancelAnimationFrame(frame);frame=0;previous=0;pressed=null;
     pointerPresent = hitTestPending = false;
-    edgePointer = edgePending = false; edgeTarget = hit = null; clearEdge();
+    edgePointer = edgePending = false; edgeTargets.clear(); edges.forEach(clearEdge);
+    visibilityObserver?.disconnect(); topologyObserver?.disconnect();
+    visibilityObserver = topologyObserver = null; topologyDirty = true;
+    registered.clear(); visible.clear();
     hover.element=desired.element=pulse.element=null;hover.level=desired.level=pulse.level=0;
     decorations.forEach(function (_,element){removeDecoration(element);});render();
   }
@@ -410,10 +502,11 @@
   }
   function destroy() {
     reset();
-    contour?.ownerSVGElement.remove(); contour = null;
+    contours?.ownerSVGElement.remove(); contours = null;
     document.removeEventListener('pointermove',move);document.removeEventListener('pointerout',leave);
     document.removeEventListener('pointerdown',down);document.removeEventListener('pointerup',up);
     document.removeEventListener('pointercancel',up);document.removeEventListener('click',click);
+    document.removeEventListener('focusin',focusChanged);document.removeEventListener('focusout',focusChanged);
     document.removeEventListener('appearancechange',reset);document.removeEventListener('visibilitychange',reset);
     document.removeEventListener('liquidglasschange',refresh);window.removeEventListener('resize',refresh);
     window.removeEventListener('blur',reset);window.removeEventListener('scroll',refresh,true);
@@ -422,13 +515,15 @@
   document.addEventListener('pointermove',move,{passive:true});document.addEventListener('pointerout',leave,{passive:true});
   document.addEventListener('pointerdown',down,{passive:true});document.addEventListener('pointerup',up,{passive:true});
   document.addEventListener('pointercancel',up,{passive:true});document.addEventListener('click',click,{passive:true});
+  document.addEventListener('focusin',focusChanged);document.addEventListener('focusout',focusChanged);
   document.addEventListener('appearancechange',reset);document.addEventListener('visibilitychange',reset);
   document.addEventListener('liquidglasschange',refresh);
   window.addEventListener('resize',refresh,{passive:true});
   window.addEventListener('blur',reset);
   window.addEventListener('scroll',refresh,{passive:true,capture:true});
   motion.addEventListener('change',reset);transparency.addEventListener('change',reset);
-  window.GlassInteraction={ read:read, readEdge:function(){return edge;}, reset:reset, destroy:destroy, refresh:refresh,
+  window.GlassInteraction={ read:read, readEdge:function(element){return element ? edges.get(element) : (edges.values().next().value || null);},
+    reset:reset, destroy:destroy, refresh:refresh,
     target:function(){return hover.element || pulse.element;},
     matches:function(element){return hover.element===element || pulse.element===element;},
     getState:function(){return {hover:hover.level,spring:pulse.level,running:!!frame};}

@@ -341,7 +341,7 @@ test('glass keeps refraction behind sharp text and uses borderless reflections',
     'the modal glass layer keeps its inner highlight');
 
   // Soft localized reflections replace the continuous painted outline.
-  const reflection = ruleBody(/^html\[data-interface="glass"\] \.modal-card::after, html\[data-interface="glass"\] \.btn-fav-nav::after$/);
+  const reflection = ruleBody(/^html\[data-interface="glass"\] \.modal-card::after$/);
   assert.match(reflection, /pointer-events: none;/);
   assert.match(reflection, /background: var\(--glass-reflections\);/);
   assert.match(ruleBody(/^html\[data-interface="glass"\] \.card::before$/), /var\(--glass-reflections\), var\(--glass-tint\)/);
