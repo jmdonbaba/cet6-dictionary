@@ -176,6 +176,25 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     });
     assert.ok(shoulder[0] > .2 && Math.abs(shoulder[1]) < .05,
       `the bend fades through a long shoulder before joining the straight edge: ${shoulder}`);
+    await page.evaluate(() => {
+      const card = document.createElement('div');
+      card.id = 'distanceCard';
+      card.className = 'card';
+      card.style.cssText = 'position:fixed;left:1140px;top:475px;width:250px;height:125px;z-index:8';
+      const search = document.createElement('input');
+      search.id = 'distanceSearch';
+      search.className = 'comparison-search';
+      search.style.cssText = 'position:fixed;left:1140px;top:656px;width:250px;height:40px;z-index:8';
+      document.body.append(card, search);
+    });
+    for (const y of [636, 671]) {
+      await page.mouse.move(1265, y);
+      await page.waitForTimeout(650);
+      const [card, search] = await page.evaluate(() => ['distanceCard', 'distanceSearch'].map(id =>
+        Math.abs(GlassInteraction.readEdge(document.getElementById(id))?.depth || 0)));
+      assert.ok(search > card && search > 1, `the nearer search responds more than the distant card at y=${y}: ${search} vs ${card}`);
+    }
+    await page.evaluate(() => ['distanceCard', 'distanceSearch'].forEach(id => document.getElementById(id).remove()));
     await page.locator('#btnOpenSettings').click();
     const attraction = page.getByRole('switch', { name: '鼠标吸引' });
     await page.locator('#mouseAttractionSetting .appearance-switch-track').click();

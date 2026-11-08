@@ -704,7 +704,7 @@ html[data-interface="glass"]:not(.glass-refraction) :is(.input-area input, .word
 }
 html[data-interface="glass"] :is(.input-area input, .word-search-input, .fav-search input,
   .study-tool-form input, .key-area input, .comparison-search):focus:not([data-glass-edge="field"]) {
-  box-shadow: inset 0 0 0 1px rgba(243, 248, 255, .72), inset 0 1px 5px rgba(224, 235, 255, .35);
+  box-shadow: inset 0 0 0 1px rgba(210, 229, 246, .55), inset 0 0 5px rgba(192, 218, 246, .32);
 }
 /* 小表面：直接磨砂，不再单独分层 */
 html[data-interface="glass"] .page-actions .btn-sm,
@@ -1491,8 +1491,8 @@ html.glass-gpu[data-interface="glass"] .modal-card[data-glass-edge] .glass-modal
 :focus + .glass-edge-field .glass-edge-focus-rim { opacity: 1; }
 .glass-edge-focus-rim use {
   stroke: url(#glass-input-rim-light);
-  stroke-width: 2.5px;
-  filter: drop-shadow(0 0 1.5px rgba(233, 243, 255, .55));
+  stroke-width: 2.3px;
+  filter: blur(.45px) drop-shadow(0 0 2.8px rgba(182, 213, 242, .58));
 }
 @media (prefers-reduced-motion: reduce) {
   .glass-edge-focus-rim { transition: none; }

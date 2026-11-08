@@ -60,17 +60,17 @@
     }
     var gap = Math.abs(signed);
     var large = element.matches(mainPlates) && short >= 60;
-    var reach = large ? 98 : 54;
-    // Fade before the medial axis, where the nearest inside edge changes sides.
-    if (signed < 0) reach = Math.min(reach, short * .49);
+    var reach = 98;
     if (!press && gap >= reach) return null;
     var nx = dx / distance, ny = dy / distance;
-    var amplitude = large ? 16 : Math.min(6.5, short * .17);
     // A long side gives the curve room to flatten. Its narrow axis still
     // fades before reaching the glass on the opposite side.
     var spanLimit = large ? 120 : 148;
     var spanX = Math.min(spanLimit, width * .88), spanY = Math.min(spanLimit, height * .88);
-    var pull = amplitude * signed / Math.hypot(signed, amplitude * 1.12) * smooth(1 - gap / reach);
+    // Use the same distance envelope inside and outside each surface. Only
+    // very small shapes need a physical limit, and the sign blends at the rim.
+    var force = 11.5 * smooth(gap / 5) * smooth(1 - gap / reach);
+    var pull = Math.sign(signed) * Math.min(force, short * .31);
     return { element:element, borderX:borderX, borderY:borderY, width:width, height:height, radius:radius, spanX:spanX, spanY:spanY, x:cx + nx * radius,
       y:cy + ny * radius, nx:nx, ny:ny, gap:gap, pull:pull };
   }
@@ -226,8 +226,8 @@
       svg.setAttribute('aria-hidden', 'true');
       svg.setAttribute('class', 'glass-edge-defs');
       svg.innerHTML = '<defs><linearGradient id="glass-input-rim-light" x1="10%" y1="0%" x2="90%" y2="100%">' +
-        '<stop stop-color="#fff" stop-opacity=".92"/><stop offset=".3" stop-color="#d7eaff" stop-opacity=".45"/>' +
-        '<stop offset=".64" stop-color="#e4dcff" stop-opacity=".53"/><stop offset="1" stop-color="#fff" stop-opacity=".86"/>' +
+        '<stop stop-color="#dcecf8" stop-opacity=".76"/><stop offset=".3" stop-color="#c9e1f6" stop-opacity=".5"/>' +
+        '<stop offset=".64" stop-color="#d6dbf5" stop-opacity=".54"/><stop offset="1" stop-color="#e0ebf8" stop-opacity=".72"/>' +
         '</linearGradient></defs>';
       contours = svg.querySelector('defs');
       document.body.appendChild(svg);
