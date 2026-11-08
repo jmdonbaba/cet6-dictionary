@@ -13,6 +13,7 @@
 
   var STORAGE_KEY = 'cet6_interface_style';
   var THEME_PREFIX = 'cet6_theme_';
+  var ATTRACTION_KEY = 'cet6_mouse_attraction';
   var CLASSIC = 'classic';
   var GLASS = 'glass';
   var STYLES = [CLASSIC, GLASS];
@@ -35,6 +36,20 @@
   var root = document.documentElement;
   var currentStyle = CLASSIC;
   var currentTheme = DEFAULT_THEMES[CLASSIC];
+  var attraction = true;
+
+  function applyAttraction(value) {
+    attraction = value;
+    root.dataset.mouseAttraction = String(value);
+    var control = document.getElementById('mouseAttraction');
+    if (control) control.checked = value;
+    window.GlassInteraction?.refresh();
+  }
+
+  function readAttraction() {
+    try { return window.localStorage.getItem(ATTRACTION_KEY) !== 'off'; }
+    catch (error) { return true; }
+  }
 
   function normalize(style) {
     return STYLES.indexOf(style) === -1 ? CLASSIC : style;
@@ -103,6 +118,11 @@
       var option = radio.closest ? radio.closest('.theme-option') : null;
       if (option) option.classList.toggle('is-selected', selected);
     });
+    var attractionSetting = document.getElementById('mouseAttractionSetting');
+    if (attractionSetting) {
+      attractionSetting.hidden = currentStyle !== GLASS;
+      document.getElementById('mouseAttraction').checked = attraction;
+    }
   }
 
   function updateThemeColor() {
@@ -248,17 +268,24 @@
         if (radio.checked) applyThemeOption(radio.value, { announce: true });
       });
     });
+    document.getElementById('mouseAttraction')?.addEventListener('change', function (event) {
+      applyAttraction(event.target.checked);
+      try { window.localStorage.setItem(ATTRACTION_KEY, attraction ? 'on' : 'off'); }
+      catch (error) { /* 本次使用仍然生效。 */ }
+    });
 
     syncControls();
 
     // 同一浏览器的另一个标签页切换界面/主题，或站点数据被清空时保持同步。
     window.addEventListener('storage', function (event) {
+      if (event.key === null || event.key === ATTRACTION_KEY) applyAttraction(readAttraction());
       if (event.key !== null && event.key !== STORAGE_KEY && event.key.indexOf(THEME_PREFIX) !== 0) return;
       paint(readStoredStyle());
     });
   }
 
   // 首帧前内联脚本已经设过一次；这里补齐选中态与监听器。
+  applyAttraction(readAttraction());
   paint(readStoredStyle());
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initSettings);

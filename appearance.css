@@ -92,6 +92,44 @@ button.settings-entry:active {
   gap: 10px;
   margin-top: 14px;
 }
+.appearance-switch {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 15px;
+  cursor: pointer;
+}
+.appearance-switch[hidden] { display: none; }
+.appearance-switch-track {
+  display: grid;
+  align-items: center;
+  flex: 0 0 38px;
+  height: 23px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(79, 70, 121, .23);
+  transition: background-color 180ms ease;
+}
+.appearance-switch-track::before {
+  content: "";
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(31, 17, 66, .24);
+  transition: translate 240ms var(--motion-spring);
+}
+.appearance-switch input:checked + .appearance-switch-track { background: var(--primary); }
+.appearance-switch input:checked + .appearance-switch-track::before { translate: 15px; }
+.appearance-switch input:focus-visible + .appearance-switch-track { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) {
+  .appearance-switch-track, .appearance-switch-track::before { transition: none; }
+}
 .appearance-option {
   position: relative;
   display: flex;
@@ -572,11 +610,6 @@ html[data-interface="glass"] .card {
   box-shadow: none;
 }
 html[data-interface="glass"] .card::before { background-image: var(--glass-reflections), var(--glass-tint); }
-.glass-edge-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
-html[data-interface="glass"] .card[data-glass-edge]::before {
-  inset: -12px;
-  clip-path: url(#glass-edge-contour);
-}
 html[data-interface="glass"] .btn-fav-nav::before { clip-path: inset(0 round 18px); }
 html[data-interface="glass"] .btn-fav-nav {
   border-radius: 18px;
@@ -1116,6 +1149,9 @@ html[data-interface="glass"] button {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+html[data-interface="glass"][data-mouse-attraction="true"] button {
+  --glass-button-shadow: inset 0 2px 4px -3px rgba(255, 255, 255, 0.5);
+}
 html[data-interface="glass"] button.btn-primary,
 html[data-interface="glass"] button.page-jump-btn-primary {
   --glass-button-fill: rgba(106, 92, 242, 0.03);
@@ -1389,6 +1425,55 @@ html[data-interface="glass"] .glass-jelly::after {
     backdrop-filter: none;
   }
 }
+
+/* The same moving contour clips the material, never the control's content. */
+.glass-edge-defs { position: absolute; width: 0; height: 0; pointer-events: none; }
+html[data-interface="glass"] [data-glass-edge-position],
+.glass-edge-field-position { position: relative; }
+.glass-edge-field-host,
+html[data-interface="glass"] [data-glass-edge="control"] { isolation: isolate; }
+html[data-interface="glass"] :is([data-glass-edge="control"], [data-glass-edge="field"]) {
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html[data-interface="glass"] [data-glass-edge="control"]::before,
+.glass-edge-field {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 0;
+  clip-path: url(#glass-edge-contour);
+}
+html[data-interface="glass"] [data-glass-edge="control"]::before {
+  inset: -20px;
+  background-color: var(--glass-edge-fill);
+  background-image: var(--glass-edge-sheen);
+  backdrop-filter: var(--glass-edge-frost, none);
+  -webkit-backdrop-filter: var(--glass-edge-frost, none);
+}
+html[data-interface="glass"] button[data-glass-edge="control"]::before {
+  background-color: var(--glass-button-fill);
+  background-image: var(--glass-button-sheen);
+}
+html[data-interface="glass"] [data-glass-edge="plate"]::before {
+  inset: -20px;
+  clip-path: url(#glass-edge-contour);
+}
+html[data-interface="glass"] :is(.modal-card, .btn-fav-nav)[data-glass-edge="plate"]::before {
+  background-image: var(--glass-reflections), var(--glass-tint);
+}
+html[data-interface="glass"] :is(.modal-card, .btn-fav-nav)[data-glass-edge="plate"]::after { content: none; }
+@media (prefers-reduced-motion: no-preference) and (prefers-reduced-transparency: no-preference) {
+  html[data-interface="glass"][data-mouse-attraction="true"] .modal-card { box-shadow: none; }
+}
+html.glass-gpu[data-interface="glass"] .modal-card[data-glass-edge] .glass-modal-canvas {
+  inset: -20px auto auto -20px;
+  width: calc(100% + 40px);
+}
+.glass-edge-field-replaced { visibility: hidden; }
 
 /* 深空主题的浅色文字覆盖放在最后，确保优先级高于玻璃界面的通用文字色 */
 /* 深空主题下页面上的文字改用浅色（卡片内部仍是浅玻璃 + 深色文字） */

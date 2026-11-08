@@ -97,10 +97,45 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     assert.ok(await initialHits.evaluate((hits, points) => hits.every((hit, index) => hit === document.elementFromPoint(points[index].x, points[index].y)), probes),
       'the visual edge does not change the card or surrounding hit targets');
     await initialHits.dispose();
+    await page.mouse.move(edge + 58, centerY);
+    await page.waitForTimeout(700);
+    const distantDepth = await page.evaluate(() => GlassInteraction.readEdge()?.depth || 0);
+    assert.ok(distantDepth > .5 && distantDepth < 6, `the edge still responds gently 58px away: ${distantDepth}`);
+    await page.mouse.move(edge - 12, centerY);
+    await page.waitForFunction(() => GlassInteraction.readEdge()?.depth < -1, null, { timeout: 1400 });
     await page.mouse.move(1430, 700);
     await page.waitForTimeout(950);
     assert.ok(difference(restingEdge.near, (await outsidePixels()).near) < .2, 'the outside glass edge returns to rest after the pointer leaves');
     await magneticCard.evaluate(card => card.remove());
+
+    const button = page.locator('.word-search-submit').first();
+    const buttonBox = await button.boundingBox();
+    await page.mouse.move(buttonBox.x + buttonBox.width / 2, buttonBox.y + 6);
+    await page.waitForFunction(() => GlassInteraction.readEdge()?.element.matches('.word-search-submit') &&
+      GlassInteraction.readEdge().depth < -.5, null, { timeout: 1400 });
+    assert.deepEqual(await button.boundingBox(), buttonBox, 'glass button material bends independently of its hit target');
+    assert.match(await button.evaluate(el => getComputedStyle(el, '::before').clipPath), /glass-edge-contour/);
+    const field = page.locator('.word-search-input').first();
+    const fieldBox = await field.boundingBox();
+    await page.mouse.move(fieldBox.x + fieldBox.width / 2, fieldBox.y + 7);
+    await page.waitForFunction(() => GlassInteraction.readEdge()?.element.matches('.word-search-input') &&
+      GlassInteraction.readEdge().depth < -.5, null, { timeout: 1400 });
+    assert.equal(await page.locator('.glass-edge-field').count(), 1);
+    assert.deepEqual(await field.boundingBox(), fieldBox, 'the input frame bends around its fixed text field');
+    await page.locator('#btnOpenSettings').click();
+    const attraction = page.getByRole('switch', { name: '鼠标吸引' });
+    await page.locator('#mouseAttractionSetting .appearance-switch-track').click();
+    assert.equal(await attraction.isChecked(), false);
+    assert.equal(await page.evaluate(() => localStorage.getItem('cet6_mouse_attraction')), 'off');
+    await page.keyboard.press('Escape');
+    await page.mouse.move(buttonBox.x + buttonBox.width / 2, buttonBox.y + 6);
+    await page.waitForTimeout(450);
+    assert.equal(await page.evaluate(() => GlassInteraction.readEdge()), null, 'the switch disables hover attraction immediately');
+    await page.locator('#btnOpenSettings').click();
+    assert.equal(await attraction.isChecked(), false, 'the setting is retained when reopening settings');
+    await attraction.press('Space');
+    assert.equal(await attraction.isChecked(), true);
+    await page.keyboard.press('Escape');
 
     await page.evaluate(()=>Appearance.setTheme('minimal'));await page.waitForTimeout(300);
     const flatBefore=await pixels();

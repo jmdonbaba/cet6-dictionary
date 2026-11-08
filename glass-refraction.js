@@ -941,6 +941,7 @@
     storageKeys: Object.freeze({ preference: STORAGE_PREF, intensity: STORAGE_INTENSITY }),
     INTEGRATION_CSS: INTEGRATION_CSS,
     interact: interact,
+    inputPlate: function (element) { return surfaces.get(element)?.background; },
     enabled: isEnabled,
     enable: enable,
     disable: disable,

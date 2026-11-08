@@ -10,65 +10,100 @@
   var frame = 0, previous = 0, pressed = null;
   var pointerPresent = false, hitTestPending = false;
   var decorations = new Map();
-  var edgeReach = 28, edgeSpan = 60, edgePad = 12; // Matches the decorative layer's CSS inset.
+  var edgePad = 20; // Matches the decorative layers' CSS inset.
   var edgePointer = false, edgePending = false, hit = null;
   var edgeTarget = null, edge = null, edgePress = false, contour = null;
-  var unstableCard = '[inert], .is-flipping, .is-resizing';
+  var fieldPlate = null, fieldHost = null, nativeField = null;
+  var unstableCard = '[inert], [hidden], .is-flipping, .is-resizing, .glass-jelly, [data-favorites-handoff-cover]';
+  var mainPlates = '.card, .modal-card, .btn-fav-nav';
+  var controls = 'button:not(:disabled, .ws-mode-toggle button, .mobile-tool-tabs button), .ws-mode-slider, ' +
+    GlassOptics.inputs + ', ' + GlassOptics.layers + ', ' + GlassOptics.modalLayers +
+    ', .more-menu, .study-export-menu, .fav-search-dropdown, .ws-search-dropdown, .toast';
+  var magneticSurfaces = mainPlates + ', ' + controls;
+  var probeOffsets = [16, 35, 56, 92].flatMap(function (step) {
+    var diagonal = step * Math.SQRT1_2;
+    return [[step,0],[-step,0],[0,step],[0,-step],[diagonal,diagonal],[-diagonal,diagonal],
+      [diagonal,-diagonal],[-diagonal,-diagonal]];
+  });
 
   function smooth(value) {
     var t = Math.max(0, Math.min(1, value));
-    return t * t * (3 - 2 * t);
+    return t * t * t * (10 + t * (6 * t - 15));
   }
 
   function edgeNear(element, x, y, press) {
     if (!element || element.closest(unstableCard)) return null;
     var bounds = element.getBoundingClientRect();
     var style = getComputedStyle(element);
+    if (style.visibility !== 'visible' || Number(style.opacity) === 0) return null;
     var borderX = parseFloat(style.borderLeftWidth), borderY = parseFloat(style.borderTopWidth);
     var left = bounds.left + borderX, top = bounds.top + borderY;
     var width = bounds.right - parseFloat(style.borderRightWidth) - left;
     var height = bounds.bottom - parseFloat(style.borderBottomWidth) - top;
-    var radius = Math.min(parseFloat(style.borderTopLeftRadius), width / 2, height / 2);
+    var short = Math.min(width, height);
+    if (short < 10) return null;
+    var radius = parseFloat(style.borderTopLeftRadius) || 0;
+    if (style.borderTopLeftRadius.includes('%')) radius *= short / 100;
+    radius = Math.min(radius, short / 2);
     var cx = Math.max(radius, Math.min(width - radius, x - left));
     var cy = Math.max(radius, Math.min(height - radius, y - top));
     var dx = x - left - cx, dy = y - top - cy;
     var distance = Math.hypot(dx, dy);
-    var gap = Math.abs(distance - radius);
-    if (width < 32 || height < 32) return null;
+    var signed = distance - radius;
     if (distance < .001) {
       // A pointer just inside the flat part can still be close to its rim.
       var gaps = [y - top, left + width - x, top + height - y, x - left];
-      gap = Math.min.apply(null, gaps);
+      var gap = Math.min.apply(null, gaps);
       var side = gaps.indexOf(gap);
       dx = [0, 1, 0, -1][side]; dy = [-1, 0, 1, 0][side];
       cx = x - left + dx * (gap - radius);
       cy = y - top + dy * (gap - radius);
       distance = 1;
+      signed = -gap;
     }
-    if (!press && gap >= edgeReach) return null;
+    var gap = Math.abs(signed);
+    var large = element.matches(mainPlates) && short >= 60;
+    var reach = large ? 98 : 54;
+    // Fade before the medial axis, where the nearest inside edge changes sides.
+    if (signed < 0) reach = Math.min(reach, short * .49);
+    if (!press && gap >= reach) return null;
     var nx = dx / distance, ny = dy / distance;
-    return { element:element, borderX:borderX, borderY:borderY, width:width, height:height, radius:radius, span:edgeSpan, x:cx + nx * radius,
-      y:cy + ny * radius, nx:nx, ny:ny, gap:gap, pull:10.5 * smooth(1 - gap / edgeReach) };
+    var amplitude = large ? 16 : Math.min(6.5, short * .17);
+    var span = Math.min(108, short * .82, Math.max(width, height) * .52);
+    var pull = amplitude * signed / Math.hypot(signed, amplitude * 1.12) * smooth(1 - gap / reach);
+    return { element:element, borderX:borderX, borderY:borderY, width:width, height:height, radius:radius, span:span, x:cx + nx * radius,
+      y:cy + ny * radius, nx:nx, ny:ny, gap:gap, pull:pull };
   }
 
+  function attractionEnabled() { return root.dataset.mouseAttraction !== 'false'; }
+  function canBend() {
+    return !LiquidGlass.supported || Number(root.style.getPropertyValue('--glass-refract-scale')) > 0;
+  }
   function nearestEdge() {
-    if (!edgePointer || pressed || !Number(root.style.getPropertyValue('--glass-refract-scale')) ||
-        document.querySelector('.modal-card.active') ||
-        hit?.closest?.('.settings-entry, .favorites-shortcuts, .page-jump-controls')) return null;
+    if (!attractionEnabled() || !edgePointer || pressed || !canBend()) return null;
     var x = desired.x, y = desired.y;
-    var direct = hit?.closest?.('.card');
-    if (direct) return edgeNear(direct, x, y);
-    // Bounded hit probes find visible neighbors without measuring every card.
-    var step = edgeReach, diagonal = step * .707;
+    var modal = document.querySelector('.modal-card.active');
     var seen = new Set(), nearest = null;
-    [[step,0],[-step,0],[0,step],[0,-step],[diagonal,diagonal],[-diagonal,diagonal],
-      [diagonal,-diagonal],[-diagonal,-diagonal]].forEach(function (offset) {
-      var card = document.elementFromPoint(x + offset[0], y + offset[1])?.closest('.card');
-      if (!card || seen.has(card)) return;
-      seen.add(card);
-      var candidate = edgeNear(card, x, y);
+    function consider(element) {
+      if (!element || seen.has(element) || (modal && !modal.contains(element))) return;
+      seen.add(element);
+      var candidate = edgeNear(element, x, y);
       if (candidate && (!nearest || candidate.gap < nearest.gap)) nearest = candidate;
-    });
+    }
+    function inspect(element) {
+      consider(element?.closest?.('.ws-mode-toggle')?.querySelector('.ws-mode-slider'));
+      var surface = element?.closest?.(magneticSurfaces);
+      while (surface && !seen.has(surface) && (!modal || modal.contains(surface))) {
+        consider(surface);
+        surface = surface.parentElement?.closest(magneticSurfaces);
+      }
+    }
+    inspect(hit);
+    // Check nearby painted surfaces, not every element in a long results list.
+    for (var offset of probeOffsets) {
+      if (nearest && nearest.gap < 9) break;
+      inspect(document.elementFromPoint(x + offset[0], y + offset[1]));
+    }
     return nearest;
   }
 
@@ -77,15 +112,15 @@
     var path = '';
     function point(x, y, tx, ty) {
       var dx = x - shape.x, dy = y - shape.y, d = Math.hypot(dx, dy);
-      var u = Math.max(0, 1 - d / edgeSpan);
+      var u = Math.max(0, 1 - d / shape.span);
       var amount = shape.depth * smooth(u);
-      var slope = d ? -shape.depth * 6 * u * (1 - u) * (dx * tx + dy * ty) / (d * edgeSpan) : 0;
+      var slope = d ? -shape.depth * 30 * u * u * (1 - u) ** 2 * (dx * tx + dy * ty) / (d * shape.span) : 0;
       return [x + edgePad + shape.nx * amount, y + edgePad + shape.ny * amount,
         tx + shape.nx * slope, ty + shape.ny * slope];
     }
     function xy(x, y) { return x.toFixed(2) + ' ' + y.toFixed(2); }
     function curve(at, start, end) {
-      var steps = Math.max(1, Math.ceil((end - start) / 12));
+      var steps = Math.max(1, Math.ceil((end - start) / Math.min(10, shape.span / 4)));
       var length = (end - start) / steps, k = length / 3;
       var a = at(start);
       for (var i = 1; i <= steps; i++) {
@@ -98,7 +133,7 @@
     function side(x, y, dx, dy, length) {
       var at = function (s) { return point(x + dx * s, y + dy * s, dx, dy); };
       var center = (shape.x - x) * dx + (shape.y - y) * dy;
-      var start = Math.max(0, center - edgeSpan), end = Math.min(length, center + edgeSpan);
+      var start = Math.max(0, center - shape.span), end = Math.min(length, center + shape.span);
       if (start < end) {
         if (start) path += 'L' + xy.apply(null, at(start));
         curve(at, start, end);
@@ -121,8 +156,65 @@
   }
 
   function clearEdge() {
-    if (edge) edge.element.removeAttribute('data-glass-edge');
+    if (edge) {
+      var element = edge.element;
+      element.removeAttribute('data-glass-edge');
+      element.removeAttribute('data-glass-edge-position');
+      element.style.removeProperty('--glass-edge-fill');
+      element.style.removeProperty('--glass-edge-sheen');
+      element.style.removeProperty('--glass-edge-frost');
+    }
+    fieldPlate?.remove();
+    fieldHost?.classList.remove('glass-edge-field-host', 'glass-edge-field-position');
+    nativeField?.classList.remove('glass-edge-field-replaced');
+    fieldPlate = fieldHost = nativeField = null;
     edge = null; edgePress = false;
+  }
+
+  function mountEdge(element) {
+    if (element.matches(mainPlates)) {
+      element.setAttribute('data-glass-edge', 'plate');
+      return;
+    }
+    var style = getComputedStyle(element);
+    if (!element.matches('input, textarea')) {
+      element.style.setProperty('--glass-edge-fill', style.backgroundColor);
+      element.style.setProperty('--glass-edge-sheen', style.backgroundImage);
+      var frost = style.backdropFilter;
+      if (!frost || frost === 'none') frost = getComputedStyle(element, '::before').backdropFilter;
+      if (frost && frost !== 'none') element.style.setProperty('--glass-edge-frost', frost);
+      if (style.position === 'static') element.setAttribute('data-glass-edge-position', '');
+      element.setAttribute('data-glass-edge', 'control');
+      return;
+    }
+    fieldHost = element.parentElement;
+    nativeField = LiquidGlass.inputPlate(element);
+    fieldPlate = document.createElement('span');
+    fieldPlate.className = 'glass-edge-field';
+    fieldPlate.setAttribute('aria-hidden', 'true');
+    fieldPlate.style.backgroundColor = style.backgroundColor;
+    fieldPlate.style.backgroundImage = style.backgroundImage;
+    fieldPlate.style.filter = nativeField?.style.filter || '';
+    if (nativeField) fieldPlate.style.backdropFilter = getComputedStyle(nativeField).backdropFilter;
+    fieldHost.classList.add('glass-edge-field-host');
+    if (getComputedStyle(fieldHost).position === 'static') fieldHost.classList.add('glass-edge-field-position');
+    fieldHost.appendChild(fieldPlate);
+    nativeField?.classList.add('glass-edge-field-replaced');
+    element.setAttribute('data-glass-edge', 'field');
+  }
+
+  function fitField() {
+    var r = edge.element.getBoundingClientRect(), p = fieldHost.getBoundingClientRect();
+    var sx = p.width / (fieldHost.offsetWidth || p.width), sy = p.height / (fieldHost.offsetHeight || p.height);
+    var x = (r.left - p.left) / sx - fieldHost.clientLeft + fieldHost.scrollLeft;
+    var y = (r.top - p.top) / sy - fieldHost.clientTop + fieldHost.scrollTop;
+    var inset = [x + edge.borderX - edgePad, y + edge.borderY - edgePad, edge.width + edgePad * 2, edge.height + edgePad * 2];
+    var geometry = inset.map(function (value) { return value.toFixed(2) + 'px'; }).join(' ');
+    if (fieldPlate._geometry === geometry) return;
+    ['left', 'top', 'width', 'height'].forEach(function (name, index) {
+      fieldPlate.style[name] = inset[index].toFixed(2) + 'px';
+    });
+    fieldPlate._geometry = geometry;
   }
 
   function paintEdge() {
@@ -135,30 +227,37 @@
       document.body.appendChild(svg);
     }
     contour.setAttribute('d', edgePath(edge));
-    if (!edge.element.hasAttribute('data-glass-edge')) edge.element.setAttribute('data-glass-edge', '');
+    if (!edge.element.hasAttribute('data-glass-edge')) mountEdge(edge.element);
+    if (fieldPlate) fitField();
   }
 
   function animateEdge(dt, easing) {
     if (edgePending) { edgePending = false; edgeTarget = nearestEdge(); }
-    if (edge && (!edge.element.isConnected || edge.element.closest(unstableCard) ||
-        document.querySelector('.modal-card.active') || !Number(root.style.getPropertyValue('--glass-refract-scale')))) clearEdge();
+    var modal = edge && document.querySelector('.modal-card.active');
+    if (edge && (!edge.element.isConnected || edge.element.closest(unstableCard) || (!edgePress && !attractionEnabled()) ||
+        (modal && !modal.contains(edge.element)) || (edge.element.closest('.modal-card') && !modal) ||
+        !canBend())) clearEdge();
     if (!edge && edgeTarget) edge = Object.assign({ depth:0, velocity:0 }, edgeTarget);
     if (!edge) return false;
     var target = !edgePress && edgeTarget?.element === edge.element ? edgeTarget : null;
     var pull = target ? target.pull : 0;
     if (target) {
       edge.borderX = target.borderX; edge.borderY = target.borderY;
-      edge.width = target.width; edge.height = target.height; edge.radius = target.radius;
+      edge.width = target.width; edge.height = target.height; edge.radius = target.radius; edge.span = target.span;
       edge.x += (target.x - edge.x) * easing; edge.y += (target.y - edge.y) * easing;
       edge.nx += (target.nx - edge.nx) * easing; edge.ny += (target.ny - edge.ny) * easing;
     }
     // Analytic damped spring keeps the same rebound across refresh rates.
-    var decay = 16, frequency = 23;
+    var handingOff = !target && !edgePress && edgeTarget;
+    var decay = edgePress || !target ? (handingOff ? 18 : 10.5) : 17;
+    var frequency = handingOff ? 31 : 24;
     var a = edge.depth - pull, b = (edge.velocity + decay * a) / frequency;
     var cos = Math.cos(frequency * dt), sin = Math.sin(frequency * dt), damping = Math.exp(-decay * dt);
     var displacement = damping * (a * cos + b * sin);
     edge.velocity = -decay * displacement + damping * frequency * (b * cos - a * sin);
-    edge.depth = pull + displacement;
+    var next = pull + displacement;
+    if (handingOff && edge.depth * next <= 0) { clearEdge(); return true; }
+    edge.depth = next;
     var moving = Math.abs(displacement) > .035 || Math.abs(edge.velocity) > .6 ||
       Boolean(target && Math.hypot(target.x - edge.x, target.y - edge.y) > .15);
     if (!moving) {
@@ -173,14 +272,15 @@
     if (!Number(root.style.getPropertyValue('--glass-refract-scale'))) return;
     var shape = edgeNear(element, x, y, true);
     if (!shape) return;
-    var depth = edge?.element === element && Math.hypot(edge.x - shape.x, edge.y - shape.y) < edgeSpan ? edge.depth : 0;
+    var depth = edge?.element === element && Math.hypot(edge.x - shape.x, edge.y - shape.y) < edge.span ? edge.depth : 0;
     if (edge?.element !== element) clearEdge();
-    edge = Object.assign({ depth:depth, velocity:-245 }, shape);
+    edge = Object.assign({ depth:depth, velocity:-280 }, shape);
     edgePress = true;
   }
 
   function enabled() {
-    return root.dataset.interface === 'glass' && window.LiquidGlass && LiquidGlass.enabled() && !motion.matches && !transparency.matches;
+    return root.dataset.interface === 'glass' && window.LiquidGlass && !motion.matches && !transparency.matches &&
+      (LiquidGlass.enabled() || (!LiquidGlass.supported && attractionEnabled()));
   }
   function surface(target) {
     if (!target || !target.closest || !target.isConnected) return null;
@@ -196,11 +296,15 @@
   function request() { if (!frame) frame = requestAnimationFrame(tick); }
   function setTarget(target) {
     hit = target;
-    desired.element = surface(target);
+    desired.element = edgePointer && !attractionEnabled() ? null : surface(target);
     desired.level = desired.element ? (desired.element === pressed ? 1.5 : 1) : 0;
   }
   function refresh() {
-    if (!pointerPresent || !enabled()) return;
+    if (!enabled()) {
+      if (edge || hover.element || pulse.element) reset();
+      return;
+    }
+    if (!pointerPresent) return;
     hitTestPending = edgePending = true;
     request();
   }
@@ -261,7 +365,7 @@
     element.style.removeProperty('--glass-press-x');element.style.removeProperty('--glass-press-y');
   }
   function click(event) {
-    if (!enabled()) return;
+    if (!enabled() || !LiquidGlass.enabled()) return;
     var element=surface(event.target);
     if (!element) return;
     var r=element.getBoundingClientRect();
@@ -275,6 +379,7 @@
       request();
       return;
     }
+    if (edge?.element === element) { clearEdge(); edgeTarget = null; }
     removeDecoration(element);
     if (getComputedStyle(element).position==='static') element.classList.add('glass-jelly-positioned');
     element.style.setProperty('--glass-press-x',Math.max(0,Math.min(100,(pulse.x-r.left)/r.width*100))+'%');

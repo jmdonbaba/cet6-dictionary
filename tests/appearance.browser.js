@@ -341,6 +341,9 @@ const portraitViewports = [1440, 1280, 390, 320];
 
     // -------------------------------------------------- glass + night wallpaper
     await page.keyboard.press('Tab');
+    assert.equal((await focused()).id, 'mouseAttraction', 'the glass switch participates in settings keyboard navigation');
+    assert.equal(await page.getByRole('switch', { name: '鼠标吸引' }).isChecked(), true);
+    await page.keyboard.press('Tab');
     assert.equal((await focused()).name, 'wallpaperTheme');
     await page.keyboard.press('ArrowRight'); // water -> aurora
     await page.keyboard.press('ArrowRight'); // aurora -> peach
